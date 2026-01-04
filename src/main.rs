@@ -7,7 +7,7 @@ use sea_orm::{Database, EntityTrait, ActiveModelTrait, Set, DatabaseConnection, 
 use std::env;
 use dotenvy::dotenv;
 use chrono::Utc;
-use crate::models::{user, music_folder, user_music_folder};
+use crate::models::{user, music_folder, user_music_folder, child, artist, album, genre};
 
 async fn setup_schema(db: &DatabaseConnection) -> Result<(), anyhow::Error> {
     let builder = db.get_database_backend();
@@ -18,6 +18,10 @@ async fn setup_schema(db: &DatabaseConnection) -> Result<(), anyhow::Error> {
         schema.create_table_from_entity(user::Entity),
         schema.create_table_from_entity(music_folder::Entity),
         schema.create_table_from_entity(user_music_folder::Entity),
+        schema.create_table_from_entity(child::Entity),
+        schema.create_table_from_entity(artist::Entity),
+        schema.create_table_from_entity(album::Entity),
+        schema.create_table_from_entity(genre::Entity),
     ];
 
     for mut table in tables {

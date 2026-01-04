@@ -56,13 +56,13 @@ where
 
         Box::pin(async move {
             let query = web::Query::<SubsonicParams>::from_query(req.query_string()).unwrap_or_else(|_| web::Query(SubsonicParams {
-                u: None, p: None, t: None, s: None, v: None, c: None, f: None
+                u: None, p: None, t: None, s: None, c: None, f: None
             }));
 
             let username = match &query.u {
                 Some(u) => u,
                 None => {
-                    let resp = SubsonicResponse::new_error(10, "User not found".to_string(), query.v.clone().unwrap_or_default());
+                    let resp = SubsonicResponse::new_error(10, "User not found".to_string());
                     let http_resp = send_response(resp, &query.f).map_into_right_body();
                     return Ok(req.into_response(http_resp));
                 }
@@ -78,7 +78,7 @@ where
             let user = match user {
                 Some(u) => u,
                 None => {
-                    let resp = SubsonicResponse::new_error(10, "User not found".to_string(), query.v.clone().unwrap_or_default());
+                    let resp = SubsonicResponse::new_error(10, "User not found".to_string());
                     let http_resp = send_response(resp, &query.f).map_into_right_body();
                     return Ok(req.into_response(http_resp));
                 }
@@ -100,7 +100,7 @@ where
             }
 
             if !authenticated {
-                let resp = SubsonicResponse::new_error(40, "Wrong username or password".to_string(), query.v.clone().unwrap_or_default());
+                let resp = SubsonicResponse::new_error(40, "Wrong username or password".to_string());
                 let http_resp = send_response(resp, &query.f).map_into_right_body();
                 return Ok(req.into_response(http_resp));
             }

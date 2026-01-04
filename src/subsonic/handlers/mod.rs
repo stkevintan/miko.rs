@@ -1,8 +1,6 @@
 use actix_web::{web, HttpResponse};
 use crate::subsonic::models::SubsonicResponse;
-use serde::Deserialize;
-
-pub mod system;
+use serde::{Deserialize, Serialize};
 
 macro_rules! subsonic_routes {
     ($scope:expr, $(($path:literal, $handler:expr)),* $(,)?) => {
@@ -14,6 +12,18 @@ macro_rules! subsonic_routes {
     };
 }
 
+macro_rules! get_id_or_error {
+    ($query:expr, $params:expr) => {
+        match $query.get("id") {
+            Some(id) => id,
+            None => return crate::subsonic::handlers::send_response(crate::subsonic::models::SubsonicResponse::new_error(10, "ID is required".into()), &$params.f),
+        }
+    };
+}
+
+pub mod system;
+pub mod browsing;
+
 #[derive(Deserialize)]
 #[allow(dead_code)]
 pub struct SubsonicParams {
@@ -21,7 +31,6 @@ pub struct SubsonicParams {
     pub p: Option<String>,
     pub t: Option<String>,
     pub s: Option<String>,
-    pub v: Option<String>,
     pub c: Option<String>,
     pub f: Option<String>,
 }
@@ -29,15 +38,26 @@ pub struct SubsonicParams {
 pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(
         subsonic_routes!(
-            web::scope(""),
+            web::scope("/rest")
+                .wrap(crate::subsonic::middleware::SubsonicAuth),
+            // system
             ("/ping", system::ping),
             ("/getLicense", system::get_license),
             ("/getOpenSubsonicExtensions", system::get_open_subsonic_extensions),
+            // browsing
+            ("/getMusicFolders", browsing::get_music_folders),
+            ("/getIndexes", browsing::get_indexes),
+            ("/getMusicDirectory", browsing::get_music_directory),
+            ("/getGenres", browsing::get_genres),
+            ("/getArtists", browsing::get_artists),
+            ("/getArtist", browsing::get_artist),
+            ("/getAlbum", browsing::get_album),
+            ("/getSong", browsing::get_song),
         )
     );
 }
 
-pub fn send_response(resp: SubsonicResponse, format: &Option<String>) -> HttpResponse {
+pub fn send_response<T: Serialize>(resp: SubsonicResponse<T>, format: &Option<String>) -> HttpResponse {
     let is_json = format.as_deref() == Some("json");
     
     if is_json {
@@ -61,7 +81,7 @@ fn clean_json_attributes(value: &mut serde_json::Value) {
             let old_map = std::mem::take(map);
             for (k, mut v) in old_map {
                 clean_json_attributes(&mut v);
-                let new_key = if k.starts_with('@') {
+                let new_key = if k.starts_with(&['@', '$']) {
                     k[1..].to_string()
                 } else {
                     k
