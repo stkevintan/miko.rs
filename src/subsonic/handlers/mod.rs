@@ -73,7 +73,7 @@ fn clean_json_attributes(value: &mut serde_json::Value) {
             let old_map = std::mem::take(map);
             for (k, mut v) in old_map {
                 clean_json_attributes(&mut v);
-                let new_key = if k.starts_with('@') {
+                let new_key = if k.starts_with(&['@', '$']) {
                     k[1..].to_string()
                 } else {
                     k

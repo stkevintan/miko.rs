@@ -212,7 +212,7 @@ pub async fn get_artist(
     // Fetch albums for this artist
     let albums = match album::Entity::find().filter(album::Column::ArtistId.eq(artist.id.clone())).all(db.get_ref()).await {
         Ok(al) => al,
-        Err(_) => vec![],
+        Err(_) => return send_response(SubsonicResponse::new_error(0, "Failed to fetch albums".into(), version), &params.f),
     };
 
     let resp = SubsonicResponse::new_ok(ArtistBody {
@@ -268,7 +268,7 @@ pub async fn get_album(
 
     let songs = match child::Entity::find().filter(child::Column::AlbumId.eq(album.id.clone())).order_by_asc(child::Column::DiscNumber).order_by_asc(child::Column::Track).all(db.get_ref()).await {
         Ok(s) => s,
-        Err(_) => vec![],
+        Err(_) => return send_response(SubsonicResponse::new_error(0, "Failed to fetch songs".into(), version), &params.f),
     };
 
     let resp = SubsonicResponse::new_ok(AlbumBody {
