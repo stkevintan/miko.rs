@@ -134,10 +134,10 @@ pub struct MusicFolder {
 }
 
 impl<T> SubsonicResponse<T> {
-    pub fn new_ok(body: T, version: String) -> Self {
+    pub fn new_ok(body: T) -> Self {
         Self {
             status: ResponseStatus::Ok,
-            version,
+            version: "1.16.1".to_string(),
             xmlns: Some("http://subsonic.org/restapi".to_string()),
             server_version: Some("1.0.0".to_string()),
             open_subsonic: Some(true),
@@ -147,10 +147,10 @@ impl<T> SubsonicResponse<T> {
 }
 
 impl SubsonicResponse<ErrorBody> {
-    pub fn new_error(code: i32, message: String, version: String) -> Self {
+    pub fn new_error(code: i32, message: String) -> Self {
         Self {
             status: ResponseStatus::Failed,
-            version,
+            version: "1.16.1".to_string(),
             xmlns: Some("http://subsonic.org/restapi".to_string()),
             server_version: Some("1.0.0".to_string()),
             open_subsonic: Some(true),

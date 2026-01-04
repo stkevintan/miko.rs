@@ -2,9 +2,6 @@ use actix_web::{web, HttpResponse};
 use crate::subsonic::models::SubsonicResponse;
 use serde::{Deserialize, Serialize};
 
-pub mod system;
-pub mod browsing;
-
 macro_rules! subsonic_routes {
     ($scope:expr, $(($path:literal, $handler:expr)),* $(,)?) => {
         $scope
@@ -15,6 +12,18 @@ macro_rules! subsonic_routes {
     };
 }
 
+macro_rules! get_id_or_error {
+    ($query:expr, $params:expr) => {
+        match $query.get("id") {
+            Some(id) => id,
+            None => return crate::subsonic::handlers::send_response(crate::subsonic::models::SubsonicResponse::new_error(10, "ID is required".into()), &$params.f),
+        }
+    };
+}
+
+pub mod system;
+pub mod browsing;
+
 #[derive(Deserialize)]
 #[allow(dead_code)]
 pub struct SubsonicParams {
@@ -22,7 +31,6 @@ pub struct SubsonicParams {
     pub p: Option<String>,
     pub t: Option<String>,
     pub s: Option<String>,
-    pub v: Option<String>,
     pub c: Option<String>,
     pub f: Option<String>,
 }
