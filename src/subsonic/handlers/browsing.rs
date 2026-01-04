@@ -1,6 +1,6 @@
 use actix_web::{web, Responder};
 use sea_orm::{DatabaseConnection, EntityTrait, QueryFilter, ColumnTrait, QueryOrder};
-use crate::subsonic::models::{SubsonicResponse, MusicFolders, MusicFolder, Indexes, Index, Artist, Directory, Child as SubsonicChild, Genres, Genre, ArtistsID3, IndexID3, ArtistID3, ArtistWithAlbumsID3, AlbumID3, AlbumWithSongsID3, MusicFoldersBody, IndexesBody, DirectoryBody, GenresBody, ArtistsBody, ArtistBody, AlbumBody, SongBody};
+use crate::subsonic::models::{SubsonicResponse, SubsonicResponseBody, MusicFolders, MusicFolder, Indexes, Index, Artist, Directory, Child as SubsonicChild, Genres, Genre, ArtistsID3, IndexID3, ArtistID3, ArtistWithAlbumsID3, AlbumID3, AlbumWithSongsID3};
 use crate::subsonic::handlers::{SubsonicParams, send_response};
 use crate::models::{music_folder, child, artist, album, genre};
 use std::collections::{HashMap, BTreeMap};
@@ -14,14 +14,12 @@ pub async fn get_music_folders(
         Err(_) => return send_response(SubsonicResponse::new_error(0, "Failed to fetch music folders".into()), &params.f),
     };
 
-    let resp = SubsonicResponse::new_ok(MusicFoldersBody {
-        music_folders: MusicFolders {
-            music_folder: folders.into_iter().map(|f| MusicFolder {
-                id: f.id,
-                name: f.name,
-            }).collect(),
-        }
-    });
+    let resp = SubsonicResponse::new_ok(SubsonicResponseBody::MusicFolders(MusicFolders {
+        music_folder: folders.into_iter().map(|f| MusicFolder {
+            id: f.id,
+            name: f.name,
+        }).collect(),
+    }));
     
     send_response(resp, &params.f)
 }
@@ -65,15 +63,13 @@ pub async fn get_indexes(
         Index { name, artist: artists }
     }).collect();
 
-    let resp = SubsonicResponse::new_ok(IndexesBody {
-        indexes: Indexes {
-            last_modified: 0, // TODO: Get last scan time
-            ignored_articles: "".into(),
-            shortcut: vec![],
-            index: indexes_vec,
-            child: vec![],
-        }
-    });
+    let resp = SubsonicResponse::new_ok(SubsonicResponseBody::Indexes(Indexes {
+        last_modified: 0, // TODO: Get last scan time
+        ignored_articles: "".into(),
+        shortcut: vec![],
+        index: indexes_vec,
+        child: vec![],
+    }));
 
     send_response(resp, &params.f)
 }
@@ -100,18 +96,16 @@ pub async fn get_music_directory(
         Err(_) => return send_response(SubsonicResponse::new_error(0, "Failed to query directory".into()), &params.f),
     };
 
-    let resp = SubsonicResponse::new_ok(DirectoryBody {
-        directory: Directory {
-            id: dir.id,
-            parent: if dir.parent.is_empty() { None } else { Some(dir.parent) },
-            name: dir.title,
-            starred: dir.starred,
-            user_rating: Some(dir.user_rating),
-            average_rating: Some(dir.average_rating),
-            play_count: Some(dir.play_count),
-            child: children.into_iter().map(map_child_to_subsonic).collect(),
-        }
-    });
+    let resp = SubsonicResponse::new_ok(SubsonicResponseBody::Directory(Directory {
+        id: dir.id,
+        parent: if dir.parent.is_empty() { None } else { Some(dir.parent) },
+        name: dir.title,
+        starred: dir.starred,
+        user_rating: Some(dir.user_rating),
+        average_rating: Some(dir.average_rating),
+        play_count: Some(dir.play_count),
+        child: children.into_iter().map(map_child_to_subsonic).collect(),
+    }));
 
     send_response(resp, &params.f)
 }
@@ -126,15 +120,13 @@ pub async fn get_genres(
         Err(_) => return send_response(SubsonicResponse::new_error(0, "Failed to query genres".into()), &params.f),
     };
 
-    let resp = SubsonicResponse::new_ok(GenresBody {
-        genres: Genres {
-            genre: genres.into_iter().map(|g| Genre {
-                value: g.name,
-                song_count: 0, // TODO
-                album_count: 0, // TODO
-            }).collect(),
-        }
-    });
+    let resp = SubsonicResponse::new_ok(SubsonicResponseBody::Genres(Genres {
+        genre: genres.into_iter().map(|g| Genre {
+            value: g.name,
+            song_count: 0, // TODO
+            album_count: 0, // TODO
+        }).collect(),
+    }));
 
     send_response(resp, &params.f)
 }
@@ -169,12 +161,10 @@ pub async fn get_artists(
         IndexID3 { name, artist: artists }
     }).collect();
 
-    let resp = SubsonicResponse::new_ok(ArtistsBody {
-        artists: ArtistsID3 {
-            ignored_articles: "".into(),
-            index: index_vec,
-        }
-    });
+    let resp = SubsonicResponse::new_ok(SubsonicResponseBody::Artists(ArtistsID3 {
+        ignored_articles: "".into(),
+        index: index_vec,
+    }));
 
     send_response(resp, &params.f)
 }
@@ -198,36 +188,34 @@ pub async fn get_artist(
         Err(_) => return send_response(SubsonicResponse::new_error(0, "Failed to fetch albums".into()), &params.f),
     };
 
-    let resp = SubsonicResponse::new_ok(ArtistBody {
-        artist: ArtistWithAlbumsID3 {
-            artist: ArtistID3 {
-                id: artist.id,
-                name: artist.name,
-                cover_art: (!artist.cover_art.is_empty()).then_some(artist.cover_art),
-                artist_image_url: (!artist.artist_image_url.is_empty()).then_some(artist.artist_image_url),
-                album_count: albums.len() as i32,
-                starred: artist.starred,
-                user_rating: Some(artist.user_rating),
-                average_rating: Some(artist.average_rating),
-            },
-            album: albums.into_iter().map(|al| AlbumID3 {
-                id: al.id,
-                name: al.name,
-                artist: Some(al.artist),
-                artist_id: Some(al.artist_id),
-                cover_art: (!al.cover_art.is_empty()).then_some(al.cover_art),
-                song_count: 0, // TODO
-                duration: 0, // TODO
-                play_count: None,
-                created: al.created,
-                starred: al.starred,
-                user_rating: Some(al.user_rating),
-                average_rating: Some(al.average_rating),
-                year: Some(al.year),
-                genre: Some(al.genre),
-            }).collect(),
-        }
-    });
+    let resp = SubsonicResponse::new_ok(SubsonicResponseBody::Artist(ArtistWithAlbumsID3 {
+        artist: ArtistID3 {
+            id: artist.id,
+            name: artist.name,
+            cover_art: (!artist.cover_art.is_empty()).then_some(artist.cover_art),
+            artist_image_url: (!artist.artist_image_url.is_empty()).then_some(artist.artist_image_url),
+            album_count: albums.len() as i32,
+            starred: artist.starred,
+            user_rating: Some(artist.user_rating),
+            average_rating: Some(artist.average_rating),
+        },
+        album: albums.into_iter().map(|al| AlbumID3 {
+            id: al.id,
+            name: al.name,
+            artist: Some(al.artist),
+            artist_id: Some(al.artist_id),
+            cover_art: (!al.cover_art.is_empty()).then_some(al.cover_art),
+            song_count: 0, // TODO
+            duration: 0, // TODO
+            play_count: None,
+            created: al.created,
+            starred: al.starred,
+            user_rating: Some(al.user_rating),
+            average_rating: Some(al.average_rating),
+            year: Some(al.year),
+            genre: Some(al.genre),
+        }).collect(),
+    }));
 
     send_response(resp, &params.f)
 }
@@ -250,27 +238,25 @@ pub async fn get_album(
         Err(_) => return send_response(SubsonicResponse::new_error(0, "Failed to fetch songs".into()), &params.f),
     };
 
-    let resp = SubsonicResponse::new_ok(AlbumBody {
-        album: AlbumWithSongsID3 {
-            album: AlbumID3 {
-                id: album.id,
-                name: album.name,
-                artist: Some(album.artist),
-                artist_id: Some(album.artist_id),
-                cover_art: (!album.cover_art.is_empty()).then_some(album.cover_art),
-                song_count: songs.len() as i32,
-                duration: songs.iter().map(|s| s.duration).sum(),
-                play_count: None,
-                created: album.created,
-                starred: album.starred,
-                user_rating: Some(album.user_rating),
-                average_rating: Some(album.average_rating),
-                year: Some(album.year),
-                genre: Some(album.genre),
-            },
-            song: songs.into_iter().map(map_child_to_subsonic).collect(),
-        }
-    });
+    let resp = SubsonicResponse::new_ok(SubsonicResponseBody::Album(AlbumWithSongsID3 {
+        album: AlbumID3 {
+            id: album.id,
+            name: album.name,
+            artist: Some(album.artist),
+            artist_id: Some(album.artist_id),
+            cover_art: (!album.cover_art.is_empty()).then_some(album.cover_art),
+            song_count: songs.len() as i32,
+            duration: songs.iter().map(|s| s.duration).sum(),
+            play_count: None,
+            created: album.created,
+            starred: album.starred,
+            user_rating: Some(album.user_rating),
+            average_rating: Some(album.average_rating),
+            year: Some(album.year),
+            genre: Some(album.genre),
+        },
+        song: songs.into_iter().map(map_child_to_subsonic).collect(),
+    }));
 
     send_response(resp, &params.f)
 }
@@ -288,9 +274,7 @@ pub async fn get_song(
         Err(_) => return send_response(SubsonicResponse::new_error(0, "Database error".into()), &params.f),
     };
 
-    let resp = SubsonicResponse::new_ok(SongBody {
-        song: map_child_to_subsonic(song)
-    });
+    let resp = SubsonicResponse::new_ok(SubsonicResponseBody::Song(map_child_to_subsonic(song)));
 
     send_response(resp, &params.f)
 }
