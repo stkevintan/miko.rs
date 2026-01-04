@@ -9,7 +9,7 @@ pub enum ResponseStatus {
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename = "subsonic-response")]
-pub struct SubsonicResponse<T> {
+pub struct SubsonicResponse {
     #[serde(rename = "@status")]
     pub status: ResponseStatus,
     #[serde(rename = "@version")]
@@ -21,69 +21,50 @@ pub struct SubsonicResponse<T> {
     #[serde(rename = "@openSubsonic", skip_serializing_if = "Option::is_none")]
     pub open_subsonic: Option<bool>,
     
-    // TODO: https://github.com/tafia/quick-xml/issues/853
-    #[serde(flatten)]
-    pub body: T,
-}
-
-#[derive(Debug, Serialize, Deserialize, Default)]
-pub struct EmptyBody {}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct ErrorBody {
-    pub error: SubsonicError,
+    #[serde(rename = "$value")]
+    pub body: SubsonicResponseBody,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct LicenseBody {
-    pub license: License,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct MusicFoldersBody {
+pub enum SubsonicResponseBody {
+    #[serde(rename = "error")]
+    Error(SubsonicError),
+    #[serde(rename = "license")]
+    License(License),
     #[serde(rename = "musicFolders")]
-    pub music_folders: MusicFolders,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct OpenSubsonicExtensionsBody {
+    MusicFolders(MusicFolders),
     #[serde(rename = "openSubsonicExtensions")]
-    pub open_subsonic_extensions: OpenSubsonicExtensions,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct IndexesBody {
-    pub indexes: Indexes,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct DirectoryBody {
-    pub directory: Directory,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct GenresBody {
-    pub genres: Genres,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct ArtistsBody {
-    pub artists: ArtistsID3,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct ArtistBody {
-    pub artist: ArtistWithAlbumsID3,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct AlbumBody {
-    pub album: AlbumWithSongsID3,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct SongBody {
-    pub song: Child,
+    OpenSubsonicExtensions(OpenSubsonicExtensions),
+    #[serde(rename = "indexes")]
+    Indexes(Indexes),
+    #[serde(rename = "directory")]
+    Directory(Directory),
+    #[serde(rename = "genres")]
+    Genres(Genres),
+    #[serde(rename = "artists")]
+    Artists(ArtistsID3),
+    #[serde(rename = "artist")]
+    Artist(ArtistWithAlbumsID3),
+    #[serde(rename = "album")]
+    Album(AlbumWithSongsID3),
+    #[serde(rename = "song")]
+    Song(Child),
+    #[serde(rename = "albumList")]
+    AlbumList(AlbumList),
+    #[serde(rename = "albumList2")]
+    AlbumList2(AlbumList2),
+    #[serde(rename = "randomSongs")]
+    RandomSongs(RandomSongs),
+    #[serde(rename = "songsByGenre")]
+    SongsByGenre(SongsByGenre),
+    #[serde(rename = "nowPlaying")]
+    NowPlaying(NowPlaying),
+    #[serde(rename = "starred")]
+    Starred(Starred),
+    #[serde(rename = "starred2")]
+    Starred2(Starred2),
+    #[serde(other)]
+    None,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -134,8 +115,8 @@ pub struct MusicFolder {
     pub name: Option<String>,
 }
 
-impl<T> SubsonicResponse<T> {
-    pub fn new_ok(body: T) -> Self {
+impl SubsonicResponse {
+    pub fn new_ok(body: SubsonicResponseBody) -> Self {
         Self {
             status: ResponseStatus::Ok,
             version: "1.16.1".to_string(),
@@ -145,9 +126,7 @@ impl<T> SubsonicResponse<T> {
             body,
         }
     }
-}
 
-impl SubsonicResponse<ErrorBody> {
     pub fn new_error(code: i32, message: String) -> Self {
         Self {
             status: ResponseStatus::Failed,
@@ -155,9 +134,7 @@ impl SubsonicResponse<ErrorBody> {
             xmlns: Some("http://subsonic.org/restapi".to_string()),
             server_version: Some("1.0.0".to_string()),
             open_subsonic: Some(true),
-            body: ErrorBody {
-                error: SubsonicError { code, message },
-            },
+            body: SubsonicResponseBody::Error(SubsonicError { code, message }),
         }
     }
 }
@@ -383,5 +360,66 @@ pub struct AlbumID3 {
 pub struct AlbumWithSongsID3 {
     #[serde(flatten)]
     pub album: AlbumID3,
+    pub song: Vec<Child>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct AlbumList {
+    pub album: Vec<Child>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct AlbumList2 {
+    pub album: Vec<AlbumID3>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct RandomSongs {
+    pub song: Vec<Child>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SongsByGenre {
+    pub song: Vec<Child>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct NowPlaying {
+    #[serde(rename = "entry")]
+    pub entry: Vec<NowPlayingEntry>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NowPlayingEntry {
+    #[serde(flatten)]
+    pub child: Child,
+    #[serde(rename = "@username")]
+    pub username: String,
+    #[serde(rename = "@minutesAgo")]
+    pub minutes_ago: i32,
+    #[serde(rename = "@playerId")]
+    pub player_id: i32,
+    #[serde(rename = "@playerName", skip_serializing_if = "Option::is_none")]
+    pub player_name: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Starred {
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub artist: Vec<Artist>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub album: Vec<Child>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub song: Vec<Child>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Starred2 {
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub artist: Vec<ArtistID3>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub album: Vec<AlbumID3>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub song: Vec<Child>,
 }

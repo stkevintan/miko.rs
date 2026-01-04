@@ -1,6 +1,6 @@
 use actix_web::{web, HttpResponse};
 use crate::subsonic::models::SubsonicResponse;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
 macro_rules! subsonic_routes {
     ($scope:expr, $(($path:literal, $handler:expr)),* $(,)?) => {
@@ -57,31 +57,52 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
     );
 }
 
-pub fn send_response<T: Serialize>(resp: SubsonicResponse<T>, format: &Option<String>) -> HttpResponse {
+pub fn send_response(resp: SubsonicResponse, format: &Option<String>) -> HttpResponse {
     let is_json = format.as_deref() == Some("json");
     
     if is_json {
-        let mut val = serde_json::to_value(&resp).unwrap_or_default();
-        clean_json_attributes(&mut val);
-        HttpResponse::Ok()
-            .content_type("application/json")
-            .json(serde_json::json!({ "subsonic-response": val }))
+        match serde_json::to_value(&resp) {
+            Ok(mut val) => {
+                clean_json_attributes(&mut val);
+                HttpResponse::Ok()
+                    .content_type("application/json")
+                    .json(serde_json::json!({ "subsonic-response": val }))
+            }
+            Err(e) => {
+                log::error!("Failed to serialize SubsonicResponse to JSON: {}", e);
+                HttpResponse::InternalServerError().finish()
+            }
+        }
     } else {
-        let xml = quick_xml::se::to_string(&resp).unwrap_or_default();
-        let xml_header = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
-        HttpResponse::Ok()
-            .content_type("application/xml")
-            .body(format!("{}{}", xml_header, xml))
+        match quick_xml::se::to_string(&resp) {
+            Ok(xml) => {
+                let xml_header = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
+                HttpResponse::Ok()
+                    .content_type("application/xml")
+                    .body(format!("{}{}", xml_header, xml))
+            }
+            Err(e) => {
+                log::error!("Failed to serialize SubsonicResponse to XML: {}", e);
+                HttpResponse::InternalServerError().finish()
+            }
+        }
     }
 }
 
 fn clean_json_attributes(value: &mut serde_json::Value) {
     match value {
         serde_json::Value::Object(map) => {
+            // If there's a "$value" key, we want to flatten its contents into the current object
+            if let Some(serde_json::Value::Object(inner_map)) = map.remove("$value") {
+                for (k, v) in inner_map {
+                    map.insert(k, v);
+                }
+            }
+
             let old_map = std::mem::take(map);
             for (k, mut v) in old_map {
                 clean_json_attributes(&mut v);
-                let new_key = if k.starts_with(&['@', '$']) {
+                let new_key = if k.starts_with('@') {
                     k[1..].to_string()
                 } else {
                     k
