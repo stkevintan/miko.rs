@@ -1,0 +1,79 @@
+use actix_web::{web, HttpResponse};
+use crate::subsonic::models::SubsonicResponse;
+use serde::Deserialize;
+
+pub mod system;
+
+macro_rules! subsonic_routes {
+    ($scope:expr, $(($path:literal, $handler:expr)),* $(,)?) => {
+        $scope
+            $(
+                .route($path, web::get().to($handler))
+                .route(concat!($path, ".view"), web::get().to($handler))
+            )*
+    };
+}
+
+#[derive(Deserialize)]
+#[allow(dead_code)]
+pub struct SubsonicParams {
+    pub u: Option<String>,
+    pub p: Option<String>,
+    pub t: Option<String>,
+    pub s: Option<String>,
+    pub v: Option<String>,
+    pub c: Option<String>,
+    pub f: Option<String>,
+}
+
+pub fn configure(cfg: &mut web::ServiceConfig) {
+    cfg.service(
+        subsonic_routes!(
+            web::scope(""),
+            ("/ping", system::ping),
+            ("/getLicense", system::get_license),
+            ("/getOpenSubsonicExtensions", system::get_open_subsonic_extensions),
+        )
+    );
+}
+
+pub fn send_response(resp: SubsonicResponse, format: &Option<String>) -> HttpResponse {
+    let is_json = format.as_deref() == Some("json");
+    
+    if is_json {
+        let mut val = serde_json::to_value(&resp).unwrap_or_default();
+        clean_json_attributes(&mut val);
+        HttpResponse::Ok()
+            .content_type("application/json")
+            .json(serde_json::json!({ "subsonic-response": val }))
+    } else {
+        let xml = quick_xml::se::to_string(&resp).unwrap_or_default();
+        let xml_header = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
+        HttpResponse::Ok()
+            .content_type("application/xml")
+            .body(format!("{}{}", xml_header, xml))
+    }
+}
+
+fn clean_json_attributes(value: &mut serde_json::Value) {
+    match value {
+        serde_json::Value::Object(map) => {
+            let old_map = std::mem::take(map);
+            for (k, mut v) in old_map {
+                clean_json_attributes(&mut v);
+                let new_key = if k.starts_with('@') {
+                    k[1..].to_string()
+                } else {
+                    k
+                };
+                map.insert(new_key, v);
+            }
+        }
+        serde_json::Value::Array(arr) => {
+            for v in arr {
+                clean_json_attributes(v);
+            }
+        }
+        _ => {}
+    }
+}
