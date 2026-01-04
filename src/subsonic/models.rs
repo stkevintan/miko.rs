@@ -21,6 +21,7 @@ pub struct SubsonicResponse<T> {
     #[serde(rename = "@openSubsonic", skip_serializing_if = "Option::is_none")]
     pub open_subsonic: Option<bool>,
     
+    // TODO: https://github.com/tafia/quick-xml/issues/853
     #[serde(flatten)]
     pub body: T,
 }
