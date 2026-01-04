@@ -61,17 +61,31 @@ pub fn send_response(resp: SubsonicResponse, format: &Option<String>) -> HttpRes
     let is_json = format.as_deref() == Some("json");
     
     if is_json {
-        let mut val = serde_json::to_value(&resp).unwrap_or_default();
-        clean_json_attributes(&mut val);
-        HttpResponse::Ok()
-            .content_type("application/json")
-            .json(serde_json::json!({ "subsonic-response": val }))
+        match serde_json::to_value(&resp) {
+            Ok(mut val) => {
+                clean_json_attributes(&mut val);
+                HttpResponse::Ok()
+                    .content_type("application/json")
+                    .json(serde_json::json!({ "subsonic-response": val }))
+            }
+            Err(e) => {
+                log::error!("Failed to serialize SubsonicResponse to JSON: {}", e);
+                HttpResponse::InternalServerError().finish()
+            }
+        }
     } else {
-        let xml = quick_xml::se::to_string(&resp).unwrap();
-        let xml_header = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
-        HttpResponse::Ok()
-            .content_type("application/xml")
-            .body(format!("{}{}", xml_header, xml))
+        match quick_xml::se::to_string(&resp) {
+            Ok(xml) => {
+                let xml_header = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
+                HttpResponse::Ok()
+                    .content_type("application/xml")
+                    .body(format!("{}{}", xml_header, xml))
+            }
+            Err(e) => {
+                log::error!("Failed to serialize SubsonicResponse to XML: {}", e);
+                HttpResponse::InternalServerError().finish()
+            }
+        }
     }
 }
 
