@@ -1,8 +1,9 @@
 use actix_web::{web, HttpResponse};
 use crate::subsonic::models::SubsonicResponse;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 pub mod system;
+pub mod browsing;
 
 macro_rules! subsonic_routes {
     ($scope:expr, $(($path:literal, $handler:expr)),* $(,)?) => {
@@ -29,15 +30,26 @@ pub struct SubsonicParams {
 pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(
         subsonic_routes!(
-            web::scope(""),
+            web::scope("/rest")
+                .wrap(crate::subsonic::middleware::SubsonicAuth),
+            // system
             ("/ping", system::ping),
             ("/getLicense", system::get_license),
             ("/getOpenSubsonicExtensions", system::get_open_subsonic_extensions),
+            // browsing
+            ("/getMusicFolders", browsing::get_music_folders),
+            ("/getIndexes", browsing::get_indexes),
+            ("/getMusicDirectory", browsing::get_music_directory),
+            ("/getGenres", browsing::get_genres),
+            ("/getArtists", browsing::get_artists),
+            ("/getArtist", browsing::get_artist),
+            ("/getAlbum", browsing::get_album),
+            ("/getSong", browsing::get_song),
         )
     );
 }
 
-pub fn send_response(resp: SubsonicResponse, format: &Option<String>) -> HttpResponse {
+pub fn send_response<T: Serialize>(resp: SubsonicResponse<T>, format: &Option<String>) -> HttpResponse {
     let is_json = format.as_deref() == Some("json");
     
     if is_json {
