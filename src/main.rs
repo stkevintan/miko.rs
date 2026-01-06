@@ -2,13 +2,16 @@ mod models;
 mod subsonic;
 mod crypto;
 mod api;
+mod config;
+mod scanner;
 
 use poem::{Server, listener::TcpListener, Route, middleware::Tracing, EndpointExt};
-use sea_orm::{Database, EntityTrait, ActiveModelTrait, Set, DatabaseConnection, PaginatorTrait, Schema, ConnectionTrait};
-use std::env;
-use dotenvy::dotenv;
+use sea_orm::{Database, EntityTrait, ActiveModelTrait, Set, DatabaseConnection, PaginatorTrait, Schema, ConnectionTrait, QueryFilter, ColumnTrait};
 use chrono::Utc;
-use crate::models::{user, music_folder, user_music_folder, child, artist, album, genre};
+use std::sync::Arc;
+use crate::models::{user, music_folder, user_music_folder, child, artist, album, genre, song_artist, song_genre};
+use crate::config::Config;
+use crate::scanner::Scanner;
 
 async fn setup_schema(db: &DatabaseConnection) -> Result<(), anyhow::Error> {
     let builder = db.get_database_backend();
@@ -23,6 +26,8 @@ async fn setup_schema(db: &DatabaseConnection) -> Result<(), anyhow::Error> {
         schema.create_table_from_entity(artist::Entity),
         schema.create_table_from_entity(album::Entity),
         schema.create_table_from_entity(genre::Entity),
+        schema.create_table_from_entity(song_artist::Entity),
+        schema.create_table_from_entity(song_genre::Entity),
     ];
 
     for mut table in tables {
@@ -33,12 +38,11 @@ async fn setup_schema(db: &DatabaseConnection) -> Result<(), anyhow::Error> {
     Ok(())
 }
 
-async fn init_default_user(db: &DatabaseConnection) -> Result<(), anyhow::Error> {
+async fn init_default_user(db: &DatabaseConnection, password_secret: &str) -> Result<(), anyhow::Error> {
     let count = user::Entity::find().count(db).await?;
     if count == 0 {
         log::info!("No users found, creating default admin user");
-        let secret = env::var("PASSWORD_SECRET").unwrap_or_default();
-        let encrypted_password = crypto::encrypt("adminpassword", secret.as_bytes())?;
+        let encrypted_password = crypto::encrypt("adminpassword", password_secret.as_bytes())?;
         
         let admin = user::ActiveModel {
             username: Set("admin".to_string()),
@@ -68,21 +72,63 @@ async fn init_default_user(db: &DatabaseConnection) -> Result<(), anyhow::Error>
     Ok(())
 }
 
+async fn init_music_folders(db: &DatabaseConnection, folders: &[String]) -> Result<(), anyhow::Error> {
+    for path in folders {
+        let exists = music_folder::Entity::find()
+            .filter(music_folder::Column::Path.eq(path))
+            .one(db)
+            .await?;
+
+        if exists.is_none() {
+            log::info!("Adding music folder from config: {}", path);
+            let name = std::path::Path::new(path)
+                .file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_else(|| "Music".to_string());
+
+            let folder = music_folder::ActiveModel {
+                path: Set(path.clone()),
+                name: Set(Some(name)),
+                ..Default::default()
+            };
+            folder.insert(db).await?;
+        }
+    }
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
-    dotenv().ok();
     env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
 
-    let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
-    let db = Database::connect(database_url)
+    let config = Config::load()?;
+    let config = Arc::new(config);
+    config.validate()?;
+
+    // Ensure database directory exists for SQLite
+    if config.database.url.starts_with("sqlite://") {
+        let path_part = config.database.url
+            .strip_prefix("sqlite://").unwrap()
+            .split('?').next().unwrap();
+        let path = std::path::Path::new(path_part);
+        if let Some(parent) = path.parent() {
+            if !parent.exists() {
+                log::info!("Creating database directory: {:?}", parent);
+                std::fs::create_dir_all(parent)?;
+            }
+        }
+    }
+
+    let db = Database::connect(&config.database.url)
         .await
         .expect("Failed to connect to database");
 
     setup_schema(&db).await.expect("Failed to setup database schema");
-    init_default_user(&db).await.expect("Failed to initialize default user");
+    init_default_user(&db, &config.server.password_secret).await.expect("Failed to initialize default user");
+    init_music_folders(&db, &config.subsonic.folders).await.expect("Failed to initialize music folders");
 
-    let port = env::var("PORT").unwrap_or_else(|_| "8081".to_string());
-    let addr = format!("0.0.0.0:{}", port);
+    let scanner = Arc::new(Scanner::new(db.clone(), config.clone()));
+    let addr = format!("0.0.0.0:{}", config.server.port);
 
     log::info!("Starting server at http://{}", addr);
 
@@ -90,6 +136,8 @@ async fn main() -> Result<(), anyhow::Error> {
         .nest("/rest", subsonic::create_route())
         .nest("/api", api::create_route())
         .data(db)
+        .data(config)
+        .data(scanner)
         .with(Tracing);
 
     Server::new(TcpListener::bind(addr))

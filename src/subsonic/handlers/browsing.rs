@@ -1,6 +1,8 @@
+use crate::config::Config;
 use crate::models::{album, artist, child, genre, music_folder};
+use crate::scanner::Scanner;
 use crate::subsonic::{
-    common::{ SubsonicParams, send_response },
+    common::{SubsonicParams, send_response},
     models::{
         AlbumID3, AlbumWithSongsID3, Artist, ArtistID3, ArtistWithAlbumsID3, ArtistsID3,
         Child as SubsonicChild, Directory, Genre, Genres, Index, IndexID3, Indexes, MusicFolder,
@@ -14,6 +16,7 @@ use poem::{
 };
 use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, QueryOrder};
 use std::collections::{BTreeMap, HashMap};
+use std::sync::Arc;
 
 #[handler]
 pub async fn get_music_folders(
@@ -46,6 +49,8 @@ pub async fn get_music_folders(
 #[handler]
 pub async fn get_indexes(
     db: Data<&DatabaseConnection>,
+    config: Data<&Arc<Config>>,
+    scanner: Data<&Arc<Scanner>>,
     params: Query<SubsonicParams>,
     query: Query<HashMap<String, String>>,
 ) -> impl IntoResponse {
@@ -70,23 +75,49 @@ pub async fn get_indexes(
             )
         }
     };
-    // ... (rest of the functions need #[handler] and Query replacements)
+
+    let ignored_articles: Vec<String> = config
+        .subsonic
+        .ignored_articles
+        .split_whitespace()
+        .map(|s| s.to_lowercase())
+        .collect();
 
     let mut index_map: BTreeMap<String, Vec<Artist>> = BTreeMap::new();
+    let root_children: Vec<SubsonicChild> = Vec::new(); // Subsonic often returns non-grouped folders here
+
     for child in children {
         if child.title.is_empty() {
             continue;
         }
-        let first_char = child
-            .title
+
+        let mut display_title = child.title.clone();
+        let mut sort_title = display_title.to_lowercase();
+
+        for article in &ignored_articles {
+            let article_with_space = format!("{} ", article);
+            if sort_title.starts_with(&article_with_space) {
+                sort_title = sort_title[article_with_space.len()..].to_string();
+                break;
+            }
+        }
+
+        let first_char = sort_title
             .chars()
             .next()
-            .unwrap()
+            .unwrap_or('#')
             .to_uppercase()
             .to_string();
-        index_map.entry(first_char).or_default().push(Artist {
+
+        let index_key = if first_char.chars().next().unwrap().is_alphabetic() {
+            first_char
+        } else {
+            "#".to_string()
+        };
+
+        index_map.entry(index_key).or_default().push(Artist {
             id: child.id,
-            name: child.title,
+            name: display_title,
             artist_image_url: None,
             starred: None,
             user_rating: None,
@@ -97,20 +128,17 @@ pub async fn get_indexes(
     let indexes_vec: Vec<Index> = index_map
         .into_iter()
         .map(|(name, mut artists)| {
-            artists.sort_by(|a, b| a.name.cmp(&b.name));
-            Index {
-                name,
-                artist: artists,
-            }
+            artists.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+            Index { name, artist: artists }
         })
         .collect();
 
     let resp = SubsonicResponse::new_ok(SubsonicResponseBody::Indexes(Indexes {
-        last_modified: 0, // TODO: Get last scan time
-        ignored_articles: "".into(),
+        last_modified: scanner.last_scan_time() * 1000,
+        ignored_articles: config.subsonic.ignored_articles.clone(),
         shortcut: vec![],
         index: indexes_vec,
-        child: vec![],
+        child: root_children,
     }));
 
     send_response(resp, &params.f)

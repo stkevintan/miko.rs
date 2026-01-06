@@ -3,7 +3,9 @@ use crate::subsonic::common::{SubsonicParams, send_response};
 use crate::subsonic::models::SubsonicResponse;
 use crate::subsonic::auth::{verify_password, verify_token};
 use crate::models::user;
+use crate::config::Config;
 use sea_orm::{DatabaseConnection, EntityTrait, QueryFilter, ColumnTrait};
+use std::sync::Arc;
 
 
 pub struct SubsonicAuth;
@@ -52,9 +54,9 @@ impl<E: Endpoint> Endpoint for SubsonicAuthEndpoint<E> {
             }
         };
 
-        // Get secret from config (hardcoded for now or from env)
-        let secret = std::env::var("PASSWORD_SECRET").unwrap_or_default();
-        let secret_bytes = secret.as_bytes();
+        // Get secret from config
+        let config = req.data::<Arc<Config>>().unwrap();
+        let secret_bytes = config.server.password_secret.as_bytes();
 
         let mut authenticated = false;
         if let Some(password) = &query.p {
