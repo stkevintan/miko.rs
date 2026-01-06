@@ -33,7 +33,7 @@ impl<E: Endpoint> Endpoint for SubsonicAuthEndpoint<E> {
             Some(u) => u,
             None => {
                 let resp = SubsonicResponse::new_error(10, "User not found".to_string());
-                return Ok(send_response(resp, &query.f).into_response());
+                return Ok(send_response(resp, &query.f));
             }
         };
 
@@ -48,7 +48,7 @@ impl<E: Endpoint> Endpoint for SubsonicAuthEndpoint<E> {
             Some(u) => u,
             None => {
                 let resp = SubsonicResponse::new_error(10, "User not found".to_string());
-                return Ok(send_response(resp, &query.f).into_response());
+                return Ok(send_response(resp, &query.f));
             }
         };
 
@@ -69,7 +69,7 @@ impl<E: Endpoint> Endpoint for SubsonicAuthEndpoint<E> {
 
         if !authenticated {
             let resp = SubsonicResponse::new_error(40, "Wrong username or password".to_string());
-            return Ok(send_response(resp, &query.f).into_response());
+            return Ok(send_response(resp, &query.f));
         }
 
         self.ep.call(req).await.map(IntoResponse::into_response)

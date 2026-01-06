@@ -11,7 +11,7 @@ macro_rules! get_id_or_error {
                 return $crate::subsonic::common::send_response(
                     $crate::subsonic::models::SubsonicResponse::new_error(10, "ID is required".into()),
                     &$params.f
-                ).into_response();
+                );
             }
         }
     };
