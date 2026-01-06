@@ -1,8 +1,9 @@
 mod models;
 mod subsonic;
 mod crypto;
+mod api;
 
-use actix_web::{web, App, HttpServer, middleware::Logger};
+use poem::{Server, listener::TcpListener, Route, middleware::Tracing, EndpointExt};
 use sea_orm::{Database, EntityTrait, ActiveModelTrait, Set, DatabaseConnection, PaginatorTrait, Schema, ConnectionTrait};
 use std::env;
 use dotenvy::dotenv;
@@ -67,8 +68,8 @@ async fn init_default_user(db: &DatabaseConnection) -> Result<(), anyhow::Error>
     Ok(())
 }
 
-#[actix_web::main]
-async fn main() -> std::io::Result<()> {
+#[tokio::main]
+async fn main() -> Result<(), anyhow::Error> {
     dotenv().ok();
     env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
 
@@ -85,13 +86,15 @@ async fn main() -> std::io::Result<()> {
 
     log::info!("Starting server at http://{}", addr);
 
-    HttpServer::new(move || {
-        App::new()
-            .app_data(web::Data::new(db.clone()))
-            .wrap(Logger::default())
-            .configure(subsonic::handlers::configure)
-    })
-    .bind(addr)?
-    .run()
-    .await
+    let app = Route::new()
+        .nest("/rest", subsonic::create_route())
+        .nest("/api", api::create_route())
+        .data(db)
+        .with(Tracing);
+
+    Server::new(TcpListener::bind(addr))
+        .run(app)
+        .await?;
+        
+    Ok(())
 }

@@ -1,35 +1,57 @@
-use actix_web::{web, Responder};
-use sea_orm::{DatabaseConnection, EntityTrait, QueryFilter, ColumnTrait, QueryOrder};
-use crate::subsonic::models::{SubsonicResponse, SubsonicResponseBody, MusicFolders, MusicFolder, Indexes, Index, Artist, Directory, Child as SubsonicChild, Genres, Genre, ArtistsID3, IndexID3, ArtistID3, ArtistWithAlbumsID3, AlbumID3, AlbumWithSongsID3};
-use crate::subsonic::handlers::{SubsonicParams, send_response};
-use crate::models::{music_folder, child, artist, album, genre};
-use std::collections::{HashMap, BTreeMap};
+use crate::models::{album, artist, child, genre, music_folder};
+use crate::subsonic::{
+    common::{ SubsonicParams, send_response },
+    models::{
+        AlbumID3, AlbumWithSongsID3, Artist, ArtistID3, ArtistWithAlbumsID3, ArtistsID3,
+        Child as SubsonicChild, Directory, Genre, Genres, Index, IndexID3, Indexes, MusicFolder,
+        MusicFolders, SubsonicResponse, SubsonicResponseBody,
+    },
+};
+use poem::{
+    handler,
+    web::{Data, Query},
+    IntoResponse,
+};
+use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, QueryOrder};
+use std::collections::{BTreeMap, HashMap};
 
+#[handler]
 pub async fn get_music_folders(
-    db: web::Data<DatabaseConnection>,
-    params: web::Query<SubsonicParams>,
-) -> impl Responder {
-    let folders = match music_folder::Entity::find().all(db.get_ref()).await {
+    db: Data<&DatabaseConnection>,
+    params: Query<SubsonicParams>,
+) -> impl IntoResponse {
+    let folders = match music_folder::Entity::find().all(*db).await {
         Ok(f) => f,
-        Err(_) => return send_response(SubsonicResponse::new_error(0, "Failed to fetch music folders".into()), &params.f),
+        Err(_) => {
+            return send_response(
+                SubsonicResponse::new_error(0, "Failed to fetch music folders".into()),
+                &params.f,
+            )
+        }
     };
 
     let resp = SubsonicResponse::new_ok(SubsonicResponseBody::MusicFolders(MusicFolders {
-        music_folder: folders.into_iter().map(|f| MusicFolder {
-            id: f.id,
-            name: f.name,
-        }).collect(),
+        music_folder: folders
+            .into_iter()
+            .map(|f| MusicFolder {
+                id: f.id,
+                name: f.name,
+            })
+            .collect(),
     }));
-    
+
     send_response(resp, &params.f)
 }
 
+#[handler]
 pub async fn get_indexes(
-    db: web::Data<DatabaseConnection>,
-    params: web::Query<SubsonicParams>,
-    query: web::Query<HashMap<String, String>>,
-) -> impl Responder {
-    let music_folder_id = query.get("musicFolderId").and_then(|id| id.parse::<i32>().ok());
+    db: Data<&DatabaseConnection>,
+    params: Query<SubsonicParams>,
+    query: Query<HashMap<String, String>>,
+) -> impl IntoResponse {
+    let music_folder_id = query
+        .get("musicFolderId")
+        .and_then(|id| id.parse::<i32>().ok());
 
     let mut db_query = child::Entity::find()
         .filter(child::Column::IsDir.eq(true))
@@ -39,15 +61,29 @@ pub async fn get_indexes(
         db_query = db_query.filter(child::Column::MusicFolderId.eq(folder_id));
     }
 
-    let children = match db_query.all(db.get_ref()).await {
+    let children = match db_query.all(*db).await {
         Ok(c) => c,
-        Err(_) => return send_response(SubsonicResponse::new_error(0, "Failed to query indexes".into()), &params.f),
+        Err(_) => {
+            return send_response(
+                SubsonicResponse::new_error(0, "Failed to query indexes".into()),
+                &params.f,
+            )
+        }
     };
+    // ... (rest of the functions need #[handler] and Query replacements)
 
     let mut index_map: BTreeMap<String, Vec<Artist>> = BTreeMap::new();
     for child in children {
-        if child.title.is_empty() { continue; }
-        let first_char = child.title.chars().next().unwrap().to_uppercase().to_string();
+        if child.title.is_empty() {
+            continue;
+        }
+        let first_char = child
+            .title
+            .chars()
+            .next()
+            .unwrap()
+            .to_uppercase()
+            .to_string();
         index_map.entry(first_char).or_default().push(Artist {
             id: child.id,
             name: child.title,
@@ -58,10 +94,16 @@ pub async fn get_indexes(
         });
     }
 
-    let indexes_vec: Vec<Index> = index_map.into_iter().map(|(name, mut artists)| {
-        artists.sort_by(|a, b| a.name.cmp(&b.name));
-        Index { name, artist: artists }
-    }).collect();
+    let indexes_vec: Vec<Index> = index_map
+        .into_iter()
+        .map(|(name, mut artists)| {
+            artists.sort_by(|a, b| a.name.cmp(&b.name));
+            Index {
+                name,
+                artist: artists,
+            }
+        })
+        .collect();
 
     let resp = SubsonicResponse::new_ok(SubsonicResponseBody::Indexes(Indexes {
         last_modified: 0, // TODO: Get last scan time
@@ -74,31 +116,57 @@ pub async fn get_indexes(
     send_response(resp, &params.f)
 }
 
+#[handler]
 pub async fn get_music_directory(
-    db: web::Data<DatabaseConnection>,
-    params: web::Query<SubsonicParams>,
-    query: web::Query<HashMap<String, String>>,
-) -> impl Responder {
+    db: Data<&DatabaseConnection>,
+    params: Query<SubsonicParams>,
+    query: Query<HashMap<String, String>>,
+) -> impl IntoResponse {
     let id = get_id_or_error!(query, params);
 
-    let dir = match child::Entity::find_by_id(id).filter(child::Column::IsDir.eq(true)).one(db.get_ref()).await {
+    let dir = match child::Entity::find_by_id(id)
+        .filter(child::Column::IsDir.eq(true))
+        .one(*db)
+        .await
+    {
         Ok(Some(d)) => d,
-        Ok(None) => return send_response(SubsonicResponse::new_error(70, "Directory not found".into()), &params.f),
-        Err(_) => return send_response(SubsonicResponse::new_error(0, "Database error".into()), &params.f),
+        Ok(None) => {
+            return send_response(
+                SubsonicResponse::new_error(70, "Directory not found".into()),
+                &params.f,
+            )
+        }
+        Err(_) => {
+            return send_response(
+                SubsonicResponse::new_error(0, "Database error".into()),
+                &params.f,
+            )
+        }
     };
 
     let children = match child::Entity::find()
         .filter(child::Column::Parent.eq(dir.id.clone()))
         .order_by_desc(child::Column::IsDir)
         .order_by_asc(child::Column::Title)
-        .all(db.get_ref()).await {
+        .all(*db)
+        .await
+    {
         Ok(c) => c,
-        Err(_) => return send_response(SubsonicResponse::new_error(0, "Failed to query directory".into()), &params.f),
+        Err(_) => {
+            return send_response(
+                SubsonicResponse::new_error(0, "Failed to query directory".into()),
+                &params.f,
+            )
+        }
     };
 
     let resp = SubsonicResponse::new_ok(SubsonicResponseBody::Directory(Directory {
         id: dir.id,
-        parent: if dir.parent.is_empty() { None } else { Some(dir.parent) },
+        parent: if dir.parent.is_empty() {
+            None
+        } else {
+            Some(dir.parent)
+        },
         name: dir.title,
         starred: dir.starred,
         user_rating: Some(dir.user_rating),
@@ -110,39 +178,56 @@ pub async fn get_music_directory(
     send_response(resp, &params.f)
 }
 
+#[handler]
 pub async fn get_genres(
-    db: web::Data<DatabaseConnection>,
-    params: web::Query<SubsonicParams>,
-) -> impl Responder {
+    db: Data<&DatabaseConnection>,
+    params: Query<SubsonicParams>,
+) -> impl IntoResponse {
     // Simplified genre query for now
-    let genres = match genre::Entity::find().all(db.get_ref()).await {
+    let genres = match genre::Entity::find().all(*db).await {
         Ok(g) => g,
-        Err(_) => return send_response(SubsonicResponse::new_error(0, "Failed to query genres".into()), &params.f),
+        Err(_) => {
+            return send_response(
+                SubsonicResponse::new_error(0, "Failed to query genres".into()),
+                &params.f,
+            )
+        }
     };
 
     let resp = SubsonicResponse::new_ok(SubsonicResponseBody::Genres(Genres {
-        genre: genres.into_iter().map(|g| Genre {
-            value: g.name,
-            song_count: 0, // TODO
-            album_count: 0, // TODO
-        }).collect(),
+        genre: genres
+            .into_iter()
+            .map(|g| Genre {
+                value: g.name,
+                song_count: 0,  // TODO
+                album_count: 0, // TODO
+            })
+            .collect(),
     }));
 
     send_response(resp, &params.f)
 }
 
+#[handler]
 pub async fn get_artists(
-    db: web::Data<DatabaseConnection>,
-    params: web::Query<SubsonicParams>,
-) -> impl Responder {
-    let artists = match artist::Entity::find().all(db.get_ref()).await {
+    db: Data<&DatabaseConnection>,
+    params: Query<SubsonicParams>,
+) -> impl IntoResponse {
+    let artists = match artist::Entity::find().all(*db).await {
         Ok(a) => a,
-        Err(_) => return send_response(SubsonicResponse::new_error(0, "Failed to query artists".into()), &params.f),
+        Err(_) => {
+            return send_response(
+                SubsonicResponse::new_error(0, "Failed to query artists".into()),
+                &params.f,
+            )
+        }
     };
 
     let mut index_map: BTreeMap<String, Vec<ArtistID3>> = BTreeMap::new();
     for a in artists {
-        if a.name.is_empty() { continue; }
+        if a.name.is_empty() {
+            continue;
+        }
         let first_char = a.name.chars().next().unwrap().to_uppercase().to_string();
         index_map.entry(first_char).or_default().push(ArtistID3 {
             id: a.id,
@@ -156,10 +241,16 @@ pub async fn get_artists(
         });
     }
 
-    let index_vec: Vec<IndexID3> = index_map.into_iter().map(|(name, mut artists)| {
-        artists.sort_by(|a, b| a.name.cmp(&b.name));
-        IndexID3 { name, artist: artists }
-    }).collect();
+    let index_vec: Vec<IndexID3> = index_map
+        .into_iter()
+        .map(|(name, mut artists)| {
+            artists.sort_by(|a, b| a.name.cmp(&b.name));
+            IndexID3 {
+                name,
+                artist: artists,
+            }
+        })
+        .collect();
 
     let resp = SubsonicResponse::new_ok(SubsonicResponseBody::Artists(ArtistsID3 {
         ignored_articles: "".into(),
@@ -169,23 +260,43 @@ pub async fn get_artists(
     send_response(resp, &params.f)
 }
 
+#[handler]
 pub async fn get_artist(
-    db: web::Data<DatabaseConnection>,
-    params: web::Query<SubsonicParams>,
-    query: web::Query<HashMap<String, String>>,
-) -> impl Responder {
+    db: Data<&DatabaseConnection>,
+    params: Query<SubsonicParams>,
+    query: Query<HashMap<String, String>>,
+) -> impl IntoResponse {
     let id = get_id_or_error!(query, params);
 
-    let artist = match artist::Entity::find_by_id(id).one(db.get_ref()).await {
+    let artist = match artist::Entity::find_by_id(id).one(*db).await {
         Ok(Some(a)) => a,
-        Ok(None) => return send_response(SubsonicResponse::new_error(70, "Artist not found".into()), &params.f),
-        Err(_) => return send_response(SubsonicResponse::new_error(0, "Database error".into()), &params.f),
+        Ok(None) => {
+            return send_response(
+                SubsonicResponse::new_error(70, "Artist not found".into()),
+                &params.f,
+            )
+        }
+        Err(_) => {
+            return send_response(
+                SubsonicResponse::new_error(0, "Database error".into()),
+                &params.f,
+            )
+        }
     };
 
     // Fetch albums for this artist
-    let albums = match album::Entity::find().filter(album::Column::ArtistId.eq(artist.id.clone())).all(db.get_ref()).await {
+    let albums = match album::Entity::find()
+        .filter(album::Column::ArtistId.eq(artist.id.clone()))
+        .all(*db)
+        .await
+    {
         Ok(al) => al,
-        Err(_) => return send_response(SubsonicResponse::new_error(0, "Failed to fetch albums".into()), &params.f),
+        Err(_) => {
+            return send_response(
+                SubsonicResponse::new_error(0, "Failed to fetch albums".into()),
+                &params.f,
+            )
+        }
     };
 
     let resp = SubsonicResponse::new_ok(SubsonicResponseBody::Artist(ArtistWithAlbumsID3 {
@@ -193,49 +304,75 @@ pub async fn get_artist(
             id: artist.id,
             name: artist.name,
             cover_art: (!artist.cover_art.is_empty()).then_some(artist.cover_art),
-            artist_image_url: (!artist.artist_image_url.is_empty()).then_some(artist.artist_image_url),
+            artist_image_url: (!artist.artist_image_url.is_empty())
+                .then_some(artist.artist_image_url),
             album_count: albums.len() as i32,
             starred: artist.starred,
             user_rating: Some(artist.user_rating),
             average_rating: Some(artist.average_rating),
         },
-        album: albums.into_iter().map(|al| AlbumID3 {
-            id: al.id,
-            name: al.name,
-            artist: Some(al.artist),
-            artist_id: Some(al.artist_id),
-            cover_art: (!al.cover_art.is_empty()).then_some(al.cover_art),
-            song_count: 0, // TODO
-            duration: 0, // TODO
-            play_count: None,
-            created: al.created,
-            starred: al.starred,
-            user_rating: Some(al.user_rating),
-            average_rating: Some(al.average_rating),
-            year: Some(al.year),
-            genre: Some(al.genre),
-        }).collect(),
+        album: albums
+            .into_iter()
+            .map(|al| AlbumID3 {
+                id: al.id,
+                name: al.name,
+                artist: Some(al.artist),
+                artist_id: Some(al.artist_id),
+                cover_art: (!al.cover_art.is_empty()).then_some(al.cover_art),
+                song_count: 0, // TODO
+                duration: 0,   // TODO
+                play_count: None,
+                created: al.created,
+                starred: al.starred,
+                user_rating: Some(al.user_rating),
+                average_rating: Some(al.average_rating),
+                year: Some(al.year),
+                genre: Some(al.genre),
+            })
+            .collect(),
     }));
 
     send_response(resp, &params.f)
 }
 
+#[handler]
 pub async fn get_album(
-    db: web::Data<DatabaseConnection>,
-    params: web::Query<SubsonicParams>,
-    query: web::Query<HashMap<String, String>>,
-) -> impl Responder {
+    db: Data<&DatabaseConnection>,
+    params: Query<SubsonicParams>,
+    query: Query<HashMap<String, String>>,
+) -> impl IntoResponse {
     let id = get_id_or_error!(query, params);
 
-    let album = match album::Entity::find_by_id(id).one(db.get_ref()).await {
+    let album = match album::Entity::find_by_id(id).one(*db).await {
         Ok(Some(al)) => al,
-        Ok(None) => return send_response(SubsonicResponse::new_error(70, "Album not found".into()), &params.f),
-        Err(_) => return send_response(SubsonicResponse::new_error(0, "Database error".into()), &params.f),
+        Ok(None) => {
+            return send_response(
+                SubsonicResponse::new_error(70, "Album not found".into()),
+                &params.f,
+            )
+        }
+        Err(_) => {
+            return send_response(
+                SubsonicResponse::new_error(0, "Database error".into()),
+                &params.f,
+            )
+        }
     };
 
-    let songs = match child::Entity::find().filter(child::Column::AlbumId.eq(album.id.clone())).order_by_asc(child::Column::DiscNumber).order_by_asc(child::Column::Track).all(db.get_ref()).await {
+    let songs = match child::Entity::find()
+        .filter(child::Column::AlbumId.eq(album.id.clone()))
+        .order_by_asc(child::Column::DiscNumber)
+        .order_by_asc(child::Column::Track)
+        .all(*db)
+        .await
+    {
         Ok(s) => s,
-        Err(_) => return send_response(SubsonicResponse::new_error(0, "Failed to fetch songs".into()), &params.f),
+        Err(_) => {
+            return send_response(
+                SubsonicResponse::new_error(0, "Failed to fetch songs".into()),
+                &params.f,
+            )
+        }
     };
 
     let resp = SubsonicResponse::new_ok(SubsonicResponseBody::Album(AlbumWithSongsID3 {
@@ -261,17 +398,32 @@ pub async fn get_album(
     send_response(resp, &params.f)
 }
 
+#[handler]
 pub async fn get_song(
-    db: web::Data<DatabaseConnection>,
-    params: web::Query<SubsonicParams>,
-    query: web::Query<HashMap<String, String>>,
-) -> impl Responder {
+    db: Data<&DatabaseConnection>,
+    params: Query<SubsonicParams>,
+    query: Query<HashMap<String, String>>,
+) -> impl IntoResponse {
     let id = get_id_or_error!(query, params);
 
-    let song = match child::Entity::find_by_id(id).filter(child::Column::IsDir.eq(false)).one(db.get_ref()).await {
+    let song = match child::Entity::find_by_id(id)
+        .filter(child::Column::IsDir.eq(false))
+        .one(*db)
+        .await
+    {
         Ok(Some(s)) => s,
-        Ok(None) => return send_response(SubsonicResponse::new_error(70, "Song not found".into()), &params.f),
-        Err(_) => return send_response(SubsonicResponse::new_error(0, "Database error".into()), &params.f),
+        Ok(None) => {
+            return send_response(
+                SubsonicResponse::new_error(70, "Song not found".into()),
+                &params.f,
+            )
+        }
+        Err(_) => {
+            return send_response(
+                SubsonicResponse::new_error(0, "Database error".into()),
+                &params.f,
+            )
+        }
     };
 
     let resp = SubsonicResponse::new_ok(SubsonicResponseBody::Song(map_child_to_subsonic(song)));
@@ -294,7 +446,8 @@ fn map_child_to_subsonic(c: child::Model) -> SubsonicChild {
         size: Some(c.size),
         content_type: Some(c.content_type),
         suffix: Some(c.suffix),
-        transcoded_content_type: (!c.transcoded_content_type.is_empty()).then_some(c.transcoded_content_type),
+        transcoded_content_type: (!c.transcoded_content_type.is_empty())
+            .then_some(c.transcoded_content_type),
         transcoded_suffix: (!c.transcoded_suffix.is_empty()).then_some(c.transcoded_suffix),
         duration: Some(c.duration),
         bit_rate: Some(c.bit_rate),
