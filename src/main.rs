@@ -81,7 +81,7 @@ async fn main() -> Result<(), anyhow::Error> {
     setup_schema(&db).await.expect("Failed to setup database schema");
     init_default_user(&db).await.expect("Failed to initialize default user");
 
-    let port = env::var("PORT").unwrap_or_else(|_| "8080".to_string());
+    let port = env::var("PORT").unwrap_or_else(|_| "8081".to_string());
     let addr = format!("0.0.0.0:{}", port);
 
     log::info!("Starting server at http://{}", addr);
