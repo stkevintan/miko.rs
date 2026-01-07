@@ -23,8 +23,7 @@ pub struct Model {
     pub genre: String,
     #[sea_orm(default_value = "")]
     pub lyrics: String,
-    #[sea_orm(default_value = "")]
-    pub cover_art: String,
+    pub cover_art: Option<String>,
     #[sea_orm(default_value = 0)]
     pub size: i64,
     #[sea_orm(default_value = "")]

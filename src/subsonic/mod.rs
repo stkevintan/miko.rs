@@ -17,7 +17,7 @@ macro_rules! subsonic_routes {
     };
 }
 
-use crate::subsonic::handlers::{system, browsing, scan};
+use crate::subsonic::handlers::{browsing, lists, playlists, scan, search, system};
 
 pub fn create_route() -> Route {
     let route = subsonic_routes!(
@@ -35,9 +35,37 @@ pub fn create_route() -> Route {
         ("/getArtist", browsing::get_artist),
         ("/getAlbum", browsing::get_album),
         ("/getSong", browsing::get_song),
+        ("/getVideos", browsing::get_videos),
+        ("/getVideoInfo", browsing::get_video_info),
+        ("/getArtistInfo", browsing::get_artist_info),
+        ("/getArtistInfo2", browsing::get_artist_info2),
+        ("/getAlbumInfo", browsing::get_album_info),
+        ("/getAlbumInfo2", browsing::get_album_info2),
+        ("/getSimilarSongs", browsing::get_similar_songs),
+        ("/getSimilarSongs2", browsing::get_similar_songs2),
+        ("/getTopSongs", browsing::get_top_songs),
+
+        // playlists
+        ("/getPlaylists", playlists::get_playlists),
+        ("/getPlaylist", playlists::get_playlist),
+        ("/createPlaylist", playlists::create_playlist),
+        ("/updatePlaylist", playlists::update_playlist),
+        ("/deletePlaylist", playlists::delete_playlist),
         // scan
         ("/getScanStatus", scan::get_scan_status),
         ("/startScan", scan::start_scan),
+        // search
+        ("/search", search::search),
+        ("/search2", search::search2),
+        ("/search3", search::search3),
+        // list
+        ("/getAlbumList", lists::get_album_list),
+        ("/getAlbumList2", lists::get_album_list2),
+        ("/getRandomSongs", lists::get_random_songs),
+        ("/getSongsByGenre", lists::get_songs_by_genre),
+        ("/getNowPlaying", lists::get_now_playing),
+        ("/getStarred", lists::get_starred),
+        ("/getStarred2", lists::get_starred2),
     );
     Route::new().nest("/", route.with(middleware::SubsonicAuth))
 }

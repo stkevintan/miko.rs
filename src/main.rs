@@ -1,13 +1,15 @@
 mod api;
+mod browser;
 mod config;
 mod crypto;
 mod models;
 mod scanner;
 mod subsonic;
 
+use crate::browser::Browser;
 use crate::config::Config;
 use crate::models::{
-    album, artist, child, genre, music_folder, song_artist, song_genre, user, user_music_folder,
+    album, album_artist, artist, child, genre, music_folder, playlist, playlist_song, song_artist, song_genre, user, user_music_folder
 };
 use crate::scanner::Scanner;
 use chrono::Utc;
@@ -33,6 +35,9 @@ async fn setup_schema(db: &DatabaseConnection) -> Result<(), anyhow::Error> {
         schema.create_table_from_entity(genre::Entity),
         schema.create_table_from_entity(song_artist::Entity),
         schema.create_table_from_entity(song_genre::Entity),
+        schema.create_table_from_entity(album_artist::Entity),
+        schema.create_table_from_entity(playlist::Entity),
+        schema.create_table_from_entity(playlist_song::Entity),
     ];
 
     for mut table in tables {
@@ -158,6 +163,7 @@ async fn main() -> Result<(), anyhow::Error> {
         .expect("Failed to initialize music folders");
 
     let scanner = Arc::new(Scanner::new(db.clone(), config.clone()));
+    let browser = Arc::new(Browser::new(db.clone()));
     scanner.update_total_count().await;
     let addr = format!("0.0.0.0:{}", config.server.port);
 
@@ -169,6 +175,7 @@ async fn main() -> Result<(), anyhow::Error> {
         .data(db)
         .data(config)
         .data(scanner)
+        .data(browser)
         .with(Tracing);
 
     Server::new(TcpListener::bind(addr)).run(app).await?;

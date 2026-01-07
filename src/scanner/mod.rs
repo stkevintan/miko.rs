@@ -4,7 +4,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::mpsc;
 use sea_orm::{DatabaseConnection, EntityTrait, QueryFilter, ColumnTrait, Set, QuerySelect, ConnectionTrait};
 use crate::config::Config;
-use crate::models::{child, music_folder, artist, album, genre, song_artist, song_genre};
+use crate::models::{child, music_folder, artist, album, album_artist, genre, song_artist, song_genre};
 use crate::scanner::walker::{Walker, WalkTask};
 use std::path::Path;
 use std::collections::{HashMap, HashSet};
@@ -118,7 +118,7 @@ impl Scanner {
                     artist: Set("".to_string()),
                     genre: Set("".to_string()),
                     lyrics: Set("".to_string()),
-                    cover_art: Set("".to_string()),
+                    cover_art: Set(None),
                     content_type: Set("".to_string()),
                     suffix: Set("".to_string()),
                     transcoded_content_type: Set("".to_string()),
@@ -184,7 +184,7 @@ impl Scanner {
                 album: Set("".to_string()),
                 genre: Set("".to_string()),
                 lyrics: Set("".to_string()),
-                cover_art: Set("".to_string()),
+                cover_art: Set(None),
                 transcoded_content_type: Set("".to_string()),
                 transcoded_suffix: Set("".to_string()),
                 album_id: Set("".to_string()),
@@ -220,8 +220,8 @@ impl Scanner {
                         new_artists.push(artist::ActiveModel {
                             id: Set(a_id.clone()),
                             name: Set(a_name.clone()),
-                            cover_art: Set(format!("ar-{}", a_id)),
-                            artist_image_url: Set("".to_string()),
+                            cover_art: Set(Some(format!("ar-{}", a_id))),
+                            artist_image_url: Set(None),
                             user_rating: Set(0),
                             average_rating: Set(0.0),
                             ..Default::default()
@@ -264,9 +264,9 @@ impl Scanner {
                         )
                         .await?;
                     active_child.album_id = Set(album_id.clone());
-                    active_child.cover_art = Set(format!("al-{}", album_id));
+                    active_child.cover_art = Set(Some(format!("al-{}", album_id)));
                 } else {
-                    active_child.cover_art = Set(id.clone());
+                    active_child.cover_art = Set(Some(id.clone()));
                 }
 
                 let mut new_genres = Vec::new();
@@ -292,11 +292,13 @@ impl Scanner {
                 }
 
                 if t.has_image {
-                    let cover_path = cache_dir.join(&active_child.cover_art.as_ref());
-                    if !cover_path.exists() {
-                        let path_for_img = Path::new(&task.path).to_path_buf();
-                        if let Ok(Ok(img_data)) = tokio::task::spawn_blocking(move || tags::read_image(&path_for_img)).await {
-                            tokio::fs::write(cover_path, img_data).await?;
+                    if let Some(ref cover_art) = active_child.cover_art.as_ref() {
+                        let cover_path = cache_dir.join(cover_art);
+                        if !cover_path.exists() {
+                            let path_for_img = Path::new(&task.path).to_path_buf();
+                            if let Ok(Ok(img_data)) = tokio::task::spawn_blocking(move || tags::read_image(&path_for_img)).await {
+                                tokio::fs::write(cover_path, img_data).await?;
+                            }
                         }
                     }
                 }
@@ -407,8 +409,8 @@ impl Scanner {
             let obj = artist::ActiveModel {
                 id: Set(id.clone()),
                 name: Set(name.to_string()),
-                cover_art: Set(format!("ar-{}", id)),
-                artist_image_url: Set("".to_string()),
+                cover_art: Set(Some(format!("ar-{}", id))),
+                artist_image_url: Set(None),
                 user_rating: Set(0),
                 average_rating: Set(0.0),
                 ..Default::default()
@@ -446,17 +448,13 @@ impl Scanner {
 
             let artist_id = self.ensure_artist(&main_artist, seen_artists).await?;
 
-            for artist in artist_names.iter().skip(1) {
-                self.ensure_artist(artist, seen_artists).await?;
-            }
-
             let obj = album::ActiveModel {
                 id: Set(id.clone()),
                 name: Set(name),
                 artist: Set(artist_name.clone()),
                 artist_id: Set(artist_id),
                 created: Set(created),
-                cover_art: Set(format!("al-{}", id)),
+                cover_art: Set(Some(format!("al-{}", id))),
                 year: Set(year),
                 genre: Set(genre),
                 user_rating: Set(0),
@@ -471,6 +469,31 @@ impl Scanner {
                 )
                 .exec_without_returning(&self.db)
                 .await?;
+
+            let mut album_artist_models = Vec::new();
+            for a_name in &artist_names {
+                if let Ok(a_id) = self.ensure_artist(a_name, seen_artists).await {
+                    album_artist_models.push(album_artist::ActiveModel {
+                        album_id: Set(id.clone()),
+                        artist_id: Set(a_id),
+                    });
+                }
+            }
+
+            if !album_artist_models.is_empty() {
+                album_artist::Entity::insert_many(album_artist_models)
+                    .on_conflict(
+                        sea_orm::sea_query::OnConflict::columns([
+                            album_artist::Column::AlbumId,
+                            album_artist::Column::ArtistId,
+                        ])
+                        .do_nothing()
+                        .to_owned(),
+                    )
+                    .exec_without_returning(&self.db)
+                    .await?;
+            }
+
             seen_albums.insert(id.clone());
         }
         Ok(id)

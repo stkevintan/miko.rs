@@ -1,0 +1,309 @@
+use crate::browser::{AlbumListOptions, AlbumWithStats, ArtistWithStats, Browser};
+use crate::models::{album, album_artist, artist, child, song_artist};
+use sea_orm::{
+    ColumnTrait, DbErr, EntityTrait, JoinType, Order, QueryFilter, QueryOrder, QuerySelect,
+};
+use sea_orm::sea_query::{Expr, ExprTrait, Query};
+
+impl Browser {
+    pub async fn get_albums(
+        &self,
+        opts: AlbumListOptions,
+    ) -> Result<Vec<AlbumWithStats>, sea_orm::DbErr> {
+        let list_type = opts.r#type.as_deref().unwrap_or("newest");
+        let size = opts.size.unwrap_or(10);
+        let offset = opts.offset.unwrap_or(0);
+
+        let mut query = album::Entity::find()
+            .column_as(child::Column::Id.count(), "song_count")
+            .column_as(child::Column::Duration.sum(), "duration")
+            .column_as(child::Column::PlayCount.sum(), "play_count")
+            .column_as(child::Column::LastPlayed.max(), "last_played")
+            .join_rev(
+                JoinType::LeftJoin,
+                child::Entity::belongs_to(album::Entity)
+                    .from(child::Column::AlbumId)
+                    .to(album::Column::Id)
+                    .into(),
+            )
+            .group_by(album::Column::Id);
+
+        if let Some(folder_id) = opts.music_folder_id {
+            query = query.filter(child::Column::MusicFolderId.eq(folder_id));
+        }
+
+        match list_type {
+            "byYear" => {
+                if let Some(from) = opts.from_year {
+                    query = query.filter(album::Column::Year.gte(from));
+                }
+                if let Some(to) = opts.to_year {
+                    query = query.filter(album::Column::Year.lte(to));
+                }
+            }
+            "byGenre" => {
+                if let Some(ref genre) = opts.genre {
+                    query = query.filter(album::Column::Genre.eq(genre.clone()));
+                }
+            }
+            "starred" => {
+                query = query.filter(album::Column::Starred.is_not_null());
+            }
+            "recent" => {
+                query = query.having(child::Column::LastPlayed.max().is_not_null());
+            }
+            _ => {}
+        }
+
+        query = match list_type {
+            "random" => query.order_by(Expr::cust("RANDOM()"), Order::Asc),
+            "newest" => query.order_by_desc(album::Column::Created),
+            "frequent" => query.order_by_desc(Expr::cust("play_count")),
+            "recent" => query.order_by_desc(Expr::cust("last_played")),
+            "starred" => query.order_by_desc(album::Column::Starred),
+            "alphabeticalByName" => query.order_by_asc(album::Column::Name),
+            "alphabeticalByArtist" => query.order_by_asc(album::Column::Artist),
+            "byYear" => query.order_by_desc(album::Column::Year),
+            _ => query.order_by_desc(album::Column::Created),
+        };
+
+        query
+            .limit(size)
+            .offset(offset)
+            .into_model::<AlbumWithStats>()
+            .all(&self.db)
+            .await
+    }
+
+    pub async fn get_artists(&self, ignored_articles: &str) -> Result<Vec<(String, Vec<ArtistWithStats>)>, DbErr> {
+        let artists = artist::Entity::find()
+            .column_as(album_artist::Column::AlbumId.count(), "album_count")
+            .join_rev(
+                JoinType::LeftJoin,
+                album_artist::Entity::belongs_to(artist::Entity)
+                    .from(album_artist::Column::ArtistId)
+                    .to(artist::Column::Id)
+                    .into(),
+            )
+            .group_by(artist::Column::Id)
+            .into_model::<ArtistWithStats>()
+            .all(&self.db)
+            .await?;
+
+        Ok(crate::browser::utils::create_indexed_list(
+            artists,
+            ignored_articles,
+            |a| &a.name,
+        ))
+    }
+
+    pub async fn get_artist(&self, id: &str) -> Result<(ArtistWithStats, Vec<AlbumWithStats>), DbErr> {
+        let artist = artist::Entity::find()
+            .filter(artist::Column::Id.eq(id))
+            .column_as(album_artist::Column::AlbumId.count(), "album_count")
+            .join_rev(
+                JoinType::LeftJoin,
+                album_artist::Entity::belongs_to(artist::Entity)
+                    .from(album_artist::Column::ArtistId)
+                    .to(artist::Column::Id)
+                    .into(),
+            )
+            .group_by(artist::Column::Id)
+            .into_model::<ArtistWithStats>()
+            .one(&self.db)
+            .await?
+            .ok_or(DbErr::RecordNotFound("Artist not found".into()))?;
+
+        let albums = self.get_albums_by_artist(id).await?;
+
+        Ok((artist, albums))
+    }
+
+    pub async fn get_albums_by_artist(&self, artist_id: &str) -> Result<Vec<AlbumWithStats>, DbErr> {
+        album::Entity::find()
+            .join_rev(
+                JoinType::InnerJoin,
+                album_artist::Entity::belongs_to(album::Entity)
+                    .from(album_artist::Column::AlbumId)
+                    .to(album::Column::Id)
+                    .into(),
+            )
+            .filter(album_artist::Column::ArtistId.eq(artist_id))
+            .column_as(child::Column::Id.count(), "song_count")
+            .column_as(child::Column::Duration.sum(), "duration")
+            .column_as(child::Column::PlayCount.sum(), "play_count")
+            .column_as(child::Column::LastPlayed.max(), "last_played")
+            .join_rev(
+                JoinType::LeftJoin,
+                child::Entity::belongs_to(album::Entity)
+                    .from(child::Column::AlbumId)
+                    .to(album::Column::Id)
+                    .into(),
+            )
+            .group_by(album::Column::Id)
+            .order_by_desc(album::Column::Year)
+            .order_by_asc(album::Column::Name)
+            .into_model::<AlbumWithStats>()
+            .all(&self.db)
+            .await
+    }
+
+    pub async fn get_album(&self, id: &str) -> Result<(AlbumWithStats, Vec<child::Model>), DbErr> {
+        let album = self.get_album_with_stats(id).await?;
+
+        let songs = child::Entity::find()
+            .filter(child::Column::AlbumId.eq(id))
+            .filter(child::Column::IsDir.eq(false))
+            .order_by_asc(child::Column::DiscNumber)
+            .order_by_asc(child::Column::Track)
+            .all(&self.db)
+            .await?;
+
+        Ok((album, songs))
+    }
+
+    async fn get_album_with_stats(&self, id: &str) -> Result<AlbumWithStats, DbErr> {
+        album::Entity::find()
+            .filter(album::Column::Id.eq(id))
+            .column_as(child::Column::Id.count(), "song_count")
+            .column_as(child::Column::Duration.sum(), "duration")
+            .column_as(child::Column::PlayCount.sum(), "play_count")
+            .column_as(child::Column::LastPlayed.max(), "last_played")
+            .join_rev(
+                JoinType::LeftJoin,
+                child::Entity::belongs_to(album::Entity)
+                    .from(child::Column::AlbumId)
+                    .to(album::Column::Id)
+                    .into(),
+            )
+            .group_by(album::Column::Id)
+            .into_model::<AlbumWithStats>()
+            .one(&self.db)
+            .await?
+            .ok_or(DbErr::RecordNotFound("Album not found".into()))
+    }
+
+    pub async fn get_song(&self, id: &str) -> Result<child::Model, DbErr> {
+        child::Entity::find_by_id(id)
+            .filter(child::Column::IsDir.eq(false))
+            .one(&self.db)
+            .await?
+            .ok_or(DbErr::RecordNotFound("Song not found".into()))
+    }
+
+    pub async fn get_random_songs(
+        &self,
+        opts: AlbumListOptions,
+    ) -> Result<Vec<child::Model>, sea_orm::DbErr> {
+        let size = opts.size.unwrap_or(10);
+
+        let mut query = child::Entity::find()
+            .filter(child::Column::IsDir.eq(false));
+
+        if let Some(folder_id) = opts.music_folder_id {
+            query = query.filter(child::Column::MusicFolderId.eq(folder_id));
+        }
+
+        if let Some(ref genre) = opts.genre {
+            query = query.filter(child::Column::Genre.eq(genre.clone()));
+        }
+
+        if let Some(from) = opts.from_year {
+            query = query.filter(child::Column::Year.gte(from));
+        }
+
+        if let Some(to) = opts.to_year {
+            query = query.filter(child::Column::Year.lte(to));
+        }
+
+        query
+            .order_by(Expr::cust("RANDOM()"), Order::Asc)
+            .limit(size)
+            .all(&self.db)
+            .await
+    }
+
+    pub async fn get_songs_by_genre(
+        &self,
+        genre: &str,
+        count: u64,
+        offset: u64,
+        folder_id: Option<i32>,
+    ) -> Result<Vec<child::Model>, sea_orm::DbErr> {
+        let mut db_query = child::Entity::find()
+            .filter(child::Column::IsDir.eq(false))
+            .filter(child::Column::Genre.eq(genre));
+
+        if let Some(f_id) = folder_id {
+            db_query = db_query.filter(child::Column::MusicFolderId.eq(f_id));
+        }
+
+        db_query
+            .limit(count)
+            .offset(offset)
+            .all(&self.db)
+            .await
+    }
+
+    pub async fn get_starred_items(
+        &self,
+        folder_id: Option<i32>,
+    ) -> Result<(Vec<ArtistWithStats>, Vec<AlbumWithStats>, Vec<child::Model>), sea_orm::DbErr> {
+        // Artists
+        let mut artist_query = artist::Entity::find()
+            .column_as(album_artist::Column::AlbumId.count(), "album_count")
+            .join_rev(
+                JoinType::LeftJoin,
+                album_artist::Entity::belongs_to(artist::Entity)
+                    .from(album_artist::Column::ArtistId)
+                    .to(artist::Column::Id)
+                    .into(),
+            )
+            .filter(artist::Column::Starred.is_not_null())
+            .group_by(artist::Column::Id)
+            .order_by_desc(artist::Column::Starred);
+
+        if let Some(f_id) = folder_id {
+            artist_query = artist_query.filter(
+                artist::Column::Id.in_subquery(
+                    Query::select()
+                        .column(song_artist::Column::ArtistId)
+                        .from(song_artist::Entity)
+                        .join(
+                            JoinType::InnerJoin,
+                            child::Entity,
+                            Expr::col(child::Column::Id).eq(Expr::col(song_artist::Column::SongId)),
+                        )
+                        .and_where(child::Column::MusicFolderId.eq(f_id))
+                        .to_owned(),
+                ),
+            );
+        }
+
+        let artists = artist_query
+            .into_model::<ArtistWithStats>()
+            .all(&self.db)
+            .await?;
+
+        // Albums
+        let albums = self.get_albums(AlbumListOptions {
+            r#type: Some("starred".to_string()),
+            size: Some(100000),
+            music_folder_id: folder_id,
+            ..Default::default()
+        })
+        .await?;
+
+        // Songs
+        let mut song_query = child::Entity::find()
+            .filter(child::Column::IsDir.eq(false))
+            .filter(child::Column::Starred.is_not_null());
+
+        if let Some(f_id) = folder_id {
+            song_query = song_query.filter(child::Column::MusicFolderId.eq(f_id));
+        }
+        let songs = song_query.all(&self.db).await?;
+
+        Ok((artists, albums, songs))
+    }
+}
