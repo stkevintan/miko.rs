@@ -4,7 +4,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::mpsc;
 use sea_orm::{DatabaseConnection, EntityTrait, QueryFilter, ColumnTrait, Set, QuerySelect, ConnectionTrait};
 use crate::config::Config;
-use crate::models::{child, music_folder, artist, album, genre, song_artist, song_genre};
+use crate::models::{child, music_folder, artist, album, album_artist, genre, song_artist, song_genre};
 use crate::scanner::walker::{Walker, WalkTask};
 use std::path::Path;
 use std::collections::{HashMap, HashSet};
@@ -446,10 +446,6 @@ impl Scanner {
 
             let artist_id = self.ensure_artist(&main_artist, seen_artists).await?;
 
-            for artist in artist_names.iter().skip(1) {
-                self.ensure_artist(artist, seen_artists).await?;
-            }
-
             let obj = album::ActiveModel {
                 id: Set(id.clone()),
                 name: Set(name),
@@ -471,6 +467,31 @@ impl Scanner {
                 )
                 .exec_without_returning(&self.db)
                 .await?;
+
+            let mut album_artist_models = Vec::new();
+            for a_name in &artist_names {
+                if let Ok(a_id) = self.ensure_artist(a_name, seen_artists).await {
+                    album_artist_models.push(album_artist::ActiveModel {
+                        album_id: Set(id.clone()),
+                        artist_id: Set(a_id),
+                    });
+                }
+            }
+
+            if !album_artist_models.is_empty() {
+                album_artist::Entity::insert_many(album_artist_models)
+                    .on_conflict(
+                        sea_orm::sea_query::OnConflict::columns([
+                            album_artist::Column::AlbumId,
+                            album_artist::Column::ArtistId,
+                        ])
+                        .do_nothing()
+                        .to_owned(),
+                    )
+                    .exec_without_returning(&self.db)
+                    .await?;
+            }
+
             seen_albums.insert(id.clone());
         }
         Ok(id)

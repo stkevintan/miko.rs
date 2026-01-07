@@ -1,9 +1,10 @@
 use crate::browser::{Browser, DirectoryWithChildren, GenreWithStats, utils::strip_articles};
-use crate::models::{artist, child};
+use crate::models::{artist, child, genre, song_genre, album};
 use sea_orm::{
-    ColumnTrait, DbBackend, DbErr, EntityTrait, FromQueryResult, PaginatorTrait, QueryFilter,
-    QueryOrder, QuerySelect, Statement,
+    ColumnTrait, DbErr, EntityTrait, QueryFilter,
+    QueryOrder, QuerySelect, JoinType, PaginatorTrait, Statement, DbBackend, FromQueryResult
 };
+use sea_orm::sea_query::Expr;
 
 impl Browser {
     pub async fn get_indexes(
@@ -120,18 +121,29 @@ impl Browser {
     }
 
     pub async fn get_genres(&self) -> Result<Vec<GenreWithStats>, DbErr> {
-        GenreWithStats::find_by_statement(Statement::from_string(
-            DbBackend::Sqlite,
-            r#"
-            SELECT
-                g.name AS value,
-                (SELECT COUNT(*) FROM song_genres sg WHERE sg.genre_name = g.name) AS song_count,
-                (SELECT COUNT(*) FROM albums a WHERE a.genre = g.name) AS album_count
-            FROM genres g
-            ORDER BY g.name ASC
-            "#,
-        ))
-        .all(&self.db)
-        .await
+        genre::Entity::find()
+            .select_only()
+            .column_as(genre::Column::Name, "value")
+            .column_as(Expr::cust("COUNT(DISTINCT song_genres.song_id)"), "song_count")
+            .column_as(Expr::cust("COUNT(DISTINCT albums.id)"), "album_count")
+            .join_rev(
+                JoinType::LeftJoin,
+                song_genre::Entity::belongs_to(genre::Entity)
+                    .from(song_genre::Column::GenreName)
+                    .to(genre::Column::Name)
+                    .into(),
+            )
+            .join_rev(
+                JoinType::LeftJoin,
+                album::Entity::belongs_to(genre::Entity)
+                    .from(album::Column::Genre)
+                    .to(genre::Column::Name)
+                    .into(),
+            )
+            .group_by(genre::Column::Name)
+            .order_by_asc(genre::Column::Name)
+            .into_model::<GenreWithStats>()
+            .all(&self.db)
+            .await
     }
 }

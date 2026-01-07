@@ -1,9 +1,10 @@
 use crate::browser::{AlbumListOptions, AlbumWithStats, ArtistWithStats, Browser, utils::strip_articles};
-use crate::models::{child};
+use crate::models::{child, album, artist, album_artist};
 use sea_orm::{
-    ColumnTrait, DbBackend, DbErr, EntityTrait, FromQueryResult, QueryFilter, QueryOrder,
-    QuerySelect, Statement,
+    ColumnTrait, DbErr, EntityTrait, QueryFilter, QueryOrder,
+    QuerySelect, Order, JoinType,
 };
+use sea_orm::sea_query::{Expr, ExprTrait};
 
 impl Browser {
     pub async fn get_albums(
@@ -14,94 +15,81 @@ impl Browser {
         let size = opts.size.unwrap_or(10);
         let offset = opts.offset.unwrap_or(0);
 
-        let mut sql = "SELECT albums.*, COALESCE(stats.song_count, 0) AS song_count, \
-                       CAST(COALESCE(stats.duration, 0) AS INTEGER) AS duration, \
-                       CAST(COALESCE(stats.play_count, 0) AS INTEGER) AS play_count, \
-                       stats.last_played \
-                       FROM albums \
-                       LEFT JOIN (SELECT album_id, COUNT(*) as song_count, SUM(duration) as duration, SUM(play_count) as play_count, MAX(last_played) as last_played FROM children WHERE is_dir = 0 GROUP BY album_id) stats \
-                       ON stats.album_id = albums.id".to_string();
-
-        let mut conditions = Vec::new();
-        let mut values = Vec::new();
+        let mut query = album::Entity::find()
+            .column_as(child::Column::Id.count(), "song_count")
+            .column_as(child::Column::Duration.sum(), "duration")
+            .column_as(child::Column::PlayCount.sum(), "play_count")
+            .column_as(child::Column::LastPlayed.max(), "last_played")
+            .join_rev(
+                JoinType::LeftJoin,
+                child::Entity::belongs_to(album::Entity)
+                    .from(child::Column::AlbumId)
+                    .to(album::Column::Id)
+                    .into(),
+            )
+            .group_by(album::Column::Id);
 
         if let Some(folder_id) = opts.music_folder_id {
-            sql = format!("{} JOIN children c2 ON c2.album_id = albums.id", sql);
-            conditions.push("c2.music_folder_id = ?".to_string());
-            values.push(folder_id.into());
+            query = query.filter(child::Column::MusicFolderId.eq(folder_id));
         }
 
         match list_type {
             "byYear" => {
                 if let Some(from) = opts.from_year {
-                    conditions.push("albums.year >= ?".to_string());
-                    values.push(from.into());
+                    query = query.filter(album::Column::Year.gte(from));
                 }
                 if let Some(to) = opts.to_year {
-                    conditions.push("albums.year <= ?".to_string());
-                    values.push(to.into());
+                    query = query.filter(album::Column::Year.lte(to));
                 }
             }
             "byGenre" => {
                 if let Some(ref genre) = opts.genre {
-                    conditions.push("albums.genre = ?".to_string());
-                    values.push(genre.clone().into());
+                    query = query.filter(album::Column::Genre.eq(genre.clone()));
                 }
             }
             "starred" => {
-                conditions.push("albums.starred IS NOT NULL".to_string());
+                query = query.filter(album::Column::Starred.is_not_null());
             }
             "recent" => {
-                conditions.push("stats.last_played IS NOT NULL".to_string());
+                query = query.having(child::Column::LastPlayed.max().is_not_null());
             }
             _ => {}
         }
 
-        if !conditions.is_empty() {
-            sql = format!("{} WHERE {}", sql, conditions.join(" AND "));
-        }
-
-        if opts.music_folder_id.is_some() {
-            sql = format!("{} GROUP BY albums.id", sql);
-        }
-
-        let mut sql = match list_type {
-            "random" => format!("{} ORDER BY RANDOM()", sql),
-            "newest" => format!("{} ORDER BY albums.created DESC", sql),
-            "frequent" => format!("{} ORDER BY play_count DESC", sql),
-            "recent" => format!("{} ORDER BY last_played DESC", sql),
-            "starred" => format!("{} ORDER BY albums.starred DESC", sql),
-            "alphabeticalByName" => format!("{} ORDER BY albums.name ASC", sql),
-            "alphabeticalByArtist" => format!("{} ORDER BY albums.artist ASC", sql),
-            "byYear" => format!("{} ORDER BY albums.year DESC", sql),
-            _ => format!("{} ORDER BY albums.created DESC", sql),
+        query = match list_type {
+            "random" => query.order_by(Expr::cust("RANDOM()"), Order::Asc),
+            "newest" => query.order_by_desc(album::Column::Created),
+            "frequent" => query.order_by_desc(Expr::cust("play_count")),
+            "recent" => query.order_by_desc(Expr::cust("last_played")),
+            "starred" => query.order_by_desc(album::Column::Starred),
+            "alphabeticalByName" => query.order_by_asc(album::Column::Name),
+            "alphabeticalByArtist" => query.order_by_asc(album::Column::Artist),
+            "byYear" => query.order_by_desc(album::Column::Year),
+            _ => query.order_by_desc(album::Column::Created),
         };
 
-        sql = format!("{} LIMIT ? OFFSET ?", sql);
-        values.push(size.into());
-        values.push(offset.into());
-
-        AlbumWithStats::find_by_statement(Statement::from_sql_and_values(
-            DbBackend::Sqlite,
-            &sql,
-            values,
-        ))
-        .all(&self.db)
-        .await
+        query
+            .limit(size)
+            .offset(offset)
+            .into_model::<AlbumWithStats>()
+            .all(&self.db)
+            .await
     }
 
     pub async fn get_artists(&self, ignored_articles: &str) -> Result<Vec<(String, Vec<ArtistWithStats>)>, DbErr> {
-        let artists = ArtistWithStats::find_by_statement(Statement::from_string(
-            DbBackend::Sqlite,
-            r#"
-            SELECT a.*, COALESCE(stats.album_count, 0) AS album_count
-            FROM artists a
-            LEFT JOIN (SELECT artist_id, COUNT(*) AS album_count FROM albums GROUP BY artist_id) stats 
-            ON stats.artist_id = a.id
-            "#
-        ))
-        .all(&self.db)
-        .await?;
+        let artists = artist::Entity::find()
+            .column_as(album_artist::Column::AlbumId.count(), "album_count")
+            .join_rev(
+                JoinType::LeftJoin,
+                album_artist::Entity::belongs_to(artist::Entity)
+                    .from(album_artist::Column::ArtistId)
+                    .to(artist::Column::Id)
+                    .into(),
+            )
+            .group_by(artist::Column::Id)
+            .into_model::<ArtistWithStats>()
+            .all(&self.db)
+            .await?;
 
         let articles: Vec<&str> = ignored_articles.split_whitespace().collect();
         let mut index_map: std::collections::BTreeMap<String, Vec<ArtistWithStats>> = std::collections::BTreeMap::new();
@@ -126,20 +114,21 @@ impl Browser {
     }
 
     pub async fn get_artist(&self, id: &str) -> Result<(ArtistWithStats, Vec<AlbumWithStats>), DbErr> {
-        let artist = ArtistWithStats::find_by_statement(Statement::from_sql_and_values(
-            DbBackend::Sqlite,
-            r#"
-            SELECT a.*, COALESCE(stats.album_count, 0) AS album_count
-            FROM artists a
-            LEFT JOIN (SELECT artist_id, COUNT(*) AS album_count FROM albums GROUP BY artist_id) stats 
-            ON stats.artist_id = a.id
-            WHERE a.id = ?
-            "#,
-            vec![id.into()],
-        ))
-        .one(&self.db)
-        .await?
-        .ok_or(DbErr::RecordNotFound("Artist not found".into()))?;
+        let artist = artist::Entity::find()
+            .filter(artist::Column::Id.eq(id))
+            .column_as(album_artist::Column::AlbumId.count(), "album_count")
+            .join_rev(
+                JoinType::LeftJoin,
+                album_artist::Entity::belongs_to(artist::Entity)
+                    .from(album_artist::Column::ArtistId)
+                    .to(artist::Column::Id)
+                    .into(),
+            )
+            .group_by(artist::Column::Id)
+            .into_model::<ArtistWithStats>()
+            .one(&self.db)
+            .await?
+            .ok_or(DbErr::RecordNotFound("Artist not found".into()))?;
 
         let albums = self.get_albums_by_artist(id).await?;
 
@@ -147,23 +136,32 @@ impl Browser {
     }
 
     pub async fn get_albums_by_artist(&self, artist_id: &str) -> Result<Vec<AlbumWithStats>, DbErr> {
-        let sql = "SELECT albums.*, COALESCE(stats.song_count, 0) AS song_count, \
-                       CAST(COALESCE(stats.duration, 0) AS INTEGER) AS duration, \
-                       CAST(COALESCE(stats.play_count, 0) AS INTEGER) AS play_count, \
-                       stats.last_played \
-                       FROM albums \
-                       LEFT JOIN (SELECT album_id, COUNT(*) as song_count, SUM(duration) as duration, SUM(play_count) as play_count, MAX(last_played) as last_played FROM children WHERE is_dir = 0 GROUP BY album_id) stats \
-                       ON stats.album_id = albums.id \
-                       WHERE albums.artist_id = ? \
-                       ORDER BY albums.year DESC, albums.name ASC".to_string();
-
-        AlbumWithStats::find_by_statement(Statement::from_sql_and_values(
-            DbBackend::Sqlite,
-            &sql,
-            vec![artist_id.into()],
-        ))
-        .all(&self.db)
-        .await
+        album::Entity::find()
+            .join_rev(
+                JoinType::InnerJoin,
+                album_artist::Entity::belongs_to(album::Entity)
+                    .from(album_artist::Column::AlbumId)
+                    .to(album::Column::Id)
+                    .into(),
+            )
+            .filter(album_artist::Column::ArtistId.eq(artist_id))
+            .column_as(child::Column::Id.count(), "song_count")
+            .column_as(child::Column::Duration.sum(), "duration")
+            .column_as(child::Column::PlayCount.sum(), "play_count")
+            .column_as(child::Column::LastPlayed.max(), "last_played")
+            .join_rev(
+                JoinType::LeftJoin,
+                child::Entity::belongs_to(album::Entity)
+                    .from(child::Column::AlbumId)
+                    .to(album::Column::Id)
+                    .into(),
+            )
+            .group_by(album::Column::Id)
+            .order_by_desc(album::Column::Year)
+            .order_by_asc(album::Column::Name)
+            .into_model::<AlbumWithStats>()
+            .all(&self.db)
+            .await
     }
 
     pub async fn get_album(&self, id: &str) -> Result<(AlbumWithStats, Vec<child::Model>), DbErr> {
@@ -181,23 +179,24 @@ impl Browser {
     }
 
     async fn get_album_with_stats(&self, id: &str) -> Result<AlbumWithStats, DbErr> {
-        let sql = "SELECT albums.*, COALESCE(stats.song_count, 0) AS song_count, \
-                       CAST(COALESCE(stats.duration, 0) AS INTEGER) AS duration, \
-                       CAST(COALESCE(stats.play_count, 0) AS INTEGER) AS play_count, \
-                       stats.last_played \
-                       FROM albums \
-                       LEFT JOIN (SELECT album_id, COUNT(*) as song_count, SUM(duration) as duration, SUM(play_count) as play_count, MAX(last_played) as last_played FROM children WHERE is_dir = 0 GROUP BY album_id) stats \
-                       ON stats.album_id = albums.id \
-                       WHERE albums.id = ?".to_string();
-
-        AlbumWithStats::find_by_statement(Statement::from_sql_and_values(
-            DbBackend::Sqlite,
-            &sql,
-            vec![id.into()],
-        ))
-        .one(&self.db)
-        .await?
-        .ok_or(DbErr::RecordNotFound("Album not found".into()))
+        album::Entity::find()
+            .filter(album::Column::Id.eq(id))
+            .column_as(child::Column::Id.count(), "song_count")
+            .column_as(child::Column::Duration.sum(), "duration")
+            .column_as(child::Column::PlayCount.sum(), "play_count")
+            .column_as(child::Column::LastPlayed.max(), "last_played")
+            .join_rev(
+                JoinType::LeftJoin,
+                child::Entity::belongs_to(album::Entity)
+                    .from(child::Column::AlbumId)
+                    .to(album::Column::Id)
+                    .into(),
+            )
+            .group_by(album::Column::Id)
+            .into_model::<AlbumWithStats>()
+            .one(&self.db)
+            .await?
+            .ok_or(DbErr::RecordNotFound("Album not found".into()))
     }
 
     pub async fn get_song(&self, id: &str) -> Result<child::Model, DbErr> {
@@ -214,39 +213,28 @@ impl Browser {
     ) -> Result<Vec<child::Model>, sea_orm::DbErr> {
         let size = opts.size.unwrap_or(10);
 
-        let mut sql = "SELECT * FROM children WHERE is_dir = 0".to_string();
-        let mut conditions = Vec::new();
-        let mut values = Vec::new();
+        let mut query = child::Entity::find()
+            .filter(child::Column::IsDir.eq(false));
 
         if let Some(folder_id) = opts.music_folder_id {
-            conditions.push("music_folder_id = ?".to_string());
-            values.push(folder_id.into());
+            query = query.filter(child::Column::MusicFolderId.eq(folder_id));
         }
 
         if let Some(ref genre) = opts.genre {
-            conditions.push("genre = ?".to_string());
-            values.push(genre.clone().into());
+            query = query.filter(child::Column::Genre.eq(genre.clone()));
         }
 
         if let Some(from) = opts.from_year {
-            conditions.push("year >= ?".to_string());
-            values.push(from.into());
+            query = query.filter(child::Column::Year.gte(from));
         }
 
         if let Some(to) = opts.to_year {
-            conditions.push("year <= ?".to_string());
-            values.push(to.into());
+            query = query.filter(child::Column::Year.lte(to));
         }
 
-        if !conditions.is_empty() {
-            sql = format!("{} AND {}", sql, conditions.join(" AND "));
-        }
-
-        let sql = format!("{} ORDER BY RANDOM() LIMIT ?", sql);
-        values.push(size.into());
-
-        child::Entity::find()
-            .from_raw_sql(Statement::from_sql_and_values(DbBackend::Sqlite, sql, values))
+        query
+            .order_by(Expr::cust("RANDOM()"), Order::Asc)
+            .limit(size)
             .all(&self.db)
             .await
     }
@@ -278,28 +266,35 @@ impl Browser {
         folder_id: Option<i32>,
     ) -> Result<(Vec<ArtistWithStats>, Vec<AlbumWithStats>, Vec<child::Model>), sea_orm::DbErr> {
         // Artists
-        let mut artist_sql = "SELECT a.*, COALESCE(stats.album_count, 0) AS album_count \
-                             FROM artists a \
-                             LEFT JOIN (SELECT artist_id, COUNT(*) AS album_count FROM albums GROUP BY artist_id) stats \
-                             ON stats.artist_id = a.id \
-                             WHERE a.starred IS NOT NULL".to_string();
-
-        let mut artist_values = Vec::new();
+        let mut artist_query = artist::Entity::find()
+            .column_as(album_artist::Column::AlbumId.count(), "album_count")
+            .join_rev(
+                JoinType::LeftJoin,
+                album_artist::Entity::belongs_to(artist::Entity)
+                    .from(album_artist::Column::ArtistId)
+                    .to(artist::Column::Id)
+                    .into(),
+            )
+            .filter(artist::Column::Starred.is_not_null())
+            .group_by(artist::Column::Id)
+            .order_by_desc(artist::Column::Starred);
 
         if let Some(f_id) = folder_id {
-            artist_sql = format!("{} AND EXISTS (SELECT 1 FROM children c WHERE c.artist_id = a.id AND c.music_folder_id = ?)", artist_sql);
-            artist_values.push(f_id.into());
+            artist_query = artist_query
+                .join_rev(
+                    JoinType::InnerJoin,
+                    child::Entity::belongs_to(artist::Entity)
+                        .from(child::Column::ArtistId)
+                        .to(artist::Column::Id)
+                        .into(),
+                )
+                .filter(child::Column::MusicFolderId.eq(f_id));
         }
 
-        artist_sql = format!("{} ORDER BY a.starred DESC", artist_sql);
-
-        let artists = ArtistWithStats::find_by_statement(Statement::from_sql_and_values(
-            DbBackend::Sqlite,
-            &artist_sql,
-            artist_values,
-        ))
-        .all(&self.db)
-        .await?;
+        let artists = artist_query
+            .into_model::<ArtistWithStats>()
+            .all(&self.db)
+            .await?;
 
         // Albums
         let albums = self.get_albums(AlbumListOptions {
