@@ -119,7 +119,16 @@ async fn main() -> Result<(), anyhow::Error> {
         }
     }
 
-    let db = Database::connect(&config.database.url)
+    let mut opt = sea_orm::ConnectOptions::new(&config.database.url);
+    opt.max_connections(100)
+        .min_connections(5)
+        .connect_timeout(std::time::Duration::from_secs(30))
+        .acquire_timeout(std::time::Duration::from_secs(30))
+        .idle_timeout(std::time::Duration::from_secs(600))
+        .max_lifetime(std::time::Duration::from_secs(1800))
+        .sqlx_logging(false);
+
+    let db = Database::connect(opt)
         .await
         .expect("Failed to connect to database");
 

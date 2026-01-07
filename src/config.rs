@@ -37,7 +37,7 @@ impl Config {
         };
 
         let read_path = |key: &str, default: Option<&str>| -> String {
-            expand_path(&read_val(key, default))
+            norm_path(&read_val(key, default))
         };
 
         Ok(Config {
@@ -47,14 +47,14 @@ impl Config {
                 password_secret: read_val("PASSWORD_SECRET", None),
             },
             database: DatabaseConfig {
-                url: expand_path(&read_val("DATABASE_URL", None)),
+                url: norm_path(&read_val("DATABASE_URL", None)),
             },
             subsonic: SubsonicConfig {
                 data_dir: read_path("SUBSONIC_DATA_DIR", Some("./data")),
                 folders: read_val("SUBSONIC_MUSIC_FOLDERS", None)
                     .split(',')
                     .filter(|s| !s.is_empty())
-                    .map(expand_path)
+                    .map(norm_path)
                     .collect(),
                 ignored_articles: read_val("SUBSONIC_IGNORED_ARTICLES", Some("The El La Los Las Le Les")),
             },
@@ -75,10 +75,13 @@ impl Config {
     }
 }
 
+fn norm_path(path: &str) -> String {
+    expand_path(path).replace('\\', "/")
+}
+
 fn expand_path(path: &str) -> String {
-    if '~' != path.chars().next().unwrap_or(' ') && !path.contains("$HOME") {
-        return path.to_string();
-    }
-    let home = env::var("HOME").expect("HOME environment variable not set");
+    let home = env::home_dir()
+        .map(|p| p.to_string_lossy().to_string())
+        .unwrap_or_else(|| ".".to_string());
     path.replacen('~', &home, 1).replace("$HOME", &home)
 }

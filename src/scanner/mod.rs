@@ -5,7 +5,7 @@ use tokio::sync::mpsc;
 use sea_orm::{DatabaseConnection, EntityTrait, QueryFilter, ColumnTrait, Set, QuerySelect, ConnectionTrait};
 use crate::config::Config;
 use crate::models::{child, music_folder, artist, album, genre, song_artist, song_genre};
-use crate::scanner::walker::{Walker};
+use crate::scanner::walker::{Walker, WalkTask};
 use std::path::Path;
 use std::collections::{HashMap, HashSet};
 
@@ -52,137 +52,56 @@ impl Scanner {
         self.scan_count.load(std::sync::atomic::Ordering::SeqCst)
     }
 
-    async fn ensure_artist(&self, name: &str, seen: &mut HashSet<String>) -> Result<String, anyhow::Error> {
-        let id = utils::generate_artist_id(name);
-        if !seen.contains(&id) {
-            let obj = artist::ActiveModel {
-                id: Set(id.clone()),
-                name: Set(name.to_string()),
-                cover_art: Set(format!("ar-{}", id)),
-                artist_image_url: Set("".to_string()),
-                user_rating: Set(0),
-                average_rating: Set(0.0),
-                ..Default::default()
-            };
-            artist::Entity::insert(obj).on_conflict(
-                sea_orm::sea_query::OnConflict::column(artist::Column::Id)
-                    .do_nothing()
-                    .to_owned()
-            ).exec_without_returning(&self.db).await?;
-            seen.insert(id.clone());
-        }
-        Ok(id)
-    }
-
-    async fn ensure_album(
+    async fn process_batch(
         &self,
-        name: String,
-        artist_names: Vec<String>,
-        year: i32,
-        genre: String,
-        created: chrono::DateTime<chrono::Utc>,
+        tasks: &[WalkTask],
+        incremental: bool,
+        cache_dir: &Path,
         seen_artists: &mut HashSet<String>,
         seen_albums: &mut HashSet<String>,
-    ) -> Result<String, anyhow::Error> {
-        let artist_name = artist_names.join("; ");
-        let id = utils::generate_album_id(&artist_name, &name);
+        seen_genres: &mut HashSet<String>,
+    ) -> Result<(), anyhow::Error> {
+        let mut ids = Vec::new();
+        let mut task_map = HashMap::new();
 
-        if !seen_albums.contains(&id) {
-            // get first artist as main artist
-            let main_artist = if artist_names.is_empty() {
-                "Unknown Artist".to_string()
-            } else {
-                artist_names[0].clone()
-            };
-
-            let artist_id = self.ensure_artist(&main_artist, seen_artists).await?;
-
-            for artist in artist_names.iter().skip(1) {
-                self.ensure_artist(artist, seen_artists).await?;
-            }
-
-            let obj = album::ActiveModel {
-                id: Set(id.clone()),
-                name: Set(name),
-                artist: Set(artist_name.clone()),
-                artist_id: Set(artist_id),
-                created: Set(created),
-                cover_art: Set(format!("al-{}", id)),
-                year: Set(year),
-                genre: Set(genre),
-                user_rating: Set(0),
-                average_rating: Set(0.0),
-                ..Default::default()
-            };
-            album::Entity::insert(obj)
-                .on_conflict(
-                    sea_orm::sea_query::OnConflict::column(album::Column::Id)
-                        .update_columns([album::Column::Year, album::Column::Genre])
-                        .to_owned(),
-                )
-                .exec_without_returning(&self.db)
-                .await?;
-            seen_albums.insert(id.clone());
-        }
-        Ok(id)
-    }
-
-    pub async fn scan_all(&self, incremental: bool) -> Result<(), anyhow::Error> {
-        if self.is_scanning.compare_exchange(false, true, std::sync::atomic::Ordering::SeqCst, std::sync::atomic::Ordering::SeqCst).is_err() {
-            return Ok(());
+        for task in tasks {
+            let id = utils::generate_id(&task.path, task.folder.id, &task.folder.path);
+            ids.push(id.clone());
+            task_map.insert(id, task);
         }
 
-        let _guard = ScanGuard(&self.is_scanning);
-        self.scan_count.store(0, std::sync::atomic::Ordering::SeqCst);
-
-        let (tx, mut rx) = mpsc::channel(100);
-        let folders = music_folder::Entity::find().all(&self.db).await?;
-        
-        for folder in folders {
-            Walker::walk_path(Path::new(&folder.path).to_path_buf(), folder, tx.clone());
-        }
-        drop(tx);
-
-        log::info!("Starting scan... incremental: {}", incremental);
-        self.scan_count.store(0, std::sync::atomic::Ordering::SeqCst);
-
-        let mut seen_ids = HashSet::new();
-        let mut existing_files = HashMap::new();
-
+        let mut existing_info = HashMap::new();
         if incremental {
-            let files = child::Entity::find()
-                .filter(child::Column::IsDir.eq(false))
+            let existing: Vec<(String, Option<chrono::DateTime<chrono::Utc>>)> = child::Entity::find()
+                .filter(child::Column::Id.is_in(ids.clone()))
+                .select_only()
+                .column(child::Column::Id)
+                .column(child::Column::Created)
+                .into_tuple()
                 .all(&self.db)
                 .await?;
-            for f in files {
-                if let Some(created) = f.created {
-                    existing_files.insert(f.id, created);
+            for (id, created) in existing {
+                if let Some(c) = created {
+                    existing_info.insert(id, c);
                 }
             }
         }
 
-        let cache_dir = utils::get_cover_cache_dir(&self.cfg);
-        if !cache_dir.exists() {
-            std::fs::create_dir_all(&cache_dir)?;
-        }
+        let mut seen_ids_to_flush = Vec::new();
 
-        let mut seen_artists = HashSet::new();
-        let mut seen_albums = HashSet::new();
-        let mut seen_genres = HashSet::new();
-
-        while let Some(task) = rx.recv().await {
-            let id = utils::generate_id(&task.path, task.folder.id, &task.folder.path);
+        for id in &ids {
+            let task = task_map.get(id).unwrap();
             let parent_id = utils::get_parent_id(&task.path, task.folder.id, &task.folder.path).unwrap_or_default();
             
-            seen_ids.insert(id.clone());
+            seen_ids_to_flush.push(id.clone());
 
             if task.is_dir {
                 let active_child: child::ActiveModel = child::ActiveModel {
-                    id: Set(id),
+                    id: Set(id.clone()),
                     parent: Set(parent_id),
                     is_dir: Set(true),
-                    title: Set(task.name),
-                    path: Set(task.path),
+                    title: Set(task.name.clone()),
+                    path: Set(task.path.clone()),
                     music_folder_id: Set(task.folder.id),
                     album: Set("".to_string()),
                     artist: Set("".to_string()),
@@ -221,7 +140,7 @@ impl Scanner {
             }
 
             if incremental {
-                if let Some(last_mod) = existing_files.get(&id) {
+                if let Some(last_mod) = existing_info.get(id) {
                     if task.mod_time <= *last_mod {
                         continue;
                     }
@@ -231,10 +150,13 @@ impl Scanner {
             let content_type = utils::get_content_type(Path::new(&task.path));
             let suffix = Path::new(&task.path).extension().and_then(|s| s.to_str()).unwrap_or_default().to_string();
 
-            let mut tag_data = None;
-            if let Ok(t) = tags::read(Path::new(&task.path)) {
-                tag_data = Some(t);
-            }
+            let tag_data = match tags::read(Path::new(&task.path)) {
+                Ok(t) => Some(t),
+                Err(e) => {
+                    log::warn!("Failed to read tags for '{}': {}", &task.path, e);
+                    None
+                }
+            };
 
             let mut many_to_many_artists = Vec::new();
             let mut many_to_many_genres = Vec::new();
@@ -243,7 +165,7 @@ impl Scanner {
                 id: Set(id.clone()),
                 parent: Set(parent_id),
                 is_dir: Set(false),
-                title: Set(tag_data.as_ref().map(|t| t.title.clone()).unwrap_or(task.name)),
+                title: Set(tag_data.as_ref().map(|t| t.title.clone()).unwrap_or(task.name.clone())),
                 path: Set(task.path.clone()),
                 size: Set(task.size as i64),
                 suffix: Set(suffix),
@@ -329,8 +251,8 @@ impl Scanner {
                             t.year.unwrap_or(0),
                             t.genre.clone(),
                             task.mod_time,
-                            &mut seen_artists,
-                            &mut seen_albums,
+                            seen_artists,
+                            seen_albums,
                         )
                         .await?;
                     active_child.album_id = Set(album_id.clone());
@@ -447,8 +369,159 @@ impl Scanner {
             self.scan_count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         }
 
+        self.flush_seen_ids(&seen_ids_to_flush).await?;
+
+        Ok(())
+    }
+
+    async fn flush_seen_ids(&self, ids: &[String]) -> Result<(), anyhow::Error> {
+        if ids.is_empty() {
+            return Ok(());
+        }
+        let values = ids.iter()
+            .map(|id| format!("('{}')", id))
+            .collect::<Vec<_>>()
+            .join(",");
+        let sql = format!("INSERT OR IGNORE INTO _scanner_seen (id) VALUES {}", values);
+        self.db.execute_unprepared(&sql).await?;
+        Ok(())
+    }
+
+    async fn ensure_artist(&self, name: &str, seen: &mut HashSet<String>) -> Result<String, anyhow::Error> {
+        let id = utils::generate_artist_id(name);
+        if !seen.contains(&id) {
+            let obj = artist::ActiveModel {
+                id: Set(id.clone()),
+                name: Set(name.to_string()),
+                cover_art: Set(format!("ar-{}", id)),
+                artist_image_url: Set("".to_string()),
+                user_rating: Set(0),
+                average_rating: Set(0.0),
+                ..Default::default()
+            };
+            artist::Entity::insert(obj).on_conflict(
+                sea_orm::sea_query::OnConflict::column(artist::Column::Id)
+                    .do_nothing()
+                    .to_owned()
+            ).exec_without_returning(&self.db).await?;
+            seen.insert(id.clone());
+        }
+        Ok(id)
+    }
+
+    async fn ensure_album(
+        &self,
+        name: String,
+        artist_names: Vec<String>,
+        year: i32,
+        genre: String,
+        created: chrono::DateTime<chrono::Utc>,
+        seen_artists: &mut HashSet<String>,
+        seen_albums: &mut HashSet<String>,
+    ) -> Result<String, anyhow::Error> {
+        let artist_name = artist_names.join("; ");
+        let id = utils::generate_album_id(&artist_name, &name);
+
+        if !seen_albums.contains(&id) {
+            // get first artist as main artist
+            let main_artist = if artist_names.is_empty() {
+                "Unknown Artist".to_string()
+            } else {
+                artist_names[0].clone()
+            };
+
+            let artist_id = self.ensure_artist(&main_artist, seen_artists).await?;
+
+            for artist in artist_names.iter().skip(1) {
+                self.ensure_artist(artist, seen_artists).await?;
+            }
+
+            let obj = album::ActiveModel {
+                id: Set(id.clone()),
+                name: Set(name),
+                artist: Set(artist_name.clone()),
+                artist_id: Set(artist_id),
+                created: Set(created),
+                cover_art: Set(format!("al-{}", id)),
+                year: Set(year),
+                genre: Set(genre),
+                user_rating: Set(0),
+                average_rating: Set(0.0),
+                ..Default::default()
+            };
+            album::Entity::insert(obj)
+                .on_conflict(
+                    sea_orm::sea_query::OnConflict::column(album::Column::Id)
+                        .update_columns([album::Column::Year, album::Column::Genre])
+                        .to_owned(),
+                )
+                .exec_without_returning(&self.db)
+                .await?;
+            seen_albums.insert(id.clone());
+        }
+        Ok(id)
+    }
+
+    pub async fn scan_all(&self, incremental: bool) -> Result<(), anyhow::Error> {
+        if self.is_scanning.compare_exchange(false, true, std::sync::atomic::Ordering::SeqCst, std::sync::atomic::Ordering::SeqCst).is_err() {
+            return Ok(());
+        }
+
+        let _guard = ScanGuard(&self.is_scanning);
+        self.scan_count.store(0, std::sync::atomic::Ordering::SeqCst);
+
+        let (tx, mut rx) = mpsc::channel(100);
+        let folders = music_folder::Entity::find().all(&self.db).await?;
+        
+        for folder in folders {
+            Walker::walk_path(Path::new(&folder.path).to_path_buf(), folder, tx.clone());
+        }
+        drop(tx);
+
+        log::info!("Starting scan... incremental: {}", incremental);
+        self.scan_count.store(0, std::sync::atomic::Ordering::SeqCst);
+
+        self.db.execute_unprepared("CREATE TABLE IF NOT EXISTS _scanner_seen (id TEXT PRIMARY KEY)").await?;
+        self.db.execute_unprepared("DELETE FROM _scanner_seen").await?;
+
+        let cache_dir = utils::get_cover_cache_dir(&self.cfg);
+        if !cache_dir.exists() {
+            std::fs::create_dir_all(&cache_dir)?;
+        }
+
+        let mut seen_artists = HashSet::new();
+        let mut seen_albums = HashSet::new();
+        let mut seen_genres = HashSet::new();
+
+        let mut task_buffer = Vec::with_capacity(100);
+        while let Some(task) = rx.recv().await {
+            task_buffer.push(task);
+            if task_buffer.len() >= 100 {
+                self.process_batch(
+                    &task_buffer,
+                    incremental,
+                    &cache_dir,
+                    &mut seen_artists,
+                    &mut seen_albums,
+                    &mut seen_genres,
+                ).await?;
+                task_buffer.clear();
+            }
+        }
+
+        if !task_buffer.is_empty() {
+            self.process_batch(
+                &task_buffer,
+                incremental,
+                &cache_dir,
+                &mut seen_artists,
+                &mut seen_albums,
+                &mut seen_genres,
+            ).await?;
+        }
+
         log::info!("Scan finished, pruning database...");
-        self.prune(seen_ids).await?;
+        self.prune().await?;
 
         let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs() as i64;
         self.last_scan_time.store(now, std::sync::atomic::Ordering::SeqCst);
@@ -457,38 +530,18 @@ impl Scanner {
         Ok(())
     }
 
-    pub async fn prune(&self, seen_ids: HashSet<String>) -> Result<(), anyhow::Error> {
+    pub async fn prune(&self) -> Result<(), anyhow::Error> {
         log::info!("Pruning deleted files and orphaned records...");
-        
-        // This is a simplified version of pruning without temporary tables for now
-        // In a real app, you might want to use temporary tables if the set is very large
-        
-        // 1. Delete children not in seen_ids
-        // Sea-ORM doesn't have a very clean "DELETE WHERE NOT IN (LIST)" for large lists easily
-        // but we can chunk it or use raw SQL.
-        
-        // For simplicity in this port, I'll use raw SQL approach if possible or just chunked deletes
-        // Let's use raw SQL for efficiency if we can.
-        
-        let all_ids: Vec<String> = child::Entity::find().select_only().column(child::Column::Id).into_tuple().all(&self.db).await?;
-        let to_delete: Vec<String> = all_ids.into_iter().filter(|id| !seen_ids.contains(id)).collect();
-        
-        if !to_delete.is_empty() {
-             // Delete junction table records first
-             song_artist::Entity::delete_many()
-                .filter(song_artist::Column::SongId.is_in(to_delete.clone()))
-                .exec(&self.db)
-                .await?;
-             song_genre::Entity::delete_many()
-                .filter(song_genre::Column::SongId.is_in(to_delete.clone()))
-                .exec(&self.db)
-                .await?;
 
-             child::Entity::delete_many()
-                .filter(child::Column::Id.is_in(to_delete))
-                .exec(&self.db)
-                .await?;
-        }
+        // Delete junction records for songs that are NOT in _scanner_seen
+        self.db.execute_unprepared("DELETE FROM song_artists WHERE song_id NOT IN (SELECT id FROM _scanner_seen)").await?;
+        self.db.execute_unprepared("DELETE FROM song_genres WHERE song_id NOT IN (SELECT id FROM _scanner_seen)").await?;
+
+        // Delete children that are NOT in _scanner_seen
+        self.db.execute_unprepared("DELETE FROM children WHERE id NOT IN (SELECT id FROM _scanner_seen)").await?;
+
+        // Drop the side table but keep it for next scan
+        self.db.execute_unprepared("DELETE FROM _scanner_seen").await?;
 
         // 2. Prune orphaned albums
         self.db.execute_unprepared("DELETE FROM albums WHERE NOT EXISTS (SELECT 1 FROM children WHERE children.album_id = albums.id)").await?;
