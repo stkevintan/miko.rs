@@ -1,15 +1,12 @@
 use poem::{handler, web::{Data, Query}, IntoResponse};
-use sea_orm::DatabaseConnection;
 use crate::subsonic::models::{SubsonicResponse, SubsonicResponseBody, ScanStatus};
 use crate::subsonic::common::{SubsonicParams, send_response};
-use crate::models::child;
 use crate::scanner::Scanner;
 use std::collections::HashMap;
 use std::sync::Arc;
 
 #[handler]
 pub async fn get_scan_status(
-    db: Data<&DatabaseConnection>,
     scanner: Data<&Arc<Scanner>>,
     params: Query<SubsonicParams>,
 ) -> impl IntoResponse {
@@ -17,7 +14,7 @@ pub async fn get_scan_status(
     let count = if scanning {
         scanner.scan_count()
     } else {
-        child::Entity::count_songs(*db).await
+        scanner.total_count()
     };
 
     let resp = SubsonicResponse::new_ok(SubsonicResponseBody::ScanStatus(ScanStatus {
@@ -30,7 +27,6 @@ pub async fn get_scan_status(
 
 #[handler]
 pub async fn start_scan(
-    db: Data<&DatabaseConnection>,
     scanner: Data<&Arc<Scanner>>,
     params: Query<SubsonicParams>,
     query: Query<HashMap<String, String>>,
@@ -46,7 +42,7 @@ pub async fn start_scan(
         }
     });
 
-    let count = child::Entity::count_songs(*db).await;
+    let count = scanner.total_count();
 
     let resp = SubsonicResponse::new_ok(SubsonicResponseBody::ScanStatus(ScanStatus {
         scanning: true,

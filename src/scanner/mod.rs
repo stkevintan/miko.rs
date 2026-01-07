@@ -18,6 +18,7 @@ pub struct Scanner {
     cfg: Arc<Config>,
     is_scanning: AtomicBool,
     scan_count: AtomicI64,
+    total_count: AtomicI64,
     last_scan_time: AtomicI64,
 }
 
@@ -36,6 +37,7 @@ impl Scanner {
             cfg,
             is_scanning: AtomicBool::new(false),
             scan_count: AtomicI64::new(0),
+            total_count: AtomicI64::new(0),
             last_scan_time: AtomicI64::new(0),
         }
     }
@@ -50,6 +52,15 @@ impl Scanner {
 
     pub fn scan_count(&self) -> i64 {
         self.scan_count.load(std::sync::atomic::Ordering::SeqCst)
+    }
+
+    pub fn total_count(&self) -> i64 {
+        self.total_count.load(std::sync::atomic::Ordering::SeqCst)
+    }
+
+    pub async fn update_total_count(&self) {
+        let count = child::Entity::count_songs(&self.db).await;
+        self.total_count.store(count, std::sync::atomic::Ordering::SeqCst);
     }
 
     async fn process_batch(
@@ -525,6 +536,8 @@ impl Scanner {
 
         log::info!("Scan finished, pruning database...");
         self.prune().await?;
+
+        self.update_total_count().await;
 
         let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs() as i64;
         self.last_scan_time.store(now, std::sync::atomic::Ordering::SeqCst);

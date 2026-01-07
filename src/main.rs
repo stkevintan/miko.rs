@@ -158,6 +158,7 @@ async fn main() -> Result<(), anyhow::Error> {
         .expect("Failed to initialize music folders");
 
     let scanner = Arc::new(Scanner::new(db.clone(), config.clone()));
+    scanner.update_total_count().await;
     let addr = format!("0.0.0.0:{}", config.server.port);
 
     log::info!("Starting server at http://{}", addr);
