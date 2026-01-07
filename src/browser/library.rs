@@ -16,41 +16,43 @@ impl Browser {
 
         let mut sql = "SELECT albums.*, COALESCE(stats.song_count, 0) AS song_count, \
                        CAST(COALESCE(stats.duration, 0) AS INTEGER) AS duration, \
-                       CAST(COALESCE(stats.play_count, 0) AS INTEGER) AS play_count \
+                       CAST(COALESCE(stats.play_count, 0) AS INTEGER) AS play_count, \
+                       stats.last_played \
                        FROM albums \
-                       LEFT JOIN (SELECT album_id, COUNT(*) as song_count, SUM(duration) as duration, SUM(play_count) as play_count FROM children WHERE is_dir = 0 GROUP BY album_id) stats \
+                       LEFT JOIN (SELECT album_id, COUNT(*) as song_count, SUM(duration) as duration, SUM(play_count) as play_count, MAX(last_played) as last_played FROM children WHERE is_dir = 0 GROUP BY album_id) stats \
                        ON stats.album_id = albums.id".to_string();
 
         let mut conditions = Vec::new();
+        let mut values = Vec::new();
+
         if let Some(folder_id) = opts.music_folder_id {
             sql = format!("{} JOIN children c2 ON c2.album_id = albums.id", sql);
-            conditions.push(format!("c2.music_folder_id = {}", folder_id));
+            conditions.push("c2.music_folder_id = ?".to_string());
+            values.push(folder_id.into());
         }
 
         match list_type {
             "byYear" => {
                 if let Some(from) = opts.from_year {
-                    conditions.push(format!("albums.year >= {}", from));
+                    conditions.push("albums.year >= ?".to_string());
+                    values.push(from.into());
                 }
                 if let Some(to) = opts.to_year {
-                    conditions.push(format!("albums.year <= {}", to));
+                    conditions.push("albums.year <= ?".to_string());
+                    values.push(to.into());
                 }
             }
             "byGenre" => {
                 if let Some(ref genre) = opts.genre {
-                    conditions.push(format!("albums.genre = '{}'", genre.replace("'", "''")));
+                    conditions.push("albums.genre = ?".to_string());
+                    values.push(genre.clone().into());
                 }
             }
             "starred" => {
                 conditions.push("albums.starred IS NOT NULL".to_string());
             }
             "recent" => {
-                sql = format!(
-                    "{}, (SELECT last_played FROM children WHERE album_id = albums.id AND is_dir = 0 ORDER BY last_played DESC LIMIT 1) AS last_played {}",
-                    &sql[..sql.find(" FROM").unwrap()],
-                    &sql[sql.find(" FROM").unwrap()..]
-                );
-                conditions.push("last_played IS NOT NULL".to_string());
+                conditions.push("stats.last_played IS NOT NULL".to_string());
             }
             _ => {}
         }
@@ -63,7 +65,7 @@ impl Browser {
             sql = format!("{} GROUP BY albums.id", sql);
         }
 
-        let sql = match list_type {
+        let mut sql = match list_type {
             "random" => format!("{} ORDER BY RANDOM()", sql),
             "newest" => format!("{} ORDER BY albums.created DESC", sql),
             "frequent" => format!("{} ORDER BY play_count DESC", sql),
@@ -75,11 +77,17 @@ impl Browser {
             _ => format!("{} ORDER BY albums.created DESC", sql),
         };
 
-        let sql = format!("{} LIMIT {} OFFSET {}", sql, size, offset);
+        sql = format!("{} LIMIT ? OFFSET ?", sql);
+        values.push(size.into());
+        values.push(offset.into());
 
-        AlbumWithStats::find_by_statement(Statement::from_string(DbBackend::Sqlite, sql))
-            .all(&self.db)
-            .await
+        AlbumWithStats::find_by_statement(Statement::from_sql_and_values(
+            DbBackend::Sqlite,
+            &sql,
+            values,
+        ))
+        .all(&self.db)
+        .await
     }
 
     pub async fn get_artists(&self, ignored_articles: &str) -> Result<Vec<(String, Vec<ArtistWithStats>)>, DbErr> {
@@ -141,9 +149,10 @@ impl Browser {
     pub async fn get_albums_by_artist(&self, artist_id: &str) -> Result<Vec<AlbumWithStats>, DbErr> {
         let sql = "SELECT albums.*, COALESCE(stats.song_count, 0) AS song_count, \
                        CAST(COALESCE(stats.duration, 0) AS INTEGER) AS duration, \
-                       CAST(COALESCE(stats.play_count, 0) AS INTEGER) AS play_count \
+                       CAST(COALESCE(stats.play_count, 0) AS INTEGER) AS play_count, \
+                       stats.last_played \
                        FROM albums \
-                       LEFT JOIN (SELECT album_id, COUNT(*) as song_count, SUM(duration) as duration, SUM(play_count) as play_count FROM children WHERE is_dir = 0 GROUP BY album_id) stats \
+                       LEFT JOIN (SELECT album_id, COUNT(*) as song_count, SUM(duration) as duration, SUM(play_count) as play_count, MAX(last_played) as last_played FROM children WHERE is_dir = 0 GROUP BY album_id) stats \
                        ON stats.album_id = albums.id \
                        WHERE albums.artist_id = ? \
                        ORDER BY albums.year DESC, albums.name ASC".to_string();
@@ -174,9 +183,10 @@ impl Browser {
     async fn get_album_with_stats(&self, id: &str) -> Result<AlbumWithStats, DbErr> {
         let sql = "SELECT albums.*, COALESCE(stats.song_count, 0) AS song_count, \
                        CAST(COALESCE(stats.duration, 0) AS INTEGER) AS duration, \
-                       CAST(COALESCE(stats.play_count, 0) AS INTEGER) AS play_count \
+                       CAST(COALESCE(stats.play_count, 0) AS INTEGER) AS play_count, \
+                       stats.last_played \
                        FROM albums \
-                       LEFT JOIN (SELECT album_id, COUNT(*) as song_count, SUM(duration) as duration, SUM(play_count) as play_count FROM children WHERE is_dir = 0 GROUP BY album_id) stats \
+                       LEFT JOIN (SELECT album_id, COUNT(*) as song_count, SUM(duration) as duration, SUM(play_count) as play_count, MAX(last_played) as last_played FROM children WHERE is_dir = 0 GROUP BY album_id) stats \
                        ON stats.album_id = albums.id \
                        WHERE albums.id = ?".to_string();
 
@@ -206,31 +216,37 @@ impl Browser {
 
         let mut sql = "SELECT * FROM children WHERE is_dir = 0".to_string();
         let mut conditions = Vec::new();
+        let mut values = Vec::new();
 
         if let Some(folder_id) = opts.music_folder_id {
-            conditions.push(format!("music_folder_id = {}", folder_id));
+            conditions.push("music_folder_id = ?".to_string());
+            values.push(folder_id.into());
         }
 
         if let Some(ref genre) = opts.genre {
-            conditions.push(format!("genre = '{}'", genre.replace("'", "''")));
+            conditions.push("genre = ?".to_string());
+            values.push(genre.clone().into());
         }
 
         if let Some(from) = opts.from_year {
-            conditions.push(format!("year >= {}", from));
+            conditions.push("year >= ?".to_string());
+            values.push(from.into());
         }
 
         if let Some(to) = opts.to_year {
-            conditions.push(format!("year <= {}", to));
+            conditions.push("year <= ?".to_string());
+            values.push(to.into());
         }
 
         if !conditions.is_empty() {
             sql = format!("{} AND {}", sql, conditions.join(" AND "));
         }
 
-        let sql = format!("{} ORDER BY RANDOM() LIMIT {}", sql, size);
+        let sql = format!("{} ORDER BY RANDOM() LIMIT ?", sql);
+        values.push(size.into());
 
         child::Entity::find()
-            .from_raw_sql(Statement::from_string(DbBackend::Sqlite, sql))
+            .from_raw_sql(Statement::from_sql_and_values(DbBackend::Sqlite, sql, values))
             .all(&self.db)
             .await
     }
@@ -268,15 +284,22 @@ impl Browser {
                              ON stats.artist_id = a.id \
                              WHERE a.starred IS NOT NULL".to_string();
 
+        let mut artist_values = Vec::new();
+
         if let Some(f_id) = folder_id {
-            artist_sql = format!("{} AND EXISTS (SELECT 1 FROM children c WHERE c.artist_id = a.id AND c.music_folder_id = {})", artist_sql, f_id);
+            artist_sql = format!("{} AND EXISTS (SELECT 1 FROM children c WHERE c.artist_id = a.id AND c.music_folder_id = ?)", artist_sql);
+            artist_values.push(f_id.into());
         }
 
-        let artist_sql = format!("{} ORDER BY a.starred DESC", artist_sql);
+        artist_sql = format!("{} ORDER BY a.starred DESC", artist_sql);
 
-        let artists = ArtistWithStats::find_by_statement(Statement::from_string(DbBackend::Sqlite, artist_sql))
-            .all(&self.db)
-            .await?;
+        let artists = ArtistWithStats::find_by_statement(Statement::from_sql_and_values(
+            DbBackend::Sqlite,
+            &artist_sql,
+            artist_values,
+        ))
+        .all(&self.db)
+        .await?;
 
         // Albums
         let albums = self.get_albums(AlbumListOptions {
