@@ -1,7 +1,7 @@
 use crate::browser::{Browser, DirectoryWithChildren, GenreWithStats};
 use crate::models::{artist, child, genre, song_genre, album};
 use sea_orm::{
-    ColumnTrait, ConnectionTrait, DbErr, EntityTrait, FromQueryResult, JoinType, PaginatorTrait, QueryFilter, QueryOrder, QuerySelect, Statement
+    ColumnTrait, ConnectionTrait, DbErr, EntityTrait, FromQueryResult, JoinType, PaginatorTrait, QueryFilter, QueryOrder, QuerySelect
 };
 use sea_orm::sea_query::Expr;
 
