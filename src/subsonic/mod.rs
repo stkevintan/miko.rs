@@ -18,6 +18,7 @@ macro_rules! subsonic_routes {
 }
 
 use crate::subsonic::handlers::{system, browsing, scan};
+
 pub fn create_route() -> Route {
     let route = subsonic_routes!(
         Route::new(),

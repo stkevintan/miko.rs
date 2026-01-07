@@ -1,17 +1,22 @@
-mod models;
-mod subsonic;
-mod crypto;
 mod api;
 mod config;
+mod crypto;
+mod models;
 mod scanner;
+mod subsonic;
 
-use poem::{Server, listener::TcpListener, Route, middleware::Tracing, EndpointExt};
-use sea_orm::{Database, EntityTrait, ActiveModelTrait, Set, DatabaseConnection, PaginatorTrait, Schema, ConnectionTrait, QueryFilter, ColumnTrait};
-use chrono::Utc;
-use std::sync::Arc;
-use crate::models::{user, music_folder, user_music_folder, child, artist, album, genre, song_artist, song_genre};
 use crate::config::Config;
+use crate::models::{
+    album, artist, child, genre, music_folder, song_artist, song_genre, user, user_music_folder,
+};
 use crate::scanner::Scanner;
+use chrono::Utc;
+use poem::{listener::TcpListener, middleware::Tracing, EndpointExt, Route, Server};
+use sea_orm::{
+    ActiveModelTrait, ColumnTrait, ConnectionTrait, Database, DatabaseConnection, EntityTrait,
+    PaginatorTrait, QueryFilter, Schema, Set,
+};
+use std::sync::Arc;
 
 async fn setup_schema(db: &DatabaseConnection) -> Result<(), anyhow::Error> {
     let builder = db.get_database_backend();
@@ -38,12 +43,15 @@ async fn setup_schema(db: &DatabaseConnection) -> Result<(), anyhow::Error> {
     Ok(())
 }
 
-async fn init_default_user(db: &DatabaseConnection, password_secret: &str) -> Result<(), anyhow::Error> {
+async fn init_default_user(
+    db: &DatabaseConnection,
+    password_secret: &str,
+) -> Result<(), anyhow::Error> {
     let count = user::Entity::find().count(db).await?;
     if count == 0 {
         log::info!("No users found, creating default admin user");
         let encrypted_password = crypto::encrypt("adminpassword", password_secret.as_bytes())?;
-        
+
         let admin = user::ActiveModel {
             username: Set("admin".to_string()),
             password: Set(encrypted_password),
@@ -65,14 +73,17 @@ async fn init_default_user(db: &DatabaseConnection, password_secret: &str) -> Re
             video_conversion_role: Set(true),
             ..Default::default()
         };
-        
+
         admin.insert(db).await?;
         log::info!("Default admin user created");
     }
     Ok(())
 }
 
-async fn init_music_folders(db: &DatabaseConnection, folders: &[String]) -> Result<(), anyhow::Error> {
+async fn init_music_folders(
+    db: &DatabaseConnection,
+    folders: &[String],
+) -> Result<(), anyhow::Error> {
     for path in folders {
         let exists = music_folder::Entity::find()
             .filter(music_folder::Column::Path.eq(path))
@@ -107,9 +118,13 @@ async fn main() -> Result<(), anyhow::Error> {
 
     // Ensure database directory exists for SQLite
     if config.database.url.starts_with("sqlite://") {
-        let path_part = config.database.url
-            .strip_prefix("sqlite://").unwrap()
-            .split('?').next().unwrap();
+        let path_part = config
+            .database
+            .url
+            .strip_prefix("sqlite://")
+            .and_then(|s| s.split('?').next())
+            .expect("Invalid SQLite URL");
+
         let path = std::path::Path::new(path_part);
         if let Some(parent) = path.parent() {
             if !parent.exists() {
@@ -132,9 +147,15 @@ async fn main() -> Result<(), anyhow::Error> {
         .await
         .expect("Failed to connect to database");
 
-    setup_schema(&db).await.expect("Failed to setup database schema");
-    init_default_user(&db, &config.server.password_secret).await.expect("Failed to initialize default user");
-    init_music_folders(&db, &config.subsonic.folders).await.expect("Failed to initialize music folders");
+    setup_schema(&db)
+        .await
+        .expect("Failed to setup database schema");
+    init_default_user(&db, &config.server.password_secret)
+        .await
+        .expect("Failed to initialize default user");
+    init_music_folders(&db, &config.subsonic.folders)
+        .await
+        .expect("Failed to initialize music folders");
 
     let scanner = Arc::new(Scanner::new(db.clone(), config.clone()));
     let addr = format!("0.0.0.0:{}", config.server.port);
@@ -149,9 +170,7 @@ async fn main() -> Result<(), anyhow::Error> {
         .data(scanner)
         .with(Tracing);
 
-    Server::new(TcpListener::bind(addr))
-        .run(app)
-        .await?;
-        
+    Server::new(TcpListener::bind(addr)).run(app).await?;
+
     Ok(())
 }

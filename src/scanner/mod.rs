@@ -376,12 +376,17 @@ impl Scanner {
         if ids.is_empty() {
             return Ok(());
         }
-        let values = ids.iter()
-            .map(|id| format!("('{}')", id))
-            .collect::<Vec<_>>()
-            .join(",");
-        let sql = format!("INSERT OR IGNORE INTO _scanner_seen (id) VALUES {}", values);
-        self.db.execute_unprepared(&sql).await?;
+        use sea_orm::{Statement, TransactionTrait};
+        let txn = self.db.begin().await?;
+        for id in ids {
+            txn.execute(Statement::from_sql_and_values(
+                self.db.get_database_backend(),
+                "INSERT OR IGNORE INTO _scanner_seen (id) VALUES (?)",
+                [sea_orm::Value::from(id.clone())],
+            ))
+            .await?;
+        }
+        txn.commit().await?;
         Ok(())
     }
 

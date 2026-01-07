@@ -17,7 +17,7 @@ macro_rules! get_id_or_error {
     };
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Default)]
 #[allow(dead_code)]
 pub struct SubsonicParams {
     pub u: Option<String>,
