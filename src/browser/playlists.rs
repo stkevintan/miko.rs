@@ -1,9 +1,11 @@
 use crate::browser::{Browser, PlaylistWithSongs, PlaylistWithStats, UpdatePlaylistOptions};
 use crate::models::{child, playlist, playlist_song};
 use sea_orm::{
-    ActiveModelTrait, ColumnTrait, ConnectionTrait, DbBackend, DbErr, EntityTrait, FromQueryResult,
-    QueryFilter, QuerySelect, Statement, TransactionTrait, Set, TransactionError,
+    ActiveModelTrait, ColumnTrait, DbErr, EntityTrait,
+    QueryFilter, QuerySelect, TransactionTrait, Set, TransactionError,
+    JoinType, QueryOrder,
 };
+use sea_orm::sea_query::Expr;
 use chrono::Utc;
 
 impl Browser {
@@ -117,24 +119,15 @@ impl Browser {
                             .exec(txn)
                             .await?;
 
-                        // Re-index
-                        let sql = r#"
-                            UPDATE playlist_songs
-                            SET position = (
-                                SELECT COUNT(*)
-                                FROM playlist_songs AS ps
-                                WHERE ps.playlist_id = playlist_songs.playlist_id
-                                AND ps.position < playlist_songs.position
+                        // Re-index positions
+                        playlist_song::Entity::update_many()
+                            .col_expr(
+                                playlist_song::Column::Position,
+                                Expr::cust("(SELECT COUNT(*) FROM playlist_songs AS ps WHERE ps.playlist_id = playlist_songs.playlist_id AND ps.position < playlist_songs.position)"),
                             )
-                            WHERE playlist_id = ?
-                        "#;
-
-                        txn.execute(Statement::from_sql_and_values(
-                            DbBackend::Sqlite,
-                            sql,
-                            vec![playlist_id.into()],
-                        ))
-                        .await?;
+                            .filter(playlist_song::Column::PlaylistId.eq(playlist_id))
+                            .exec(txn)
+                            .await?;
                     }
 
                     Ok(())
@@ -166,55 +159,68 @@ impl Browser {
         username: &str,
         target_username: &str,
     ) -> Result<Vec<PlaylistWithStats>, DbErr> {
-        let mut sql = "SELECT playlists.*, \
-                       COUNT(playlist_songs.id) as song_count, \
-                       CAST(COALESCE(SUM(children.duration), 0) AS INTEGER) as duration \
-                       FROM playlists \
-                       LEFT JOIN playlist_songs ON playlist_songs.playlist_id = playlists.id \
-                       LEFT JOIN children ON children.id = playlist_songs.song_id \
-                       WHERE playlists.owner = ?".to_string();
+        let mut query = playlist::Entity::find()
+            .column_as(playlist_song::Column::Id.count(), "song_count")
+            .column_as(child::Column::Duration.sum(), "duration")
+            .join_rev(
+                JoinType::LeftJoin,
+                playlist_song::Entity::belongs_to(playlist::Entity)
+                    .from(playlist_song::Column::PlaylistId)
+                    .to(playlist::Column::Id)
+                    .into(),
+            )
+            .join_rev(
+                JoinType::LeftJoin,
+                child::Entity::belongs_to(playlist_song::Entity)
+                    .from(child::Column::Id)
+                    .to(playlist_song::Column::SongId)
+                    .into(),
+            )
+            .filter(playlist::Column::Owner.eq(target_username))
+            .group_by(playlist::Column::Id);
 
         if username != target_username {
-            sql.push_str(" AND playlists.public = 1");
+            query = query.filter(playlist::Column::Public.eq(true));
         }
 
-        sql.push_str(" GROUP BY playlists.id");
-
-        PlaylistWithStats::find_by_statement(Statement::from_sql_and_values(
-            DbBackend::Sqlite,
-            &sql,
-            vec![target_username.into()],
-        ))
-        .all(&self.db)
-        .await
+        query.into_model::<PlaylistWithStats>().all(&self.db).await
     }
 
     pub async fn get_playlist(&self, id: i32) -> Result<Option<PlaylistWithSongs>, DbErr> {
-        let playlist = PlaylistWithStats::find_by_statement(Statement::from_sql_and_values(
-            DbBackend::Sqlite,
-            "SELECT playlists.*, \
-             COUNT(playlist_songs.id) as song_count, \
-             CAST(COALESCE(SUM(children.duration), 0) AS INTEGER) as duration \
-             FROM playlists \
-             LEFT JOIN playlist_songs ON playlist_songs.playlist_id = playlists.id \
-             LEFT JOIN children ON children.id = playlist_songs.song_id \
-             WHERE playlists.id = ? \
-             GROUP BY playlists.id",
-            vec![id.into()],
-        ))
-        .one(&self.db)
-        .await?;
+        let playlist = playlist::Entity::find()
+            .filter(playlist::Column::Id.eq(id))
+            .column_as(playlist_song::Column::Id.count(), "song_count")
+            .column_as(child::Column::Duration.sum(), "duration")
+            .join_rev(
+                JoinType::LeftJoin,
+                playlist_song::Entity::belongs_to(playlist::Entity)
+                    .from(playlist_song::Column::PlaylistId)
+                    .to(playlist::Column::Id)
+                    .into(),
+            )
+            .join_rev(
+                JoinType::LeftJoin,
+                child::Entity::belongs_to(playlist_song::Entity)
+                    .from(child::Column::Id)
+                    .to(playlist_song::Column::SongId)
+                    .into(),
+            )
+            .group_by(playlist::Column::Id)
+            .into_model::<PlaylistWithStats>()
+            .one(&self.db)
+            .await?;
 
         if let Some(playlist) = playlist {
             let songs = child::Entity::find()
-                .from_raw_sql(Statement::from_sql_and_values(
-                    DbBackend::Sqlite,
-                    "SELECT children.* FROM children \
-                     JOIN playlist_songs ON playlist_songs.song_id = children.id \
-                     WHERE playlist_songs.playlist_id = ? \
-                     ORDER BY playlist_songs.position ASC",
-                    vec![id.into()],
-                ))
+                .join_rev(
+                    JoinType::InnerJoin,
+                    playlist_song::Entity::belongs_to(child::Entity)
+                        .from(playlist_song::Column::SongId)
+                        .to(child::Column::Id)
+                        .into(),
+                )
+                .filter(playlist_song::Column::PlaylistId.eq(id))
+                .order_by_asc(playlist_song::Column::Position)
                 .all(&self.db)
                 .await?;
 

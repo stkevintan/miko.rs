@@ -1,4 +1,4 @@
-use crate::browser::{AlbumListOptions, AlbumWithStats, ArtistWithStats, Browser, utils::strip_articles};
+use crate::browser::{AlbumListOptions, AlbumWithStats, ArtistWithStats, Browser};
 use crate::models::{child, album, artist, album_artist};
 use sea_orm::{
     ColumnTrait, DbErr, EntityTrait, QueryFilter, QueryOrder,
@@ -91,26 +91,11 @@ impl Browser {
             .all(&self.db)
             .await?;
 
-        let articles: Vec<&str> = ignored_articles.split_whitespace().collect();
-        let mut index_map: std::collections::BTreeMap<String, Vec<ArtistWithStats>> = std::collections::BTreeMap::new();
-
-        for artist in artists {
-            if artist.name.is_empty() {
-                continue;
-            }
-
-            let sort_name = strip_articles(&artist.name, &articles);
-            let first_char = sort_name.chars().next().unwrap_or(' ').to_uppercase().to_string();
-
-            index_map.entry(first_char).or_default().push(artist);
-        }
-
-        let mut result: Vec<(String, Vec<ArtistWithStats>)> = index_map.into_iter().collect();
-        for (_, artists) in &mut result {
-            artists.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
-        }
-
-        Ok(result)
+        Ok(crate::browser::utils::create_indexed_list(
+            artists,
+            ignored_articles,
+            |a| &a.name,
+        ))
     }
 
     pub async fn get_artist(&self, id: &str) -> Result<(ArtistWithStats, Vec<AlbumWithStats>), DbErr> {

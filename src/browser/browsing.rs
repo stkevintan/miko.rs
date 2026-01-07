@@ -1,8 +1,7 @@
-use crate::browser::{Browser, DirectoryWithChildren, GenreWithStats, utils::strip_articles};
+use crate::browser::{Browser, DirectoryWithChildren, GenreWithStats};
 use crate::models::{artist, child, genre, song_genre, album};
 use sea_orm::{
-    ColumnTrait, DbErr, EntityTrait, QueryFilter,
-    QueryOrder, QuerySelect, JoinType, PaginatorTrait, Statement, DbBackend, FromQueryResult
+    ColumnTrait, ConnectionTrait, DbErr, EntityTrait, FromQueryResult, JoinType, PaginatorTrait, QueryFilter, QueryOrder, QuerySelect, Statement
 };
 use sea_orm::sea_query::Expr;
 
@@ -21,44 +20,25 @@ impl Browser {
         }
 
         let children = query.all(&self.db).await?;
-        let articles: Vec<&str> = ignored_articles.split_whitespace().collect();
 
-        let mut index_map: std::collections::BTreeMap<String, Vec<artist::Model>> =
-            std::collections::BTreeMap::new();
+        let artists: Vec<artist::Model> = children
+            .into_iter()
+            .map(|child| artist::Model {
+                id: child.id,
+                name: child.title,
+                cover_art: "".to_string(),
+                artist_image_url: "".to_string(),
+                starred: None,
+                user_rating: 0,
+                average_rating: 0.0,
+            })
+            .collect();
 
-        for child in children {
-            if child.title.is_empty() {
-                continue;
-            }
-
-            let sort_name = strip_articles(&child.title, &articles);
-            let first_char = sort_name
-                .chars()
-                .next()
-                .unwrap_or(' ')
-                .to_uppercase()
-                .to_string();
-
-            index_map
-                .entry(first_char)
-                .or_default()
-                .push(artist::Model {
-                    id: child.id,
-                    name: child.title,
-                    cover_art: "".to_string(),
-                    artist_image_url: "".to_string(),
-                    starred: None,
-                    user_rating: 0,
-                    average_rating: 0.0,
-                });
-        }
-
-        let mut result: Vec<(String, Vec<artist::Model>)> = index_map.into_iter().collect();
-        for (_, artists) in &mut result {
-            artists.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
-        }
-
-        Ok(result)
+        Ok(crate::browser::utils::create_indexed_list(
+            artists,
+            ignored_articles,
+            |a| &a.name,
+        ))
     }
 
     pub async fn get_directory(
@@ -93,7 +73,7 @@ impl Browser {
         if !dir.parent.is_empty() {
             // Recursive CTE for ancestors
             let ancestors = child::Model::find_by_statement(Statement::from_sql_and_values(
-                DbBackend::Sqlite,
+                self.db.get_database_backend(),
                 r#"
                 WITH RECURSIVE ancestors AS (
                     SELECT * FROM children WHERE id = ?
