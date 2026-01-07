@@ -65,6 +65,28 @@ pub enum SubsonicResponseBody {
     Starred(Starred),
     #[serde(rename = "starred2")]
     Starred2(Starred2),
+    #[serde(rename = "searchResult")]
+    SearchResult(SearchResult),
+    #[serde(rename = "searchResult2")]
+    SearchResult2(SearchResult2),
+    #[serde(rename = "searchResult3")]
+    SearchResult3(SearchResult3),
+    #[serde(rename = "playlists")]
+    Playlists(Playlists),
+    #[serde(rename = "playlist")]
+    Playlist(Playlist),
+    #[serde(rename = "artistInfo")]
+    ArtistInfo(ArtistInfo),
+    #[serde(rename = "artistInfo2")]
+    ArtistInfo2(ArtistInfo2),
+    #[serde(rename = "albumInfo")]
+    AlbumInfo(AlbumInfo),
+    #[serde(rename = "similarSongs")]
+    SimilarSongs(SimilarSongs),
+    #[serde(rename = "similarSongs2")]
+    SimilarSongs2(SimilarSongs2),
+    #[serde(rename = "topSongs")]
+    TopSongs(TopSongs),
     #[serde(other)]
     None,
 }
@@ -197,8 +219,12 @@ pub struct Directory {
     pub average_rating: Option<f64>,
     #[serde(rename = "@playCount", skip_serializing_if = "Option::is_none")]
     pub play_count: Option<i64>,
+    #[serde(rename = "@totalCount", skip_serializing_if = "Option::is_none")]
+    pub total_count: Option<i64>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub child: Vec<Child>,
+    #[serde(rename = "parent", skip_serializing_if = "Vec::is_empty")]
+    pub parents: Vec<Child>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -432,4 +458,135 @@ pub struct ScanStatus {
     pub scanning: bool,
     #[serde(rename = "@count", skip_serializing_if = "Option::is_none")]
     pub count: Option<i64>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SearchResult {
+    #[serde(rename = "@offset")]
+    pub offset: u64,
+    #[serde(rename = "@totalHits")]
+    pub total_hits: u64,
+    #[serde(rename = "match")]
+    pub match_vec: Vec<Child>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SearchResult2 {
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub artist: Vec<Artist>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub album: Vec<Child>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub song: Vec<Child>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SearchResult3 {
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub artist: Vec<ArtistID3>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub album: Vec<AlbumID3>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub song: Vec<Child>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Playlists {
+    #[serde(rename = "playlist")]
+    pub playlist: Vec<Playlist>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Playlist {
+    #[serde(rename = "@id")]
+    pub id: String,
+    #[serde(rename = "@name")]
+    pub name: String,
+    #[serde(rename = "@comment", skip_serializing_if = "Option::is_none")]
+    pub comment: Option<String>,
+    #[serde(rename = "@owner")]
+    pub owner: String,
+    #[serde(rename = "@public")]
+    pub public: bool,
+    #[serde(rename = "@songCount")]
+    pub song_count: i32,
+    #[serde(rename = "@duration")]
+    pub duration: i32,
+    #[serde(rename = "@created")]
+    pub created: chrono::DateTime<chrono::Utc>,
+    #[serde(rename = "@changed")]
+    pub changed: chrono::DateTime<chrono::Utc>,
+    #[serde(rename = "entry", skip_serializing_if = "Vec::is_empty", default)]
+    pub entry: Vec<Child>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct AlbumInfo {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub notes: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub music_brainz_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_fm_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub small_image_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub medium_image_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub large_image_url: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct ArtistInfoBase {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub biography: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub music_brainz_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_fm_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub small_image_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub medium_image_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub large_image_url: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct ArtistInfo {
+    #[serde(flatten)]
+    pub base: ArtistInfoBase,
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub similar_artist: Vec<Artist>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct ArtistInfo2 {
+    #[serde(flatten)]
+    pub base: ArtistInfoBase,
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub similar_artist: Vec<ArtistID3>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Default)]
+pub struct SimilarSongs {
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub song: Vec<Child>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Default)]
+pub struct SimilarSongs2 {
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub song: Vec<Child>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Default)]
+pub struct TopSongs {
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub song: Vec<Child>,
 }

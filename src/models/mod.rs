@@ -7,3 +7,5 @@ pub mod album;
 pub mod genre;
 pub mod song_artist;
 pub mod song_genre;
+pub mod playlist;
+pub mod playlist_song;
