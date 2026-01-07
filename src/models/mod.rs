@@ -5,3 +5,5 @@ pub mod child;
 pub mod artist;
 pub mod album;
 pub mod genre;
+pub mod song_artist;
+pub mod song_genre;

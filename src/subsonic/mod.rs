@@ -17,7 +17,8 @@ macro_rules! subsonic_routes {
     };
 }
 
-use crate::subsonic::handlers::{system, browsing};
+use crate::subsonic::handlers::{system, browsing, scan};
+
 pub fn create_route() -> Route {
     let route = subsonic_routes!(
         Route::new(),
@@ -34,6 +35,9 @@ pub fn create_route() -> Route {
         ("/getArtist", browsing::get_artist),
         ("/getAlbum", browsing::get_album),
         ("/getSong", browsing::get_song),
+        // scan
+        ("/getScanStatus", scan::get_scan_status),
+        ("/startScan", scan::start_scan),
     );
     Route::new().nest("/", route.with(middleware::SubsonicAuth))
 }

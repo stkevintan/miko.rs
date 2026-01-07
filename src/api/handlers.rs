@@ -4,12 +4,13 @@ use jsonwebtoken::{encode, Header, EncodingKey};
 use crate::models::user;
 use crate::api::models::{LoginRequest, LoginResponse, Claims, ErrorResponse};
 use crate::subsonic::auth::verify_password;
-use std::env;
+use crate::config::Config;
 use chrono::Utc;
 
 #[handler]
 pub async fn login(
     db: Data<&DatabaseConnection>,
+    config: Data<&Config>,
     req: Json<LoginRequest>,
 ) -> impl IntoResponse {
     let user = match user::Entity::find()
@@ -26,25 +27,11 @@ pub async fn login(
             .into_response(),
     };
 
-    let password_secret = match env::var("PASSWORD_SECRET") {
-        Ok(s) => s,
-        Err(_) => return Json(ErrorResponse { error: "PASSWORD_SECRET not set".into() })
-            .with_status(StatusCode::SERVICE_UNAVAILABLE)
-            .into_response(),
-    };
-
-    if !verify_password(&user.password, &req.password, password_secret.as_bytes()) {
+    if !verify_password(&user.password, &req.password, config.server.password_secret.as_bytes()) {
         return Json(ErrorResponse { error: "Invalid username or password".into() })
             .with_status(StatusCode::UNAUTHORIZED)
             .into_response();
     }
-
-    let jwt_secret = match env::var("JWT_SECRET") {
-        Ok(s) => s,
-        Err(_) => return Json(ErrorResponse { error: "JWT_SECRET not set".into() })
-            .with_status(StatusCode::SERVICE_UNAVAILABLE)
-            .into_response(),
-    };
 
     let expiration = Utc::now()
         .checked_add_signed(chrono::Duration::try_days(24).unwrap())
@@ -59,7 +46,7 @@ pub async fn login(
     let token = match encode(
         &Header::default(),
         &claims,
-        &EncodingKey::from_secret(jwt_secret.as_bytes()),
+        &EncodingKey::from_secret(config.server.jwt_secret.as_bytes()),
     ) {
         Ok(t) => t,
         Err(_) => return Json(ErrorResponse { error: "Failed to generate token".into() })

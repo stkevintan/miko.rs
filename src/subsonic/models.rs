@@ -49,6 +49,8 @@ pub enum SubsonicResponseBody {
     Album(AlbumWithSongsID3),
     #[serde(rename = "song")]
     Song(Child),
+    #[serde(rename = "scanStatus")]
+    ScanStatus(ScanStatus),
     #[serde(rename = "albumList")]
     AlbumList(AlbumList),
     #[serde(rename = "albumList2")]
@@ -422,4 +424,12 @@ pub struct Starred2 {
     pub album: Vec<AlbumID3>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub song: Vec<Child>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ScanStatus {
+    #[serde(rename = "@scanning")]
+    pub scanning: bool,
+    #[serde(rename = "@count", skip_serializing_if = "Option::is_none")]
+    pub count: Option<i64>,
 }
