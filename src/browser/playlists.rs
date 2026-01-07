@@ -5,7 +5,7 @@ use sea_orm::{
     QueryFilter, QuerySelect, TransactionTrait, Set, TransactionError,
     JoinType, QueryOrder,
 };
-use sea_orm::sea_query::Expr;
+use std::collections::HashSet;
 use chrono::Utc;
 
 impl Browser {
@@ -87,47 +87,57 @@ impl Browser {
                     p.updated_at = Set(Utc::now());
                     p.update(txn).await?;
 
-                    if !opts.song_ids_to_add.is_empty() {
-                        let max_pos: Option<i32> = playlist_song::Entity::find()
+                    if !opts.song_ids_to_add.is_empty() || !opts.song_indices_to_remove.is_empty() {
+                        let songs = playlist_song::Entity::find()
                             .filter(playlist_song::Column::PlaylistId.eq(playlist_id))
-                            .select_only()
-                            .column_as(playlist_song::Column::Position.max(), "max_pos")
-                            .into_tuple()
-                            .one(txn)
-                            .await?
-                            .unwrap_or(None);
-
-                        let start_pos = max_pos.map(|p| p + 1).unwrap_or(0);
-                        let mut songs_to_add = Vec::new();
-                        for (i, song_id) in opts.song_ids_to_add.into_iter().enumerate() {
-                            songs_to_add.push(playlist_song::ActiveModel {
-                                playlist_id: Set(playlist_id),
-                                song_id: Set(song_id),
-                                position: Set(start_pos + i as i32),
-                                ..Default::default()
-                            });
-                        }
-                        playlist_song::Entity::insert_many(songs_to_add)
-                            .exec(txn)
+                            .order_by_asc(playlist_song::Column::Position)
+                            .all(txn)
                             .await?;
-                    }
 
-                    if !opts.song_indices_to_remove.is_empty() {
+                        let mut song_ids: Vec<String> = songs.into_iter().map(|s| s.song_id).collect();
+
+                        if !opts.song_indices_to_remove.is_empty() {
+                            let to_remove: HashSet<usize> = opts
+                                .song_indices_to_remove
+                                .into_iter()
+                                .map(|i| i as usize)
+                                .collect();
+
+                            let mut new_song_ids = Vec::new();
+                            for (i, sid) in song_ids.into_iter().enumerate() {
+                                if !to_remove.contains(&i) {
+                                    new_song_ids.push(sid);
+                                }
+                            }
+                            song_ids = new_song_ids;
+                        }
+
+                        if !opts.song_ids_to_add.is_empty() {
+                            song_ids.extend(opts.song_ids_to_add);
+                        }
+
+                        // Re-sync with database
                         playlist_song::Entity::delete_many()
                             .filter(playlist_song::Column::PlaylistId.eq(playlist_id))
-                            .filter(playlist_song::Column::Position.is_in(opts.song_indices_to_remove))
                             .exec(txn)
                             .await?;
 
-                        // Re-index positions
-                        playlist_song::Entity::update_many()
-                            .col_expr(
-                                playlist_song::Column::Position,
-                                Expr::cust("(SELECT COUNT(*) FROM playlist_songs AS ps WHERE ps.playlist_id = playlist_songs.playlist_id AND ps.position < playlist_songs.position)"),
-                            )
-                            .filter(playlist_song::Column::PlaylistId.eq(playlist_id))
-                            .exec(txn)
-                            .await?;
+                        if !song_ids.is_empty() {
+                            let new_entries: Vec<playlist_song::ActiveModel> = song_ids
+                                .into_iter()
+                                .enumerate()
+                                .map(|(i, sid)| playlist_song::ActiveModel {
+                                    playlist_id: Set(playlist_id),
+                                    song_id: Set(sid),
+                                    position: Set(i as i32),
+                                    ..Default::default()
+                                })
+                                .collect();
+
+                            playlist_song::Entity::insert_many(new_entries)
+                                .exec(txn)
+                                .await?;
+                        }
                     }
 
                     Ok(())

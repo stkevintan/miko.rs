@@ -11,7 +11,7 @@ pub struct Model {
     pub artist: String,
     #[sea_orm(default_value = "")]
     pub artist_id: String,
-    pub cover_art: String,
+    pub cover_art: Option<String>,
     pub created: DateTimeUtc,
     pub starred: Option<DateTimeUtc>,
     #[sea_orm(default_value = 0)]

@@ -1,10 +1,9 @@
 use crate::browser::{AlbumListOptions, AlbumWithStats, ArtistWithStats, Browser};
-use crate::models::{child, album, artist, album_artist};
+use crate::models::{album, album_artist, artist, child, song_artist};
 use sea_orm::{
-    ColumnTrait, DbErr, EntityTrait, QueryFilter, QueryOrder,
-    QuerySelect, Order, JoinType,
+    ColumnTrait, DbErr, EntityTrait, JoinType, Order, QueryFilter, QueryOrder, QuerySelect,
 };
-use sea_orm::sea_query::{Expr, ExprTrait};
+use sea_orm::sea_query::{Expr, ExprTrait, Query};
 
 impl Browser {
     pub async fn get_albums(
@@ -265,15 +264,20 @@ impl Browser {
             .order_by_desc(artist::Column::Starred);
 
         if let Some(f_id) = folder_id {
-            artist_query = artist_query
-                .join_rev(
-                    JoinType::InnerJoin,
-                    child::Entity::belongs_to(artist::Entity)
-                        .from(child::Column::ArtistId)
-                        .to(artist::Column::Id)
-                        .into(),
-                )
-                .filter(child::Column::MusicFolderId.eq(f_id));
+            artist_query = artist_query.filter(
+                artist::Column::Id.in_subquery(
+                    Query::select()
+                        .column(song_artist::Column::ArtistId)
+                        .from(song_artist::Entity)
+                        .join(
+                            JoinType::InnerJoin,
+                            child::Entity,
+                            Expr::col(child::Column::Id).eq(Expr::col(song_artist::Column::SongId)),
+                        )
+                        .and_where(child::Column::MusicFolderId.eq(f_id))
+                        .to_owned(),
+                ),
+            );
         }
 
         let artists = artist_query

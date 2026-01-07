@@ -1,7 +1,7 @@
 use crate::browser::{Browser, DirectoryWithChildren, GenreWithStats};
 use crate::models::{artist, child, genre, song_genre, album};
 use sea_orm::{
-    ColumnTrait, ConnectionTrait, DbErr, EntityTrait, FromQueryResult, JoinType, PaginatorTrait, QueryFilter, QueryOrder, QuerySelect, Statement
+    ColumnTrait, DbErr, EntityTrait, JoinType, PaginatorTrait, QueryFilter, QueryOrder, QuerySelect
 };
 use sea_orm::sea_query::Expr;
 
@@ -26,8 +26,8 @@ impl Browser {
             .map(|child| artist::Model {
                 id: child.id,
                 name: child.title,
-                cover_art: "".to_string(),
-                artist_image_url: "".to_string(),
+                cover_art: child.cover_art,
+                artist_image_url: None,
                 starred: None,
                 user_rating: 0,
                 average_rating: 0.0,
@@ -71,24 +71,18 @@ impl Browser {
 
         let mut parents = Vec::new();
         if !dir.parent.is_empty() {
-            // Recursive CTE for ancestors
-            let ancestors = child::Model::find_by_statement(Statement::from_sql_and_values(
-                self.db.get_database_backend(),
-                r#"
-                WITH RECURSIVE ancestors AS (
-                    SELECT * FROM children WHERE id = ?
-                    UNION ALL
-                    SELECT c.* FROM children c
-                    JOIN ancestors a ON c.id = a.parent
-                )
-                SELECT * FROM ancestors
-            "#,
-                vec![dir.parent.clone().into()],
-            ))
-            .all(&self.db)
-            .await?;
-
-            parents = ancestors;
+            let mut current_parent_id = dir.parent.clone();
+            while !current_parent_id.is_empty() {
+                if let Some(p) = child::Entity::find_by_id(current_parent_id.clone())
+                    .one(&self.db)
+                    .await?
+                {
+                    current_parent_id = p.parent.clone();
+                    parents.push(p);
+                } else {
+                    break;
+                }
+            }
             parents.reverse();
         }
 

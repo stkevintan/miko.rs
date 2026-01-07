@@ -1,8 +1,9 @@
 use crate::browser::{AlbumWithStats, ArtistWithStats, Browser, SearchOptions};
-use crate::models::{child, album, artist, album_artist};
+use crate::models::{album, album_artist, artist, child, song_artist};
 use sea_orm::{
-    ColumnTrait, DbErr, EntityTrait, QueryFilter, QuerySelect, JoinType, PaginatorTrait,
+    ColumnTrait, DbErr, EntityTrait, JoinType, PaginatorTrait, QueryFilter, QuerySelect,
 };
+use sea_orm::sea_query::{Expr, Query};
 
 impl Browser {
     pub async fn search(&self, opts: SearchOptions) -> Result<(Vec<ArtistWithStats>, Vec<AlbumWithStats>, Vec<child::Model>), DbErr> {
@@ -46,26 +47,23 @@ impl Browser {
             );
 
         if let Some(folder_id) = opts.music_folder_id {
-            artist_query = artist_query
-                .join_rev(
-                    JoinType::InnerJoin,
-                    child::Entity::belongs_to(artist::Entity)
-                        .from(child::Column::ArtistId)
-                        .to(artist::Column::Id)
-                        .into(),
-                )
-                .filter(child::Column::MusicFolderId.eq(folder_id));
+            artist_query = artist_query.filter(
+                artist::Column::Id.in_subquery(
+                    Query::select()
+                        .column(song_artist::Column::ArtistId)
+                        .from(song_artist::Entity)
+                        .join(
+                            JoinType::InnerJoin,
+                            child::Entity,
+                            Expr::col(child::Column::Id).eq(Expr::col(song_artist::Column::SongId)),
+                        )
+                        .and_where(child::Column::MusicFolderId.eq(folder_id))
+                        .to_owned(),
+                ),
+            );
 
-            album_query = album_query
-                .join_rev(
-                    JoinType::InnerJoin,
-                    child::Entity::belongs_to(album::Entity)
-                        .from(child::Column::AlbumId)
-                        .to(album::Column::Id)
-                        .into(),
-                )
-                .filter(child::Column::MusicFolderId.eq(folder_id));
-            
+            album_query = album_query.filter(child::Column::MusicFolderId.eq(folder_id));
+
             song_query = song_query.filter(child::Column::MusicFolderId.eq(folder_id));
         }
 
