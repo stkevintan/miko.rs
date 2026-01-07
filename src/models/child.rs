@@ -101,7 +101,10 @@ impl Entity {
             .count(db)
             .await {
                 Ok(c) => c as i64,
-                Err(_) => 0,
+                Err(e) => {
+                    log::error!("Failed to count songs: {}", e);
+                    0
+                }
             }
     }
 }

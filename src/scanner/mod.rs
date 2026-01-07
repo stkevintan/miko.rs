@@ -135,10 +135,6 @@ impl Scanner {
                 continue;
             }
 
-            if !utils::is_audio_file(Path::new(&task.path)) {
-                continue;
-            }
-
             if incremental {
                 if let Some(last_mod) = existing_info.get(id) {
                     if task.mod_time <= *last_mod {
@@ -150,7 +146,8 @@ impl Scanner {
             let content_type = utils::get_content_type(Path::new(&task.path));
             let suffix = Path::new(&task.path).extension().and_then(|s| s.to_str()).unwrap_or_default().to_string();
 
-            let tag_data = match tags::read(Path::new(&task.path)) {
+            let path_for_tags = Path::new(&task.path).to_path_buf();
+            let tag_data = match tokio::task::spawn_blocking(move || tags::read(&path_for_tags)).await? {
                 Ok(t) => Some(t),
                 Err(e) => {
                     log::warn!("Failed to read tags for '{}': {}", &task.path, e);
@@ -286,8 +283,9 @@ impl Scanner {
                 if t.has_image {
                     let cover_path = cache_dir.join(&active_child.cover_art.as_ref());
                     if !cover_path.exists() {
-                        if let Ok(img_data) = tags::read_image(Path::new(&task.path)) {
-                            std::fs::write(cover_path, img_data)?;
+                        let path_for_img = Path::new(&task.path).to_path_buf();
+                        if let Ok(Ok(img_data)) = tokio::task::spawn_blocking(move || tags::read_image(&path_for_img)).await {
+                            tokio::fs::write(cover_path, img_data).await?;
                         }
                     }
                 }
@@ -486,7 +484,7 @@ impl Scanner {
 
         let cache_dir = utils::get_cover_cache_dir(&self.cfg);
         if !cache_dir.exists() {
-            std::fs::create_dir_all(&cache_dir)?;
+            tokio::fs::create_dir_all(&cache_dir).await?;
         }
 
         let mut seen_artists = HashSet::new();
@@ -534,11 +532,11 @@ impl Scanner {
         log::info!("Pruning deleted files and orphaned records...");
 
         // Delete junction records for songs that are NOT in _scanner_seen
-        self.db.execute_unprepared("DELETE FROM song_artists WHERE song_id NOT IN (SELECT id FROM _scanner_seen)").await?;
-        self.db.execute_unprepared("DELETE FROM song_genres WHERE song_id NOT IN (SELECT id FROM _scanner_seen)").await?;
+        self.db.execute_unprepared("DELETE FROM song_artists WHERE NOT EXISTS (SELECT 1 FROM _scanner_seen WHERE _scanner_seen.id = song_artists.song_id)").await?;
+        self.db.execute_unprepared("DELETE FROM song_genres WHERE NOT EXISTS (SELECT 1 FROM _scanner_seen WHERE _scanner_seen.id = song_genres.song_id)").await?;
 
         // Delete children that are NOT in _scanner_seen
-        self.db.execute_unprepared("DELETE FROM children WHERE id NOT IN (SELECT id FROM _scanner_seen)").await?;
+        self.db.execute_unprepared("DELETE FROM children WHERE NOT EXISTS (SELECT 1 FROM _scanner_seen WHERE _scanner_seen.id = children.id)").await?;
 
         // Drop the side table but keep it for next scan
         self.db.execute_unprepared("DELETE FROM _scanner_seen").await?;

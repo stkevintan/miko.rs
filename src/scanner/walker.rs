@@ -1,5 +1,5 @@
 use walkdir::WalkDir;
-use crate::models::music_folder;
+use crate::{models::music_folder, scanner::utils::is_audio_file};
 use tokio::sync::mpsc;
 use std::path::PathBuf;
 
@@ -21,13 +21,18 @@ impl Walker {
         folder: music_folder::Model,
         tx: mpsc::Sender<WalkTask>,
     ) {
-        tokio::spawn(async move {
+        tokio::task::spawn_blocking(move || {
             for entry in WalkDir::new(&path).into_iter().filter_map(|e| e.ok()) {
                 let metadata = match entry.metadata() {
                     Ok(m) => m,
                     Err(_) => continue,
                 };
-                
+
+                // filter only dir or audio files
+                if !metadata.is_dir() &&!is_audio_file(entry.path()){
+                    continue
+                }
+
                 let mod_time: chrono::DateTime<chrono::Utc> = metadata.modified()
                     .unwrap_or_else(|_| std::time::SystemTime::now())
                     .into();
@@ -41,7 +46,7 @@ impl Walker {
                     folder: folder.clone(),
                 };
 
-                if tx.send(task).await.is_err() {
+                if tx.blocking_send(task).is_err() {
                     break;
                 }
             }
