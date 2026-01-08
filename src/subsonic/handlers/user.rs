@@ -9,7 +9,7 @@ use poem::{
     IntoResponse,
 };
 use serde::Deserialize;
-use sea_orm::{DatabaseConnection, EntityTrait, LoaderTrait};
+use sea_orm::{DatabaseConnection, EntityTrait};
 use std::sync::Arc;
 
 #[derive(Deserialize)]
@@ -30,7 +30,11 @@ pub async fn get_users(
         );
     }
 
-    let users = match user::Entity::find().all(*db).await {
+    let users_with_folders = match user::Entity::find()
+        .find_with_related(music_folder::Entity)
+        .all(*db)
+        .await
+    {
         Ok(u) => u,
         Err(e) => {
             log::error!("Database error: {}", e);
@@ -41,26 +45,9 @@ pub async fn get_users(
         }
     };
 
-    let folders = match users.load_many(music_folder::Entity, *db).await {
-        Ok(f) => f,
-        Err(e) => {
-            log::error!("Database error loading folders: {}", e);
-            return send_response(
-                SubsonicResponse::new_error(0, "Database error".into()),
-                &params.f,
-            );
-        }
-    };
-
-    let subsonic_users: Vec<User> = users
+    let subsonic_users: Vec<User> = users_with_folders
         .into_iter()
-        .zip(folders.into_iter())
-        .map(|(u, f)| {
-            User::from_db(
-                u,
-                f.into_iter().map(|mf| mf.id).collect(),
-            )
-        })
+        .map(|(u, f)| User::from_db(u, f.into_iter().map(|mf| mf.id).collect()))
         .collect();
 
     send_response(
@@ -87,17 +74,20 @@ pub async fn get_user(
         );
     }
 
-    let user = match user::Entity::find_by_id(username.to_string())
+    let (user, folders) = match user::Entity::find_by_id(username.to_string())
         .find_with_related(music_folder::Entity)
         .all(*db)
         .await
     {
-        Ok(res) => {
-            if let Some((u, f)) = res.into_iter().next() {
-                Some((u, f))
-            } else {
-                None
-            }
+        Ok(mut res) if !res.is_empty() => {
+            let (u, f) = res.remove(0);
+            (u, f.into_iter().map(|mf| mf.id).collect::<Vec<_>>())
+        }
+        Ok(_) => {
+            return send_response(
+                SubsonicResponse::new_error(70, "User not found".into()),
+                &params.f,
+            );
         }
         Err(e) => {
             log::error!("Database error: {}", e);
@@ -105,16 +95,6 @@ pub async fn get_user(
                 SubsonicResponse::new_error(0, "Database error".into()),
                 &params.f,
             );
-        }
-    };
-
-    let (user, folders) = match user {
-        Some((u, f)) => (u, f.into_iter().map(|mf| mf.id).collect()),
-        None => {
-            return send_response(
-                SubsonicResponse::new_error(70, "User not found".into()),
-                &params.f,
-            )
         }
     };
 

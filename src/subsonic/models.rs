@@ -1,9 +1,8 @@
-use serde::{Deserialize, Serialize};
-use crate::models::{child, artist, user};
 use crate::browser::{
     AlbumWithStats, ArtistWithStats, GenreWithStats, PlaylistWithSongs, PlaylistWithStats,
 };
-
+use crate::models::{artist, child, user};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
@@ -25,7 +24,7 @@ pub struct SubsonicResponse {
     pub server_version: Option<String>,
     #[serde(rename = "@openSubsonic", skip_serializing_if = "Option::is_none")]
     pub open_subsonic: Option<bool>,
-    
+
     #[serde(rename = "$value")]
     pub body: SubsonicResponseBody,
 }
@@ -295,7 +294,10 @@ pub struct Child {
     pub content_type: Option<String>,
     #[serde(rename = "@suffix", skip_serializing_if = "Option::is_none")]
     pub suffix: Option<String>,
-    #[serde(rename = "@transcodedContentType", skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "@transcodedContentType",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub transcoded_content_type: Option<String>,
     #[serde(rename = "@transcodedSuffix", skip_serializing_if = "Option::is_none")]
     pub transcoded_suffix: Option<String>,
@@ -382,9 +384,10 @@ impl From<child::Model> for Child {
             genre: (!c.genre.is_empty()).then_some(c.genre),
             cover_art: c.cover_art,
             size: Some(c.size),
-            content_type: Some(c.content_type),
-            suffix: Some(c.suffix),
-            transcoded_content_type: (!c.transcoded_content_type.is_empty()).then_some(c.transcoded_content_type),
+            content_type: (!c.content_type.is_empty()).then_some(c.content_type),
+            suffix: (!c.suffix.is_empty()).then_some(c.suffix),
+            transcoded_content_type: (!c.transcoded_content_type.is_empty())
+                .then_some(c.transcoded_content_type),
             transcoded_suffix: (!c.transcoded_suffix.is_empty()).then_some(c.transcoded_suffix),
             duration: Some(c.duration),
             bit_rate: Some(c.bit_rate),
