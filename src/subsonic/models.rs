@@ -403,7 +403,7 @@ impl From<child::Model> for Child {
             album_id: (!c.album_id.is_empty()).then_some(c.album_id),
             artist_id: (!c.artist_id.is_empty()).then_some(c.artist_id),
             r#type: Some(c.r#type),
-            bookmark_position: Some(c.bookmark_position),
+            bookmark_position: None,
         }
     }
 }
