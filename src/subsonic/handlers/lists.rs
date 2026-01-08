@@ -1,12 +1,9 @@
-use crate::browser::{
-    map_album_to_child, map_album_to_id3, map_artist_with_stats_to_id3,
-    map_artist_with_stats_to_subsonic, map_child_to_subsonic, AlbumListOptions, Browser,
-};
+use crate::browser::{AlbumListOptions, Browser};
 use crate::subsonic::{
     common::{send_response, SubsonicParams},
     models::{
-        AlbumList, AlbumList2, RandomSongs, SongsByGenre, Starred, Starred2, SubsonicResponse,
-        SubsonicResponseBody,
+        AlbumID3, AlbumList, AlbumList2, Artist, ArtistID3, Child, RandomSongs, SongsByGenre,
+        Starred, Starred2, SubsonicResponse, SubsonicResponseBody,
     },
 };
 use poem::{
@@ -35,7 +32,7 @@ pub async fn get_album_list2(
     };
 
     let resp = SubsonicResponse::new_ok(SubsonicResponseBody::AlbumList2(AlbumList2 {
-        album: albums.into_iter().map(map_album_to_id3).collect(),
+        album: albums.into_iter().map(AlbumID3::from).collect(),
     }));
 
     send_response(resp, &params.f)
@@ -59,7 +56,7 @@ pub async fn get_album_list(
     };
 
     let resp = SubsonicResponse::new_ok(SubsonicResponseBody::AlbumList(AlbumList {
-        album: albums.into_iter().map(map_album_to_child).collect(),
+        album: albums.into_iter().map(Child::from_album_stats).collect(),
     }));
 
     send_response(resp, &params.f)
@@ -83,7 +80,7 @@ pub async fn get_random_songs(
     };
 
     let resp = SubsonicResponse::new_ok(SubsonicResponseBody::RandomSongs(RandomSongs {
-        song: songs.into_iter().map(map_child_to_subsonic).collect(),
+        song: songs.into_iter().map(Child::from).collect(),
     }));
 
     send_response(resp, &params.f)
@@ -131,7 +128,7 @@ pub async fn get_songs_by_genre(
     };
 
     let resp = SubsonicResponse::new_ok(SubsonicResponseBody::SongsByGenre(SongsByGenre {
-        song: songs.into_iter().map(map_child_to_subsonic).collect(),
+        song: songs.into_iter().map(Child::from).collect(),
     }));
 
     send_response(resp, &params.f)
@@ -159,12 +156,9 @@ pub async fn get_starred(
     };
 
     let resp = SubsonicResponse::new_ok(SubsonicResponseBody::Starred(Starred {
-        artist: artists
-            .into_iter()
-            .map(map_artist_with_stats_to_subsonic)
-            .collect(),
-        album: albums.into_iter().map(map_album_to_child).collect(),
-        song: songs.into_iter().map(map_child_to_subsonic).collect(),
+        artist: artists.into_iter().map(Artist::from).collect(),
+        album: albums.into_iter().map(Child::from_album_stats).collect(),
+        song: songs.into_iter().map(Child::from).collect(),
     }));
 
     send_response(resp, &params.f)
@@ -192,12 +186,9 @@ pub async fn get_starred2(
     };
 
     let resp = SubsonicResponse::new_ok(SubsonicResponseBody::Starred2(Starred2 {
-        artist: artists
-            .into_iter()
-            .map(map_artist_with_stats_to_id3)
-            .collect(),
-        album: albums.into_iter().map(map_album_to_id3).collect(),
-        song: songs.into_iter().map(map_child_to_subsonic).collect(),
+        artist: artists.into_iter().map(ArtistID3::from).collect(),
+        album: albums.into_iter().map(AlbumID3::from).collect(),
+        song: songs.into_iter().map(Child::from).collect(),
     }));
 
     send_response(resp, &params.f)

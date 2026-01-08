@@ -1,10 +1,10 @@
-use crate::browser::{
-    map_album_to_id3, map_artist_with_stats_to_id3, map_artist_with_stats_to_subsonic,
-    map_child_to_subsonic, Browser, SearchOptions,
-};
+use crate::browser::{Browser, SearchOptions};
 use crate::subsonic::{
     common::{send_response, SubsonicParams},
-    models::{SearchResult, SearchResult2, SearchResult3, SubsonicResponse, SubsonicResponseBody},
+    models::{
+        AlbumID3, Artist, ArtistID3, Child, SearchResult, SearchResult2, SearchResult3,
+        SubsonicResponse, SubsonicResponseBody,
+    },
 };
 use poem::{
     handler,
@@ -54,12 +54,9 @@ pub async fn search3(
         Ok((artists, albums, songs)) => {
             let resp =
                 SubsonicResponse::new_ok(SubsonicResponseBody::SearchResult3(SearchResult3 {
-                    artist: artists
-                        .into_iter()
-                        .map(map_artist_with_stats_to_id3)
-                        .collect(),
-                    album: albums.into_iter().map(map_album_to_id3).collect(),
-                    song: songs.into_iter().map(map_child_to_subsonic).collect(),
+                    artist: artists.into_iter().map(ArtistID3::from).collect(),
+                    album: albums.into_iter().map(AlbumID3::from).collect(),
+                    song: songs.into_iter().map(Child::from).collect(),
                 }));
             send_response(resp, &params.f)
         }
@@ -114,19 +111,16 @@ pub async fn search2(
             // Search2 uses Artist and Child (for albums)
             let resp =
                 SubsonicResponse::new_ok(SubsonicResponseBody::SearchResult2(SearchResult2 {
-                    artist: artists
-                        .into_iter()
-                        .map(map_artist_with_stats_to_subsonic)
-                        .collect(),
+                    artist: artists.into_iter().map(Artist::from).collect(),
                     album: albums
                         .into_iter()
                         .map(|a| {
-                            let mut c = crate::browser::map_album_to_child(a);
+                            let mut c = Child::from_album_stats(a);
                             c.is_dir = true;
                             c
                         })
                         .collect(),
-                    song: songs.into_iter().map(map_child_to_subsonic).collect(),
+                    song: songs.into_iter().map(Child::from).collect(),
                 }));
             send_response(resp, &params.f)
         }
@@ -161,7 +155,7 @@ pub async fn search(
             let resp = SubsonicResponse::new_ok(SubsonicResponseBody::SearchResult(SearchResult {
                 offset,
                 total_hits,
-                match_vec: songs.into_iter().map(map_child_to_subsonic).collect(),
+                match_vec: songs.into_iter().map(Child::from).collect(),
             }));
             send_response(resp, &params.f)
         }

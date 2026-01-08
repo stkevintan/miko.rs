@@ -1,16 +1,14 @@
-use crate::browser::{
-    map_album_to_id3, map_artist_to_subsonic, map_artist_with_stats_to_id3, map_child_to_subsonic,
-    map_genre_to_subsonic, Browser,
-};
+use crate::browser::Browser;
 use crate::config::Config;
 use crate::models::music_folder;
 use crate::scanner::Scanner;
 use crate::subsonic::{
     common::{send_response, SubsonicParams},
     models::{
-        AlbumInfo, AlbumWithSongsID3, ArtistInfo, ArtistInfo2, ArtistWithAlbumsID3, ArtistsID3,
-        Directory, Genres, Index, IndexID3, Indexes, MusicFolder, MusicFolders, SimilarSongs,
-        SimilarSongs2, SubsonicResponse, SubsonicResponseBody, TopSongs,
+        AlbumID3, AlbumInfo, AlbumWithSongsID3, Artist, ArtistID3, ArtistInfo, ArtistInfo2,
+        ArtistWithAlbumsID3, ArtistsID3, Child, Directory, Genre, Genres, Index, IndexID3, Indexes,
+        MusicFolder, MusicFolders, SimilarSongs, SimilarSongs2, SubsonicResponse,
+        SubsonicResponseBody, TopSongs,
     },
 };
 use poem::{
@@ -71,7 +69,7 @@ pub async fn get_indexes(
                 .into_iter()
                 .map(|(name, artists)| Index {
                     name,
-                    artist: artists.into_iter().map(map_artist_to_subsonic).collect(),
+                    artist: artists.into_iter().map(Artist::from).collect(),
                 })
                 .collect();
 
@@ -123,16 +121,8 @@ pub async fn get_music_directory(
                 average_rating: Some(data.dir.average_rating),
                 play_count: Some(data.dir.play_count),
                 total_count: Some(data.total_count),
-                child: data
-                    .children
-                    .into_iter()
-                    .map(map_child_to_subsonic)
-                    .collect(),
-                parents: data
-                    .parents
-                    .into_iter()
-                    .map(map_child_to_subsonic)
-                    .collect(),
+                child: data.children.into_iter().map(Child::from).collect(),
+                parents: data.parents.into_iter().map(Child::from).collect(),
             }));
 
             send_response(resp, &params.f)
@@ -164,7 +154,7 @@ pub async fn get_genres(
     };
 
     let resp = SubsonicResponse::new_ok(SubsonicResponseBody::Genres(Genres {
-        genre: genres.into_iter().map(map_genre_to_subsonic).collect(),
+        genre: genres.into_iter().map(Genre::from).collect(),
     }));
 
     send_response(resp, &params.f)
@@ -182,10 +172,7 @@ pub async fn get_artists(
                 .into_iter()
                 .map(|(name, artists)| IndexID3 {
                     name,
-                    artist: artists
-                        .into_iter()
-                        .map(map_artist_with_stats_to_id3)
-                        .collect(),
+                    artist: artists.into_iter().map(ArtistID3::from).collect(),
                 })
                 .collect();
 
@@ -218,8 +205,8 @@ pub async fn get_artist(
         Ok((artist, albums)) => {
             let resp =
                 SubsonicResponse::new_ok(SubsonicResponseBody::Artist(ArtistWithAlbumsID3 {
-                    artist: map_artist_with_stats_to_id3(artist),
-                    album: albums.into_iter().map(map_album_to_id3).collect(),
+                    artist: ArtistID3::from(artist),
+                    album: albums.into_iter().map(AlbumID3::from).collect(),
                 }));
 
             send_response(resp, &params.f)
@@ -245,8 +232,8 @@ pub async fn get_album(
     match browser.get_album(&id).await {
         Ok((album, songs)) => {
             let resp = SubsonicResponse::new_ok(SubsonicResponseBody::Album(AlbumWithSongsID3 {
-                album: map_album_to_id3(album),
-                song: songs.into_iter().map(map_child_to_subsonic).collect(),
+                album: AlbumID3::from(album),
+                song: songs.into_iter().map(Child::from).collect(),
             }));
 
             send_response(resp, &params.f)
@@ -271,8 +258,7 @@ pub async fn get_song(
 
     match browser.get_song(&id).await {
         Ok(song) => {
-            let resp =
-                SubsonicResponse::new_ok(SubsonicResponseBody::Song(map_child_to_subsonic(song)));
+            let resp = SubsonicResponse::new_ok(SubsonicResponseBody::Song(Child::from(song)));
             send_response(resp, &params.f)
         }
         Err(e) => {

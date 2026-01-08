@@ -9,3 +9,11 @@ pub async fn not_supported(params: Query<SubsonicParams>) -> impl IntoResponse {
         &params.f,
     )
 }
+
+#[handler]
+pub async fn not_implemented(params: Query<SubsonicParams>) -> impl IntoResponse {
+    send_response(
+        SubsonicResponse::new_error(0, "Not implemented".into()),
+        &params.f,
+    )
+}

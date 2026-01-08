@@ -1,9 +1,7 @@
-use crate::browser::{
-    map_playlist_to_subsonic, map_playlist_with_songs_to_subsonic, Browser, UpdatePlaylistOptions,
-};
+use crate::browser::{Browser, UpdatePlaylistOptions};
 use crate::models::user;
 use crate::subsonic::common::{send_response, SubsonicParams};
-use crate::subsonic::models::{Playlists, SubsonicResponse, SubsonicResponseBody};
+use crate::subsonic::models::{Playlist, Playlists, SubsonicResponse, SubsonicResponseBody};
 use poem::web::{Data, Query};
 use poem::{handler, IntoResponse};
 use serde::Deserialize;
@@ -26,7 +24,7 @@ pub async fn get_playlists(
 
     match browser.get_playlists(username, target_username).await {
         Ok(playlists) => {
-            let playlists: Vec<_> = playlists.into_iter().map(map_playlist_to_subsonic).collect();
+            let playlists: Vec<_> = playlists.into_iter().map(Playlist::from).collect();
             let resp = SubsonicResponse::new_ok(SubsonicResponseBody::Playlists(Playlists {
                 playlist: playlists,
             }));
@@ -53,7 +51,7 @@ pub async fn get_playlist(
 ) -> impl IntoResponse {
     match browser.get_playlist(query.id).await {
         Ok(Some(playlist)) => {
-            let subsonic_playlist = map_playlist_with_songs_to_subsonic(playlist);
+            let subsonic_playlist = Playlist::from(playlist);
             let resp = SubsonicResponse::new_ok(SubsonicResponseBody::Playlist(subsonic_playlist));
             send_response(resp, &params.f)
         }
@@ -127,7 +125,10 @@ pub async fn update_playlist(
         song_indices_to_remove: query.song_index_to_remove.clone().unwrap_or_default(),
     };
 
-    match browser.update_playlist(query.playlist_id, username, opts).await {
+    match browser
+        .update_playlist(query.playlist_id, username, opts)
+        .await
+    {
         Ok(_) => {
             let resp = SubsonicResponse::new_ok(SubsonicResponseBody::None);
             send_response(resp, &params.f)
