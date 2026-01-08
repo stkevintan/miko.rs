@@ -94,9 +94,7 @@ pub async fn search2(
                     album: albums
                         .into_iter()
                         .map(|a| {
-                            let mut c = Child::from_album_stats(a);
-                            c.is_dir = true;
-                            c
+                            Child::from_album_stats(a)
                         })
                         .collect(),
                     song: songs.into_iter().map(Child::from).collect(),
