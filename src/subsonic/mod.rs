@@ -11,8 +11,8 @@ macro_rules! subsonic_routes {
     ($route:expr, $(($path:literal, $handler:expr)),* $(,)?) => {
         $route
             $(
-                .at($path, poem::get($handler).head($handler))
-                .at(concat!($path, ".view"), poem::get($handler).head($handler))
+                .at($path, $handler)
+                .at(concat!($path, ".view"), $handler)
             )*
     };
 }

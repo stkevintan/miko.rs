@@ -7,33 +7,27 @@ pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
     pub id: String,
     #[sea_orm(index)]
-    pub parent: String,
+    pub parent: Option<String>,
     pub is_dir: bool,
     #[sea_orm(index)]
     pub title: String,
     #[sea_orm(index)]
-    pub album: String,
+    pub album: Option<String>,
     #[sea_orm(index)]
-    pub artist: String,
+    pub artist: Option<String>,
     #[sea_orm(default_value = 0)]
     pub track: i32,
     #[sea_orm(default_value = 0)]
     pub year: i32,
     #[sea_orm(index)]
-    pub genre: String,
-    #[sea_orm(default_value = "")]
-    pub lyrics: String,
-    pub cover_art: Option<String>,
+    pub genre: Option<String>,
+    pub lyrics: Option<String>,
     #[sea_orm(default_value = 0)]
     pub size: i64,
-    #[sea_orm(default_value = "")]
-    pub content_type: String,
-    #[sea_orm(default_value = "")]
-    pub suffix: String,
-    #[sea_orm(default_value = "")]
-    pub transcoded_content_type: String,
-    #[sea_orm(default_value = "")]
-    pub transcoded_suffix: String,
+    pub content_type: Option<String>,
+    pub suffix: Option<String>,
+    pub transcoded_content_type: Option<String>,
+    pub transcoded_suffix: Option<String>,
     #[sea_orm(default_value = 0)]
     pub duration: i32,
     #[sea_orm(default_value = 0)]
@@ -53,10 +47,10 @@ pub struct Model {
     pub disc_number: i32,
     pub created: Option<DateTimeUtc>,
     pub starred: Option<DateTimeUtc>,
-    #[sea_orm(index, default_value = "")]
-    pub album_id: String,
-    #[sea_orm(index, default_value = "")]
-    pub artist_id: String,
+    #[sea_orm(index)]
+    pub album_id: Option<String>,
+    #[sea_orm(index)]
+    pub artist_id: Option<String>,
     #[sea_orm(index)]
     pub music_folder_id: i32,
     #[sea_orm(default_value = "music")]

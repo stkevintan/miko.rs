@@ -7,7 +7,8 @@ use sea_orm::sea_query::{Expr, Query};
 
 impl Browser {
     pub async fn search(&self, opts: SearchOptions) -> Result<(Vec<ArtistWithStats>, Vec<AlbumWithStats>, Vec<child::Model>), DbErr> {
-        let search_query = format!("%{}%", opts.query);
+        let clean_query = opts.query.trim().trim_matches('"');
+        let search_query = format!("%{}%", clean_query);
         
         // Artists
         let mut artist_query = artist::Entity::find()
@@ -91,7 +92,8 @@ impl Browser {
     }
 
     pub async fn search_songs(&self, query: &str, count: u64, offset: u64) -> Result<(Vec<child::Model>, u64), DbErr> {
-        let search_query = format!("%{}%", query);
+        let clean_query = query.trim().trim_matches('"');
+        let search_query = format!("%{}%", clean_query);
         
         let q = child::Entity::find()
             .filter(child::Column::IsDir.eq(false))

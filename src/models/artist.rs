@@ -7,7 +7,6 @@ pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
     pub id: String,
     pub name: String,
-    pub cover_art: Option<String>,
     pub artist_image_url: Option<String>,
     pub starred: Option<DateTimeUtc>,
     #[sea_orm(default_value = 0)]

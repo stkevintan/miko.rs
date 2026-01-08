@@ -24,7 +24,7 @@ impl Browser {
                         owner: Set(owner),
                         created_at: Set(now),
                         updated_at: Set(now),
-                        comment: Set("".to_string()),
+                        comment: Set(None),
                         public: Set(false),
                         ..Default::default()
                     };
@@ -78,7 +78,7 @@ impl Browser {
                         p.name = Set(name);
                     }
                     if let Some(comment) = opts.comment {
-                        p.comment = Set(comment);
+                        p.comment = Set(Some(comment));
                     }
                     if let Some(public) = opts.public {
                         p.public = Set(public);

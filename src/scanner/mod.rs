@@ -102,7 +102,8 @@ impl Scanner {
 
         for id in &ids {
             let task = task_map.get(id).unwrap();
-            let parent_id = utils::get_parent_id(&task.path, task.folder.id, &task.folder.path).unwrap_or_default();
+            let parent_id = utils::get_parent_id(&task.path, task.folder.id, &task.folder.path)
+                .filter(|s| !s.is_empty());
             
             seen_ids_to_flush.push(id.clone());
 
@@ -114,17 +115,16 @@ impl Scanner {
                     title: Set(task.name.clone()),
                     path: Set(task.path.clone()),
                     music_folder_id: Set(task.folder.id),
-                    album: Set("".to_string()),
-                    artist: Set("".to_string()),
-                    genre: Set("".to_string()),
-                    lyrics: Set("".to_string()),
-                    cover_art: Set(None),
-                    content_type: Set("".to_string()),
-                    suffix: Set("".to_string()),
-                    transcoded_content_type: Set("".to_string()),
-                    transcoded_suffix: Set("".to_string()),
-                    album_id: Set("".to_string()),
-                    artist_id: Set("".to_string()),
+                    album: Set(None),
+                    artist: Set(None),
+                    genre: Set(None),
+                    lyrics: Set(None),
+                    content_type: Set(None),
+                    suffix: Set(None),
+                    transcoded_content_type: Set(None),
+                    transcoded_suffix: Set(None),
+                    album_id: Set(None),
+                    artist_id: Set(None),
                     r#type: Set("directory".to_string()),
                     track: Set(0),
                     year: Set(0),
@@ -173,22 +173,25 @@ impl Scanner {
                 id: Set(id.clone()),
                 parent: Set(parent_id),
                 is_dir: Set(false),
-                title: Set(tag_data.as_ref().map(|t| t.title.clone()).unwrap_or(task.name.clone())),
+                title: Set(tag_data
+                    .as_ref()
+                    .filter(|t| !t.title.trim().is_empty())
+                    .map(|t| t.title.clone())
+                    .unwrap_or_else(|| task.name.clone())),
                 path: Set(task.path.clone()),
                 size: Set(task.size as i64),
-                suffix: Set(suffix),
-                content_type: Set(content_type),
+                suffix: Set(Some(suffix)),
+                content_type: Set(Some(content_type)),
                 created: Set(Some(task.mod_time)),
                 music_folder_id: Set(task.folder.id),
-                artist: Set("".to_string()),
-                album: Set("".to_string()),
-                genre: Set("".to_string()),
-                lyrics: Set("".to_string()),
-                cover_art: Set(None),
-                transcoded_content_type: Set("".to_string()),
-                transcoded_suffix: Set("".to_string()),
-                album_id: Set("".to_string()),
-                artist_id: Set("".to_string()),
+                artist: Set(None),
+                album: Set(None),
+                genre: Set(None),
+                lyrics: Set(None),
+                transcoded_content_type: Set(None),
+                transcoded_suffix: Set(None),
+                album_id: Set(None),
+                artist_id: Set(None),
                 r#type: Set("music".to_string()),
                 track: Set(0),
                 year: Set(0),
@@ -203,24 +206,29 @@ impl Scanner {
             };
 
             if let Some(t) = tag_data {
-                active_child.album = Set(t.album.clone());
+                active_child.album = Set((!t.album.trim().is_empty()).then(|| t.album.clone()));
                 active_child.track = Set(t.track.unwrap_or(0));
                 active_child.disc_number = Set(t.disc.unwrap_or(0));
                 active_child.year = Set(t.year.unwrap_or(0));
-                active_child.genre = Set(t.genre.clone());
-                active_child.lyrics = Set(t.lyrics.clone());
+                active_child.genre = Set((!t.genre.trim().is_empty()).then(|| t.genre.clone()));
+                active_child.lyrics = Set((!t.lyrics.trim().is_empty()).then(|| t.lyrics.clone()));
                 active_child.duration = Set(t.duration);
                 active_child.bit_rate = Set(t.bitrate);
 
                 let mut new_artists = Vec::new();
-                for a_name in &t.artists {
+                let filtered_artists: Vec<String> = t.artists.iter()
+                    .map(|a| a.trim())
+                    .filter(|a| !a.is_empty())
+                    .map(|a| a.to_string())
+                    .collect();
+
+                for a_name in &filtered_artists {
                     let a_id = utils::generate_artist_id(a_name);
                     many_to_many_artists.push(a_id.clone());
                     if !seen_artists.contains(&a_id) {
                         new_artists.push(artist::ActiveModel {
                             id: Set(a_id.clone()),
                             name: Set(a_name.clone()),
-                            cover_art: Set(Some(format!("ar-{}", a_id))),
                             artist_image_url: Set(None),
                             user_rating: Set(0),
                             average_rating: Set(0.0),
@@ -241,16 +249,25 @@ impl Scanner {
                         .await?;
                 }
 
-                active_child.artist = Set(t.artist.clone());
+                active_child.artist = Set((!t.artist.trim().is_empty()).then(|| t.artist.clone()));
                 if let Some(first_id) = many_to_many_artists.first() {
-                    active_child.artist_id = Set(first_id.clone());
+                    active_child.artist_id = Set(Some(first_id.clone()));
                 }
 
-                if !t.album.is_empty() {
-                    let album_artists = if t.album_artists.is_empty() {
-                        t.artists.clone()
+                if !t.album.trim().is_empty() {
+                    let album_artists = if filtered_artists.is_empty() {
+                        let filtered_album_artists: Vec<String> = t.album_artists.iter()
+                            .map(|a| a.trim())
+                            .filter(|a| !a.is_empty())
+                            .map(|a| a.to_string())
+                            .collect();
+                        if filtered_album_artists.is_empty() {
+                            vec!["Unknown Artist".to_string()]
+                        } else {
+                            filtered_album_artists
+                        }
                     } else {
-                        t.album_artists.clone()
+                        filtered_artists.clone()
                     };
                     let album_id = self
                         .ensure_album(
@@ -263,14 +280,17 @@ impl Scanner {
                             seen_albums,
                         )
                         .await?;
-                    active_child.album_id = Set(album_id.clone());
-                    active_child.cover_art = Set(Some(format!("al-{}", album_id)));
-                } else {
-                    active_child.cover_art = Set(Some(id.clone()));
+                    active_child.album_id = Set(Some(album_id.clone()));
                 }
 
                 let mut new_genres = Vec::new();
-                for g_name in &t.genres {
+                let filtered_genres: Vec<String> = t.genres.iter()
+                    .map(|g| g.trim())
+                    .filter(|g| !g.is_empty())
+                    .map(|g| g.to_string())
+                    .collect();
+
+                for g_name in &filtered_genres {
                     many_to_many_genres.push(g_name.clone());
                     if !seen_genres.contains(g_name) {
                         new_genres.push(genre::ActiveModel {
@@ -292,13 +312,16 @@ impl Scanner {
                 }
 
                 if t.has_image {
-                    if let Some(ref cover_art) = active_child.cover_art.as_ref() {
-                        let cover_path = cache_dir.join(cover_art);
-                        if !cover_path.exists() {
-                            let path_for_img = Path::new(&task.path).to_path_buf();
-                            if let Ok(Ok(img_data)) = tokio::task::spawn_blocking(move || tags::read_image(&path_for_img)).await {
-                                tokio::fs::write(cover_path, img_data).await?;
-                            }
+                    let cover_art_id = if let Some(aid) = active_child.album_id.as_ref().as_ref() {
+                        format!("al-{}", aid)
+                    } else {
+                        id.clone()
+                    };
+                    let cover_path = cache_dir.join(&cover_art_id);
+                    if !cover_path.exists() {
+                        let path_for_img = Path::new(&task.path).to_path_buf();
+                        if let Ok(Ok(img_data)) = tokio::task::spawn_blocking(move || tags::read_image(&path_for_img)).await {
+                            tokio::fs::write(cover_path, img_data).await?;
                         }
                     }
                 }
@@ -324,7 +347,6 @@ impl Scanner {
                         child::Column::BitRate,
                         child::Column::ArtistId,
                         child::Column::AlbumId,
-                        child::Column::CoverArt,
                     ])
                     .to_owned()
             ).exec_without_returning(&self.db).await?;
@@ -409,7 +431,6 @@ impl Scanner {
             let obj = artist::ActiveModel {
                 id: Set(id.clone()),
                 name: Set(name.to_string()),
-                cover_art: Set(Some(format!("ar-{}", id))),
                 artist_image_url: Set(None),
                 user_rating: Set(0),
                 average_rating: Set(0.0),
@@ -451,12 +472,11 @@ impl Scanner {
             let obj = album::ActiveModel {
                 id: Set(id.clone()),
                 name: Set(name),
-                artist: Set(artist_name.clone()),
-                artist_id: Set(artist_id),
+                artist: Set((!artist_name.trim().is_empty()).then(|| artist_name.clone())),
+                artist_id: Set(Some(artist_id)),
                 created: Set(created),
-                cover_art: Set(Some(format!("al-{}", id))),
                 year: Set(year),
-                genre: Set(genre),
+                genre: Set((!genre.trim().is_empty()).then(|| genre)),
                 user_rating: Set(0),
                 average_rating: Set(0.0),
                 ..Default::default()

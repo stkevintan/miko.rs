@@ -7,11 +7,8 @@ pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
     pub id: String,
     pub name: String,
-    #[sea_orm(default_value = "")]
-    pub artist: String,
-    #[sea_orm(default_value = "")]
-    pub artist_id: String,
-    pub cover_art: Option<String>,
+    pub artist: Option<String>,
+    pub artist_id: Option<String>,
     pub created: DateTimeUtc,
     pub starred: Option<DateTimeUtc>,
     #[sea_orm(default_value = 0)]
@@ -20,8 +17,7 @@ pub struct Model {
     pub average_rating: f64,
     #[sea_orm(default_value = 0)]
     pub year: i32,
-    #[sea_orm(default_value = "")]
-    pub genre: String,
+    pub genre: Option<String>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

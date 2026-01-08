@@ -129,11 +129,7 @@ pub async fn get_music_directory(
         Ok(data) => {
             let resp = SubsonicResponse::new_ok(SubsonicResponseBody::Directory(Directory {
                 id: data.dir.id,
-                parent: if data.dir.parent.is_empty() {
-                    None
-                } else {
-                    Some(data.dir.parent)
-                },
+                parent: data.dir.parent,
                 name: data.dir.title,
                 starred: data.dir.starred,
                 user_rating: Some(data.dir.user_rating),

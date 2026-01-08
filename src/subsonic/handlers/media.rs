@@ -12,7 +12,7 @@ use poem::{
     web::{Data, Query, StaticFileRequest},
     IntoResponse,
 };
-use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, QuerySelect};
+use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter};
 use serde::Deserialize;
 use std::path::Path;
 use std::sync::Arc;
@@ -157,14 +157,17 @@ pub async fn get_cover_art(
     let cover_art = if id.starts_with("al-") || id.starts_with("ar-") {
         id.to_string()
     } else {
-        match child::Entity::find()
-            .filter(child::Column::Id.eq(id))
-            .select_only()
-            .column(child::Column::CoverArt)
+        match child::Entity::find_by_id(id.to_string())
             .one(*db)
             .await
         {
-            Ok(Some(s)) => s.cover_art.unwrap_or_default(),
+            Ok(Some(s)) => {
+                if let Some(aid) = s.album_id {
+                    format!("al-{}", aid)
+                } else {
+                    s.id
+                }
+            }
             Ok(None) => {
                 return send_response(
                     SubsonicResponse::new_error(70, "Cover art not found".into()),
@@ -247,9 +250,9 @@ pub async fn get_lyrics(
     };
 
     let resp = SubsonicResponse::new_ok(SubsonicResponseBody::Lyrics(Lyrics {
-        artist: Some(song.artist),
+        artist: song.artist,
         title: Some(song.title),
-        value: song.lyrics,
+        value: song.lyrics.unwrap_or_default(),
     }));
 
     send_response(resp, &params.f)
@@ -268,14 +271,17 @@ pub async fn get_lyrics_by_song_id(
         Err(r) => return r,
     };
 
-    if song.lyrics.is_empty() {
-        return send_response(
-            SubsonicResponse::new_error(70, "Lyrics not found".into()),
-            &params.f,
-        );
-    }
+    let lyrics = match song.lyrics.as_ref() {
+        Some(l) if !l.is_empty() => l,
+        _ => {
+            return send_response(
+                SubsonicResponse::new_error(70, "Lyrics not found".into()),
+                &params.f,
+            )
+        }
+    };
 
-    let (synced, parsed_lines) = lyric::parse(&song.lyrics);
+    let (synced, parsed_lines) = lyric::parse(lyrics);
     let lines = parsed_lines
         .into_iter()
         .map(|(start, value)| LyricsLine { start, value })
@@ -285,7 +291,7 @@ pub async fn get_lyrics_by_song_id(
         structured_lyrics: vec![StructuredLyrics {
             synced,
             lang: Some("xxx".to_string()),
-            display_artist: Some(song.artist),
+            display_artist: song.artist,
             display_title: Some(song.title),
             lines,
         }],

@@ -219,7 +219,7 @@ impl From<artist::Model> for Artist {
         Self {
             id: a.id,
             name: a.name,
-            artist_image_url: a.artist_image_url.filter(|s| !s.is_empty()),
+            artist_image_url: a.artist_image_url,
             starred: a.starred,
             user_rating: Some(a.user_rating),
             average_rating: Some(a.average_rating),
@@ -336,16 +336,16 @@ pub struct Child {
 impl Child {
     pub fn from_album_stats(a: AlbumWithStats) -> Self {
         Self {
-            id: a.id,
+            id: a.id.clone(),
             parent: None,
             is_dir: true,
             title: a.name,
             album: None,
-            artist: Some(a.artist),
+            artist: a.artist,
             track: None,
             year: Some(a.year),
-            genre: Some(a.genre),
-            cover_art: a.cover_art,
+            genre: a.genre,
+            cover_art: Some(format!("al-{}", a.id)),
             size: None,
             content_type: None,
             suffix: None,
@@ -363,7 +363,7 @@ impl Child {
             created: Some(a.created),
             starred: a.starred,
             album_id: None,
-            artist_id: Some(a.artist_id),
+            artist_id: a.artist_id,
             r#type: None,
             bookmark_position: None,
         }
@@ -372,23 +372,27 @@ impl Child {
 
 impl From<child::Model> for Child {
     fn from(c: child::Model) -> Self {
+        let cover_art = if let Some(ref aid) = c.album_id {
+            Some(format!("al-{}", aid))
+        } else {
+            Some(c.id.clone())
+        };
         Self {
             id: c.id,
-            parent: (!c.parent.is_empty()).then_some(c.parent),
+            parent: c.parent,
             is_dir: c.is_dir,
             title: c.title,
-            album: (!c.album.is_empty()).then_some(c.album),
-            artist: (!c.artist.is_empty()).then_some(c.artist),
+            album: c.album,
+            artist: c.artist,
             track: Some(c.track),
             year: Some(c.year),
-            genre: (!c.genre.is_empty()).then_some(c.genre),
-            cover_art: c.cover_art,
+            genre: c.genre,
+            cover_art,
             size: Some(c.size),
-            content_type: (!c.content_type.is_empty()).then_some(c.content_type),
-            suffix: (!c.suffix.is_empty()).then_some(c.suffix),
-            transcoded_content_type: (!c.transcoded_content_type.is_empty())
-                .then_some(c.transcoded_content_type),
-            transcoded_suffix: (!c.transcoded_suffix.is_empty()).then_some(c.transcoded_suffix),
+            content_type: c.content_type,
+            suffix: c.suffix,
+            transcoded_content_type: c.transcoded_content_type,
+            transcoded_suffix: c.transcoded_suffix,
             duration: Some(c.duration),
             bit_rate: Some(c.bit_rate),
             path: (!c.path.is_empty()).then_some(c.path),
@@ -400,8 +404,8 @@ impl From<child::Model> for Child {
             disc_number: Some(c.disc_number),
             created: c.created,
             starred: c.starred,
-            album_id: (!c.album_id.is_empty()).then_some(c.album_id),
-            artist_id: (!c.artist_id.is_empty()).then_some(c.artist_id),
+            album_id: c.album_id,
+            artist_id: c.artist_id,
             r#type: Some(c.r#type),
             bookmark_position: None,
         }
@@ -473,9 +477,9 @@ pub struct ArtistID3 {
 impl From<ArtistWithStats> for ArtistID3 {
     fn from(a: ArtistWithStats) -> Self {
         Self {
-            id: a.id,
+            id: a.id.clone(),
             name: a.name,
-            cover_art: a.cover_art,
+            cover_art: Some(format!("ar-{}", a.id)),
             artist_image_url: a.artist_image_url,
             album_count: a.album_count as i32,
             starred: a.starred,
@@ -528,11 +532,11 @@ pub struct AlbumID3 {
 impl From<AlbumWithStats> for AlbumID3 {
     fn from(a: AlbumWithStats) -> Self {
         Self {
-            id: a.id,
+            id: a.id.clone(),
             name: a.name,
-            artist: Some(a.artist),
-            artist_id: Some(a.artist_id),
-            cover_art: a.cover_art,
+            artist: a.artist,
+            artist_id: a.artist_id,
+            cover_art: Some(format!("al-{}", a.id)),
             song_count: a.song_count as i32,
             duration: a.duration as i32,
             play_count: Some(a.play_count),
@@ -541,7 +545,7 @@ impl From<AlbumWithStats> for AlbumID3 {
             user_rating: Some(a.user_rating),
             average_rating: Some(a.average_rating),
             year: Some(a.year),
-            genre: Some(a.genre),
+            genre: a.genre,
         }
     }
 }
@@ -688,7 +692,7 @@ impl From<PlaylistWithStats> for Playlist {
         Self {
             id: p.id.to_string(),
             name: p.name,
-            comment: (!p.comment.is_empty()).then_some(p.comment),
+            comment: p.comment,
             owner: p.owner,
             public: p.public,
             song_count: p.song_count as i32,

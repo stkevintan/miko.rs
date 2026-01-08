@@ -13,7 +13,7 @@ impl Browser {
     ) -> Result<Vec<(String, Vec<artist::Model>)>, DbErr> {
         let mut query = child::Entity::find()
             .filter(child::Column::IsDir.eq(true))
-            .filter(child::Column::Parent.eq(""));
+            .filter(child::Column::Parent.is_null());
 
         if let Some(f_id) = folder_id {
             query = query.filter(child::Column::MusicFolderId.eq(f_id));
@@ -26,7 +26,6 @@ impl Browser {
             .map(|child| artist::Model {
                 id: child.id,
                 name: child.title,
-                cover_art: child.cover_art,
                 artist_image_url: None,
                 starred: None,
                 user_rating: 0,
@@ -70,10 +69,10 @@ impl Browser {
         let children = query.all(&self.db).await?;
 
         let mut parents = Vec::new();
-        if !dir.parent.is_empty() {
-            let mut current_parent_id = dir.parent.clone();
-            while !current_parent_id.is_empty() {
-                if let Some(p) = child::Entity::find_by_id(current_parent_id.clone())
+        if let Some(parent_id) = dir.parent.as_ref() {
+            let mut current_parent_id = Some(parent_id.clone());
+            while let Some(pid) = current_parent_id {
+                if let Some(p) = child::Entity::find_by_id(pid)
                     .one(&self.db)
                     .await?
                 {

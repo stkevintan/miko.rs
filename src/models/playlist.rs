@@ -7,7 +7,7 @@ pub struct Model {
     #[sea_orm(primary_key)]
     pub id: i32,
     pub name: String,
-    pub comment: String,
+    pub comment: Option<String>,
     pub owner: String,
     pub public: bool,
     pub created_at: DateTimeUtc,
