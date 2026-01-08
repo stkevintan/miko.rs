@@ -5,6 +5,7 @@ use crate::subsonic::common::{send_response, SubsonicParams};
 use crate::subsonic::models::{
     Lyrics, LyricsLine, LyricsList, StructuredLyrics, SubsonicResponse, SubsonicResponseBody,
 };
+use once_cell::sync::Lazy;
 use poem::{
     handler,
     http::StatusCode,
@@ -15,6 +16,9 @@ use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, QuerySe
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
+
+static LYRICS_RE: Lazy<regex::Regex> =
+    Lazy::new(|| regex::Regex::new(r"^\[(\d+):(\d+)\.(\d+)\](.*)$").unwrap());
 
 #[handler]
 pub async fn stream(
@@ -121,12 +125,16 @@ pub async fn download(
     match file_req.create_response(path, false, false) {
         Ok(resp) => {
             let mut res = resp.into_response();
-            res.headers_mut().insert(
-                poem::http::header::CONTENT_DISPOSITION,
-                format!("attachment; filename=\"{}\"", filename)
-                    .parse()
-                    .unwrap(),
-            );
+            if let Ok(header) = format!("attachment; filename=\"{}\"", filename).parse() {
+                res.headers_mut()
+                    .insert(poem::http::header::CONTENT_DISPOSITION, header);
+            } else {
+                log::error!(
+                    "Failed to create Content-Disposition header for filename: {}",
+                    filename
+                );
+                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+            }
             res
         }
         Err(e) => {
@@ -157,11 +165,18 @@ pub async fn get_cover_art(
             .await
         {
             Ok(Some(s)) => s.cover_art.unwrap_or_default(),
-            _ => {
+            Ok(None) => {
                 return send_response(
                     SubsonicResponse::new_error(70, "Cover art not found".into()),
                     &params.f,
                 )
+            }
+            Err(e) => {
+                log::error!("Database error: {}", e);
+                return send_response(
+                    SubsonicResponse::new_error(0, "Database error".into()),
+                    &params.f,
+                );
             }
         }
     };
@@ -174,12 +189,26 @@ pub async fn get_cover_art(
     }
 
     let cache_dir = get_cover_cache_dir(&config);
-    let cache_path = cache_dir.join(&cover_art);
+    // Sanitize to prevent path traversal
+    let safe_cover_art = Path::new(&cover_art)
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or_default();
+
+    if safe_cover_art.is_empty() || safe_cover_art != cover_art {
+        log::warn!("Potentially malicious cover art path: {}", cover_art);
+        return StatusCode::BAD_REQUEST.into_response();
+    }
+
+    let cache_path = cache_dir.join(safe_cover_art);
 
     if cache_path.exists() {
         return match file_req.create_response(&cache_path, false, false) {
             Ok(resp) => resp.into_response(),
-            Err(_) => StatusCode::NOT_FOUND.into_response(),
+            Err(e) => {
+                log::error!("Error serving cover art: {:?}", e);
+                StatusCode::INTERNAL_SERVER_ERROR.into_response()
+            }
         };
     }
 
@@ -218,11 +247,18 @@ pub async fn get_lyrics(
         .await
     {
         Ok(Some(s)) => s,
-        _ => {
+        Ok(None) => {
             return send_response(
                 SubsonicResponse::new_error(70, "Lyrics not found".into()),
                 &params.f,
             )
+        }
+        Err(e) => {
+            log::error!("Database error: {}", e);
+            return send_response(
+                SubsonicResponse::new_error(0, "Database error".into()),
+                &params.f,
+            );
         }
     };
 
@@ -249,11 +285,18 @@ pub async fn get_lyrics_by_song_id(
         .await
     {
         Ok(Some(s)) => s,
-        _ => {
+        Ok(None) => {
             return send_response(
                 SubsonicResponse::new_error(70, "Lyrics not found".into()),
                 &params.f,
             )
+        }
+        Err(e) => {
+            log::error!("Database error: {}", e);
+            return send_response(
+                SubsonicResponse::new_error(0, "Database error".into()),
+                &params.f,
+            );
         }
     };
 
@@ -267,16 +310,13 @@ pub async fn get_lyrics_by_song_id(
     let mut lines = Vec::new();
     let mut synced = true;
 
-    // regex: ^\[(\d+):(\d+)\.(\d+)\](.*)$
-    let re = regex::Regex::new(r"^\[(\d+):(\d+)\.(\d+)\](.*)$").unwrap();
-
     for row in song.lyrics.lines() {
         let row = row.trim();
         if row.is_empty() {
             continue;
         }
 
-        if let Some(caps) = re.captures(row) {
+        if let Some(caps) = LYRICS_RE.captures(row) {
             let min: i32 = caps[1].parse().unwrap_or(0);
             let sec: i32 = caps[2].parse().unwrap_or(0);
             let ms_str = &caps[3];
