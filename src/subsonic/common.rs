@@ -2,23 +2,7 @@ use poem::Response;
 use crate::subsonic::models::SubsonicResponse;
 use serde::Deserialize;
 
-#[macro_export]
-macro_rules! get_id_or_error {
-    ($query:expr, $params:expr) => {
-        match $query.get("id") {
-            Some(id) => id,
-            None => {
-                return $crate::subsonic::common::send_response(
-                    $crate::subsonic::models::SubsonicResponse::new_error(10, "ID is required".into()),
-                    &$params.f
-                );
-            }
-        }
-    };
-}
-
 #[derive(Deserialize, Debug, Default)]
-#[allow(dead_code)]
 pub struct SubsonicParams {
     pub u: Option<String>,
     pub p: Option<String>,

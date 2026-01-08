@@ -8,9 +8,14 @@ use poem::{
     web::{Data, Query},
     IntoResponse,
 };
+use serde::Deserialize;
 use sea_orm::{DatabaseConnection, EntityTrait, LoaderTrait};
-use std::collections::HashMap;
 use std::sync::Arc;
+
+#[derive(Deserialize)]
+pub struct GetUserQuery {
+    pub username: String,
+}
 
 #[handler]
 pub async fn get_users(
@@ -71,19 +76,10 @@ pub async fn get_user(
     db: Data<&DatabaseConnection>,
     current_user: Data<&Arc<user::Model>>,
     params: Query<SubsonicParams>,
-    query: Query<HashMap<String, String>>,
+    query: Query<GetUserQuery>,
 ) -> impl IntoResponse {
-    
+    let username = &query.username;
 
-    let username = match query.get("username") {
-        Some(u) => u,
-        None => {
-            return send_response(
-                SubsonicResponse::new_error(10, "Username is required".into()),
-                &params.f,
-            )
-        }
-    };
     if !current_user.admin_role && current_user.username != *username {
         return send_response(
             SubsonicResponse::new_error(40, "The user is not authorized for the given operation.".into()),

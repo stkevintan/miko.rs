@@ -11,8 +11,29 @@ use poem::{
     web::{Data, Query},
     IntoResponse,
 };
-use std::collections::HashMap;
+use serde::Deserialize;
 use std::sync::Arc;
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SongsByGenreQuery {
+    pub genre: String,
+    #[serde(default = "default_count")]
+    pub count: u64,
+    #[serde(default)]
+    pub offset: u64,
+    pub music_folder_id: Option<i32>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MusicFolderQuery {
+    pub music_folder_id: Option<i32>,
+}
+
+fn default_count() -> u64 {
+    10
+}
 
 #[handler]
 pub async fn get_album_list2(
@@ -90,32 +111,15 @@ pub async fn get_random_songs(
 pub async fn get_songs_by_genre(
     browser: Data<&Arc<Browser>>,
     params: Query<SubsonicParams>,
-    query: Query<HashMap<String, String>>,
+    query: Query<SongsByGenreQuery>,
 ) -> impl IntoResponse {
-    let genre = match query.get("genre") {
-        Some(g) => g,
-        None => {
-            return send_response(
-                SubsonicResponse::new_error(10, "Genre is required".into()),
-                &params.f,
-            );
-        }
-    };
-
-    let count = query
-        .get("count")
-        .and_then(|v| v.parse::<u64>().ok())
-        .unwrap_or(10);
-    let offset = query
-        .get("offset")
-        .and_then(|v| v.parse::<u64>().ok())
-        .unwrap_or(0);
-    let music_folder_id = query
-        .get("musicFolderId")
-        .and_then(|v| v.parse::<i32>().ok());
-
     let songs = match browser
-        .get_songs_by_genre(genre, count, offset, music_folder_id)
+        .get_songs_by_genre(
+            &query.genre,
+            query.count,
+            query.offset,
+            query.music_folder_id,
+        )
         .await
     {
         Ok(s) => s,
@@ -138,11 +142,9 @@ pub async fn get_songs_by_genre(
 pub async fn get_starred(
     browser: Data<&Arc<Browser>>,
     params: Query<SubsonicParams>,
-    query: Query<HashMap<String, String>>,
+    query: Query<MusicFolderQuery>,
 ) -> impl IntoResponse {
-    let music_folder_id = query
-        .get("musicFolderId")
-        .and_then(|v| v.parse::<i32>().ok());
+    let music_folder_id = query.music_folder_id;
 
     let (artists, albums, songs) = match browser.get_starred_items(music_folder_id).await {
         Ok(res) => res,
@@ -168,11 +170,9 @@ pub async fn get_starred(
 pub async fn get_starred2(
     browser: Data<&Arc<Browser>>,
     params: Query<SubsonicParams>,
-    query: Query<HashMap<String, String>>,
+    query: Query<MusicFolderQuery>,
 ) -> impl IntoResponse {
-    let music_folder_id = query
-        .get("musicFolderId")
-        .and_then(|v| v.parse::<i32>().ok());
+    let music_folder_id = query.music_folder_id;
 
     let (artists, albums, songs) = match browser.get_starred_items(music_folder_id).await {
         Ok(res) => res,

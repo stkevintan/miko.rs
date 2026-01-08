@@ -17,8 +17,32 @@ use poem::{
     IntoResponse,
 };
 use sea_orm::{DatabaseConnection, EntityTrait};
-use std::collections::HashMap;
+use serde::Deserialize;
 use std::sync::Arc;
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetIndexesQuery {
+    pub music_folder_id: Option<i32>,
+}
+
+#[derive(Deserialize)]
+pub struct GetMusicDirectoryQuery {
+    pub id: String,
+    pub offset: Option<u64>,
+    pub count: Option<u64>,
+}
+
+#[derive(Deserialize)]
+pub struct IdQuery {
+    pub id: String,
+}
+
+#[derive(Deserialize)]
+#[allow(dead_code)]
+pub struct ArtistQuery {
+    pub artist: String,
+}
 
 #[handler]
 pub async fn get_music_folders(
@@ -54,11 +78,9 @@ pub async fn get_indexes(
     config: Data<&Arc<Config>>,
     scanner: Data<&Arc<Scanner>>,
     params: Query<SubsonicParams>,
-    query: Query<HashMap<String, String>>,
+    query: Query<GetIndexesQuery>,
 ) -> impl IntoResponse {
-    let music_folder_id = query
-        .get("musicFolderId")
-        .and_then(|id| id.parse::<i32>().ok());
+    let music_folder_id = query.music_folder_id;
 
     match browser
         .get_indexes(music_folder_id, &config.subsonic.ignored_articles)
@@ -97,16 +119,13 @@ pub async fn get_indexes(
 pub async fn get_music_directory(
     browser: Data<&Arc<Browser>>,
     params: Query<SubsonicParams>,
-    query: Query<HashMap<String, String>>,
+    query: Query<GetMusicDirectoryQuery>,
 ) -> impl IntoResponse {
-    let id = get_id_or_error!(query, params);
-    let offset = query
-        .get("offset")
-        .and_then(|o| o.parse().ok())
-        .unwrap_or(0);
-    let count = query.get("count").and_then(|c| c.parse().ok()).unwrap_or(0);
+    let id = &query.id;
+    let offset = query.offset.unwrap_or(0);
+    let count = query.count.unwrap_or(0);
 
-    match browser.get_directory(&id, offset, count).await {
+    match browser.get_directory(id, offset, count).await {
         Ok(data) => {
             let resp = SubsonicResponse::new_ok(SubsonicResponseBody::Directory(Directory {
                 id: data.dir.id,
@@ -197,11 +216,11 @@ pub async fn get_artists(
 pub async fn get_artist(
     browser: Data<&Arc<Browser>>,
     params: Query<SubsonicParams>,
-    query: Query<HashMap<String, String>>,
+    query: Query<IdQuery>,
 ) -> impl IntoResponse {
-    let id = get_id_or_error!(query, params);
+    let id = &query.id;
 
-    match browser.get_artist(&id).await {
+    match browser.get_artist(id).await {
         Ok((artist, albums)) => {
             let resp =
                 SubsonicResponse::new_ok(SubsonicResponseBody::Artist(ArtistWithAlbumsID3 {
@@ -225,11 +244,11 @@ pub async fn get_artist(
 pub async fn get_album(
     browser: Data<&Arc<Browser>>,
     params: Query<SubsonicParams>,
-    query: Query<HashMap<String, String>>,
+    query: Query<IdQuery>,
 ) -> impl IntoResponse {
-    let id = get_id_or_error!(query, params);
+    let id = &query.id;
 
-    match browser.get_album(&id).await {
+    match browser.get_album(id).await {
         Ok((album, songs)) => {
             let resp = SubsonicResponse::new_ok(SubsonicResponseBody::Album(AlbumWithSongsID3 {
                 album: AlbumID3::from(album),
@@ -252,11 +271,11 @@ pub async fn get_album(
 pub async fn get_song(
     browser: Data<&Arc<Browser>>,
     params: Query<SubsonicParams>,
-    query: Query<HashMap<String, String>>,
+    query: Query<IdQuery>,
 ) -> impl IntoResponse {
-    let id = get_id_or_error!(query, params);
+    let id = &query.id;
 
-    match browser.get_song(&id).await {
+    match browser.get_song(id).await {
         Ok(song) => {
             let resp = SubsonicResponse::new_ok(SubsonicResponseBody::Song(Child::from(song)));
             send_response(resp, &params.f)
@@ -274,15 +293,8 @@ pub async fn get_song(
 #[handler]
 pub async fn get_artist_info(
     params: Query<SubsonicParams>,
-    query: Query<HashMap<String, String>>,
+    _query: Query<IdQuery>,
 ) -> impl IntoResponse {
-    if !query.contains_key("id") {
-        return send_response(
-            SubsonicResponse::new_error(10, "ID is required".into()),
-            &params.f,
-        );
-    }
-
     let resp = SubsonicResponse::new_ok(SubsonicResponseBody::ArtistInfo(ArtistInfo::default()));
     send_response(resp, &params.f)
 }
@@ -290,15 +302,8 @@ pub async fn get_artist_info(
 #[handler]
 pub async fn get_artist_info2(
     params: Query<SubsonicParams>,
-    query: Query<HashMap<String, String>>,
+    _query: Query<IdQuery>,
 ) -> impl IntoResponse {
-    if !query.contains_key("id") {
-        return send_response(
-            SubsonicResponse::new_error(10, "ID is required".into()),
-            &params.f,
-        );
-    }
-
     let resp = SubsonicResponse::new_ok(SubsonicResponseBody::ArtistInfo2(ArtistInfo2::default()));
     send_response(resp, &params.f)
 }
@@ -306,15 +311,8 @@ pub async fn get_artist_info2(
 #[handler]
 pub async fn get_album_info(
     params: Query<SubsonicParams>,
-    query: Query<HashMap<String, String>>,
+    _query: Query<IdQuery>,
 ) -> impl IntoResponse {
-    if !query.contains_key("id") {
-        return send_response(
-            SubsonicResponse::new_error(10, "ID is required".into()),
-            &params.f,
-        );
-    }
-
     let resp = SubsonicResponse::new_ok(SubsonicResponseBody::AlbumInfo(AlbumInfo::default()));
     send_response(resp, &params.f)
 }
@@ -322,15 +320,8 @@ pub async fn get_album_info(
 #[handler]
 pub async fn get_album_info2(
     params: Query<SubsonicParams>,
-    query: Query<HashMap<String, String>>,
+    _query: Query<IdQuery>,
 ) -> impl IntoResponse {
-    if !query.contains_key("id") {
-        return send_response(
-            SubsonicResponse::new_error(10, "ID is required".into()),
-            &params.f,
-        );
-    }
-
     let resp = SubsonicResponse::new_ok(SubsonicResponseBody::AlbumInfo(AlbumInfo::default()));
     send_response(resp, &params.f)
 }
@@ -338,15 +329,8 @@ pub async fn get_album_info2(
 #[handler]
 pub async fn get_similar_songs(
     params: Query<SubsonicParams>,
-    query: Query<HashMap<String, String>>,
+    _query: Query<IdQuery>,
 ) -> impl IntoResponse {
-    if !query.contains_key("id") {
-        return send_response(
-            SubsonicResponse::new_error(10, "ID is required".into()),
-            &params.f,
-        );
-    }
-
     let resp = SubsonicResponse::new_ok(SubsonicResponseBody::SimilarSongs(SimilarSongs::default()));
     send_response(resp, &params.f)
 }
@@ -354,15 +338,8 @@ pub async fn get_similar_songs(
 #[handler]
 pub async fn get_similar_songs2(
     params: Query<SubsonicParams>,
-    query: Query<HashMap<String, String>>,
+    _query: Query<IdQuery>,
 ) -> impl IntoResponse {
-    if !query.contains_key("id") {
-        return send_response(
-            SubsonicResponse::new_error(10, "ID is required".into()),
-            &params.f,
-        );
-    }
-
     let resp = SubsonicResponse::new_ok(SubsonicResponseBody::SimilarSongs2(SimilarSongs2::default()));
     send_response(resp, &params.f)
 }
@@ -370,15 +347,8 @@ pub async fn get_similar_songs2(
 #[handler]
 pub async fn get_top_songs(
     params: Query<SubsonicParams>,
-    query: Query<HashMap<String, String>>,
+    _query: Query<ArtistQuery>,
 ) -> impl IntoResponse {
-    if !query.contains_key("artist") {
-        return send_response(
-            SubsonicResponse::new_error(10, "Artist is required".into()),
-            &params.f,
-        );
-    }
-
     let resp = SubsonicResponse::new_ok(SubsonicResponseBody::TopSongs(TopSongs::default()));
     send_response(resp, &params.f)
 }

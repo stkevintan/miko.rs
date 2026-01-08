@@ -72,6 +72,9 @@ impl<E: Endpoint> Endpoint for SubsonicAuthEndpoint<E> {
             return Ok(send_response(resp, &query.f));
         }
 
+        let client = &query.c.as_deref().unwrap_or("unknown");
+        log::debug!("User '{}' authenticated successfully from client '{}'", username, client);
+
         let mut req = req;
         req.set_data(Arc::new(user));
 

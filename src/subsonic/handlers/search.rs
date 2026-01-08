@@ -11,44 +11,51 @@ use poem::{
     web::{Data, Query},
     IntoResponse,
 };
-use std::collections::HashMap;
+use serde::Deserialize;
 use std::sync::Arc;
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Search23Query {
+    pub query: String,
+    pub artist_count: Option<u64>,
+    pub artist_offset: Option<u64>,
+    pub album_count: Option<u64>,
+    pub album_offset: Option<u64>,
+    pub song_count: Option<u64>,
+    pub song_offset: Option<u64>,
+    pub music_folder_id: Option<i32>,
+}
+
+impl From<Search23Query> for SearchOptions {
+    fn from(q: Search23Query) -> Self {
+        Self {
+            query: q.query,
+            artist_count: q.artist_count.unwrap_or(20),
+            artist_offset: q.artist_offset.unwrap_or(0),
+            album_count: q.album_count.unwrap_or(20),
+            album_offset: q.album_offset.unwrap_or(0),
+            song_count: q.song_count.unwrap_or(20),
+            song_offset: q.song_offset.unwrap_or(0),
+            music_folder_id: q.music_folder_id,
+        }
+    }
+}
+
+#[derive(Deserialize)]
+pub struct SearchQuery {
+    pub query: String,
+    pub count: Option<u64>,
+    pub offset: Option<u64>,
+}
 
 #[handler]
 pub async fn search3(
     browser: Data<&Arc<Browser>>,
     params: Query<SubsonicParams>,
-    query: Query<HashMap<String, String>>,
+    query: Query<Search23Query>,
 ) -> impl IntoResponse {
-    let q = query.get("query").cloned().unwrap_or_default();
-    let opts = SearchOptions {
-        query: q,
-        artist_count: query
-            .get("artistCount")
-            .and_then(|v| v.parse().ok())
-            .unwrap_or(20),
-        artist_offset: query
-            .get("artistOffset")
-            .and_then(|v| v.parse().ok())
-            .unwrap_or(0),
-        album_count: query
-            .get("albumCount")
-            .and_then(|v| v.parse().ok())
-            .unwrap_or(20),
-        album_offset: query
-            .get("albumOffset")
-            .and_then(|v| v.parse().ok())
-            .unwrap_or(0),
-        song_count: query
-            .get("songCount")
-            .and_then(|v| v.parse().ok())
-            .unwrap_or(20),
-        song_offset: query
-            .get("songOffset")
-            .and_then(|v| v.parse().ok())
-            .unwrap_or(0),
-        music_folder_id: query.get("musicFolderId").and_then(|v| v.parse().ok()),
-    };
+    let opts = SearchOptions::from(query.0);
 
     match browser.search(opts).await {
         Ok((artists, albums, songs)) => {
@@ -74,37 +81,9 @@ pub async fn search3(
 pub async fn search2(
     browser: Data<&Arc<Browser>>,
     params: Query<SubsonicParams>,
-    query: Query<HashMap<String, String>>,
+    query: Query<Search23Query>,
 ) -> impl IntoResponse {
-    let q = query.get("query").cloned().unwrap_or_default();
-    let opts = SearchOptions {
-        query: q,
-        artist_count: query
-            .get("artistCount")
-            .and_then(|v| v.parse().ok())
-            .unwrap_or(20),
-        artist_offset: query
-            .get("artistOffset")
-            .and_then(|v| v.parse().ok())
-            .unwrap_or(0),
-        album_count: query
-            .get("albumCount")
-            .and_then(|v| v.parse().ok())
-            .unwrap_or(20),
-        album_offset: query
-            .get("albumOffset")
-            .and_then(|v| v.parse().ok())
-            .unwrap_or(0),
-        song_count: query
-            .get("songCount")
-            .and_then(|v| v.parse().ok())
-            .unwrap_or(20),
-        song_offset: query
-            .get("songOffset")
-            .and_then(|v| v.parse().ok())
-            .unwrap_or(0),
-        music_folder_id: query.get("musicFolderId").and_then(|v| v.parse().ok()),
-    };
+    let opts = SearchOptions::from(query.0);
 
     match browser.search(opts).await {
         Ok((artists, albums, songs)) => {
@@ -138,19 +117,13 @@ pub async fn search2(
 pub async fn search(
     browser: Data<&Arc<Browser>>,
     params: Query<SubsonicParams>,
-    query: Query<HashMap<String, String>>,
+    query: Query<SearchQuery>,
 ) -> impl IntoResponse {
-    let q = query.get("query").cloned().unwrap_or_default();
-    let count = query
-        .get("count")
-        .and_then(|v| v.parse().ok())
-        .unwrap_or(20);
-    let offset = query
-        .get("offset")
-        .and_then(|v| v.parse::<u64>().ok())
-        .unwrap_or(0);
+    let q = &query.query;
+    let count = query.count.unwrap_or(20);
+    let offset = query.offset.unwrap_or(0);
 
-    match browser.search_songs(&q, count, offset).await {
+    match browser.search_songs(q, count, offset).await {
         Ok((songs, total_hits)) => {
             let resp = SubsonicResponse::new_ok(SubsonicResponseBody::SearchResult(SearchResult {
                 offset,
