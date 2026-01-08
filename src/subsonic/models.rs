@@ -1,3 +1,7 @@
+use crate::browser::{
+    AlbumWithStats, ArtistWithStats, GenreWithStats, PlaylistWithSongs, PlaylistWithStats,
+};
+use crate::models::{artist, child, user};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
@@ -20,7 +24,7 @@ pub struct SubsonicResponse {
     pub server_version: Option<String>,
     #[serde(rename = "@openSubsonic", skip_serializing_if = "Option::is_none")]
     pub open_subsonic: Option<bool>,
-    
+
     #[serde(rename = "$value")]
     pub body: SubsonicResponseBody,
 }
@@ -91,6 +95,10 @@ pub enum SubsonicResponseBody {
     Lyrics(Lyrics),
     #[serde(rename = "lyricsList")]
     LyricsList(LyricsList),
+    #[serde(rename = "user")]
+    User(User),
+    #[serde(rename = "users")]
+    Users(Users),
     #[serde(other)]
     None,
 }
@@ -206,6 +214,32 @@ pub struct Artist {
     pub average_rating: Option<f64>,
 }
 
+impl From<artist::Model> for Artist {
+    fn from(a: artist::Model) -> Self {
+        Self {
+            id: a.id,
+            name: a.name,
+            artist_image_url: a.artist_image_url.filter(|s| !s.is_empty()),
+            starred: a.starred,
+            user_rating: Some(a.user_rating),
+            average_rating: Some(a.average_rating),
+        }
+    }
+}
+
+impl From<ArtistWithStats> for Artist {
+    fn from(a: ArtistWithStats) -> Self {
+        Self {
+            id: a.id,
+            name: a.name,
+            artist_image_url: a.artist_image_url,
+            starred: a.starred,
+            user_rating: Some(a.user_rating),
+            average_rating: Some(a.average_rating),
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Directory {
@@ -260,7 +294,10 @@ pub struct Child {
     pub content_type: Option<String>,
     #[serde(rename = "@suffix", skip_serializing_if = "Option::is_none")]
     pub suffix: Option<String>,
-    #[serde(rename = "@transcodedContentType", skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "@transcodedContentType",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub transcoded_content_type: Option<String>,
     #[serde(rename = "@transcodedSuffix", skip_serializing_if = "Option::is_none")]
     pub transcoded_suffix: Option<String>,
@@ -296,6 +333,81 @@ pub struct Child {
     pub bookmark_position: Option<i64>,
 }
 
+impl Child {
+    pub fn from_album_stats(a: AlbumWithStats) -> Self {
+        Self {
+            id: a.id,
+            parent: None,
+            is_dir: true,
+            title: a.name,
+            album: None,
+            artist: Some(a.artist),
+            track: None,
+            year: Some(a.year),
+            genre: Some(a.genre),
+            cover_art: a.cover_art,
+            size: None,
+            content_type: None,
+            suffix: None,
+            transcoded_content_type: None,
+            transcoded_suffix: None,
+            duration: Some(a.duration as i32),
+            bit_rate: None,
+            path: None,
+            is_video: Some(false),
+            user_rating: Some(a.user_rating),
+            average_rating: Some(a.average_rating),
+            play_count: Some(a.play_count),
+            last_played: None,
+            disc_number: None,
+            created: Some(a.created),
+            starred: a.starred,
+            album_id: None,
+            artist_id: Some(a.artist_id),
+            r#type: None,
+            bookmark_position: None,
+        }
+    }
+}
+
+impl From<child::Model> for Child {
+    fn from(c: child::Model) -> Self {
+        Self {
+            id: c.id,
+            parent: (!c.parent.is_empty()).then_some(c.parent),
+            is_dir: c.is_dir,
+            title: c.title,
+            album: (!c.album.is_empty()).then_some(c.album),
+            artist: (!c.artist.is_empty()).then_some(c.artist),
+            track: Some(c.track),
+            year: Some(c.year),
+            genre: (!c.genre.is_empty()).then_some(c.genre),
+            cover_art: c.cover_art,
+            size: Some(c.size),
+            content_type: (!c.content_type.is_empty()).then_some(c.content_type),
+            suffix: (!c.suffix.is_empty()).then_some(c.suffix),
+            transcoded_content_type: (!c.transcoded_content_type.is_empty())
+                .then_some(c.transcoded_content_type),
+            transcoded_suffix: (!c.transcoded_suffix.is_empty()).then_some(c.transcoded_suffix),
+            duration: Some(c.duration),
+            bit_rate: Some(c.bit_rate),
+            path: (!c.path.is_empty()).then_some(c.path),
+            is_video: Some(c.is_video),
+            user_rating: Some(c.user_rating),
+            average_rating: Some(c.average_rating),
+            play_count: Some(c.play_count),
+            last_played: c.last_played,
+            disc_number: Some(c.disc_number),
+            created: c.created,
+            starred: c.starred,
+            album_id: (!c.album_id.is_empty()).then_some(c.album_id),
+            artist_id: (!c.artist_id.is_empty()).then_some(c.artist_id),
+            r#type: Some(c.r#type),
+            bookmark_position: None,
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Genres {
     pub genre: Vec<Genre>,
@@ -310,6 +422,16 @@ pub struct Genre {
     pub song_count: i32,
     #[serde(rename = "@albumCount")]
     pub album_count: i32,
+}
+
+impl From<GenreWithStats> for Genre {
+    fn from(g: GenreWithStats) -> Self {
+        Self {
+            value: g.value,
+            song_count: g.song_count,
+            album_count: g.album_count,
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -346,6 +468,21 @@ pub struct ArtistID3 {
     pub user_rating: Option<i32>,
     #[serde(rename = "@averageRating", skip_serializing_if = "Option::is_none")]
     pub average_rating: Option<f64>,
+}
+
+impl From<ArtistWithStats> for ArtistID3 {
+    fn from(a: ArtistWithStats) -> Self {
+        Self {
+            id: a.id,
+            name: a.name,
+            cover_art: a.cover_art,
+            artist_image_url: a.artist_image_url,
+            album_count: a.album_count as i32,
+            starred: a.starred,
+            user_rating: Some(a.user_rating),
+            average_rating: Some(a.average_rating),
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -386,6 +523,27 @@ pub struct AlbumID3 {
     pub year: Option<i32>,
     #[serde(rename = "@genre", skip_serializing_if = "Option::is_none")]
     pub genre: Option<String>,
+}
+
+impl From<AlbumWithStats> for AlbumID3 {
+    fn from(a: AlbumWithStats) -> Self {
+        Self {
+            id: a.id,
+            name: a.name,
+            artist: Some(a.artist),
+            artist_id: Some(a.artist_id),
+            cover_art: a.cover_art,
+            song_count: a.song_count as i32,
+            duration: a.duration as i32,
+            play_count: Some(a.play_count),
+            created: a.created,
+            starred: a.starred,
+            user_rating: Some(a.user_rating),
+            average_rating: Some(a.average_rating),
+            year: Some(a.year),
+            genre: Some(a.genre),
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -525,6 +683,31 @@ pub struct Playlist {
     pub entry: Vec<Child>,
 }
 
+impl From<PlaylistWithStats> for Playlist {
+    fn from(p: PlaylistWithStats) -> Self {
+        Self {
+            id: p.id.to_string(),
+            name: p.name,
+            comment: (!p.comment.is_empty()).then_some(p.comment),
+            owner: p.owner,
+            public: p.public,
+            song_count: p.song_count as i32,
+            duration: p.duration as i32,
+            created: p.created_at,
+            changed: p.updated_at,
+            entry: vec![],
+        }
+    }
+}
+
+impl From<PlaylistWithSongs> for Playlist {
+    fn from(p: PlaylistWithSongs) -> Self {
+        let mut playlist = Playlist::from(p.playlist);
+        playlist.entry = p.entry.into_iter().map(Child::from).collect();
+        playlist
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct AlbumInfo {
@@ -631,4 +814,73 @@ pub struct LyricsLine {
     pub start: Option<i32>,
     #[serde(rename = "$value")]
     pub value: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Users {
+    #[serde(rename = "user")]
+    pub user: Vec<User>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct User {
+    #[serde(rename = "@username")]
+    pub username: String,
+    #[serde(rename = "@email", skip_serializing_if = "Option::is_none")]
+    pub email: Option<String>,
+    #[serde(rename = "@scrobblingEnabled")]
+    pub scrobbling_enabled: bool,
+    #[serde(rename = "@maxBitRate", skip_serializing_if = "Option::is_none")]
+    pub max_bit_rate: Option<i32>,
+    #[serde(rename = "@adminRole")]
+    pub admin_role: bool,
+    #[serde(rename = "@settingsRole")]
+    pub settings_role: bool,
+    #[serde(rename = "@downloadRole")]
+    pub download_role: bool,
+    #[serde(rename = "@uploadRole")]
+    pub upload_role: bool,
+    #[serde(rename = "@playlistRole")]
+    pub playlist_role: bool,
+    #[serde(rename = "@coverArtRole")]
+    pub cover_art_role: bool,
+    #[serde(rename = "@commentRole")]
+    pub comment_role: bool,
+    #[serde(rename = "@podcastRole")]
+    pub podcast_role: bool,
+    #[serde(rename = "@streamRole")]
+    pub stream_role: bool,
+    #[serde(rename = "@jukeboxRole")]
+    pub jukebox_role: bool,
+    #[serde(rename = "@shareRole")]
+    pub share_role: bool,
+    #[serde(rename = "@videoConversionRole")]
+    pub video_conversion_role: bool,
+    #[serde(rename = "folder", skip_serializing_if = "Vec::is_empty")]
+    pub folder: Vec<i32>,
+}
+
+impl User {
+    pub fn from_db(u: user::Model, folders: Vec<i32>) -> Self {
+        Self {
+            username: u.username,
+            email: u.email,
+            scrobbling_enabled: u.scrobbling_enabled,
+            max_bit_rate: u.max_bit_rate,
+            admin_role: u.admin_role,
+            settings_role: u.settings_role,
+            download_role: u.download_role,
+            upload_role: u.upload_role,
+            playlist_role: u.playlist_role,
+            cover_art_role: u.cover_art_role,
+            comment_role: u.comment_role,
+            podcast_role: u.podcast_role,
+            stream_role: u.stream_role,
+            jukebox_role: u.jukebox_role,
+            share_role: u.share_role,
+            video_conversion_role: u.video_conversion_role,
+            folder: folders,
+        }
+    }
 }

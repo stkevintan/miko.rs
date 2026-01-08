@@ -17,7 +17,7 @@ macro_rules! subsonic_routes {
     };
 }
 
-use crate::subsonic::handlers::{browsing, lists, playlists, scan, search, system, media, shared};
+use crate::subsonic::handlers::{browsing, lists, playlists, scan, search, system, media, shared, user};
 
 pub fn create_route() -> Route {
     let route = subsonic_routes!(
@@ -68,6 +68,17 @@ pub fn create_route() -> Route {
         ("/search", search::search),
         ("/search2", search::search2),
         ("/search3", search::search3),
+        ("/getChatMessages", shared::not_implemented),
+        ("/addChatMessage", shared::not_implemented),
+
+        // user management
+        ("/getUser", user::get_user),
+        ("/getUsers", user::get_users),
+        ("/createUser", shared::not_implemented),
+        ("/updateUser", shared::not_implemented),
+        ("/deleteUser", shared::not_implemented),
+        ("/changePassword", shared::not_implemented),
+
         // list
         ("/getAlbumList", lists::get_album_list),
         ("/getAlbumList2", lists::get_album_list2),

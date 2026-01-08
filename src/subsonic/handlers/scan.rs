@@ -2,8 +2,14 @@ use poem::{handler, web::{Data, Query}, IntoResponse};
 use crate::subsonic::models::{SubsonicResponse, SubsonicResponseBody, ScanStatus};
 use crate::subsonic::common::{SubsonicParams, send_response};
 use crate::scanner::Scanner;
-use std::collections::HashMap;
+use serde::Deserialize;
 use std::sync::Arc;
+
+#[derive(Deserialize)]
+pub struct StartScanQuery {
+    #[serde(default)]
+    pub inc: Option<String>,
+}
 
 #[handler]
 pub async fn get_scan_status(
@@ -29,9 +35,9 @@ pub async fn get_scan_status(
 pub async fn start_scan(
     scanner: Data<&Arc<Scanner>>,
     params: Query<SubsonicParams>,
-    query: Query<HashMap<String, String>>,
+    query: Query<StartScanQuery>,
 ) -> impl IntoResponse {
-    let incremental = query.get("inc")
+    let incremental = query.inc.as_deref()
         .map(|v| v == "1" || v == "true" || v == "yes")
         .unwrap_or(true); 
 

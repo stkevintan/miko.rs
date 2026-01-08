@@ -72,81 +72,12 @@ impl<E: Endpoint> Endpoint for SubsonicAuthEndpoint<E> {
             return Ok(send_response(resp, &query.f));
         }
 
+        let client = &query.c.as_deref().unwrap_or("unknown");
+        log::debug!("User '{}' authenticated successfully from client '{}'", username, client);
+
         let mut req = req;
         req.set_data(Arc::new(user));
 
         self.ep.call(req).await.map(IntoResponse::into_response)
     }
 }
-
-// #[derive(Debug, Clone, Copy)]
-// pub enum Role {
-//     Admin,
-//     Settings,
-//     Download,
-//     Upload,
-//     Playlist,
-//     CoverArt,
-//     Comment,
-//     Podcast,
-//     Stream,
-//     Jukebox,
-//     Share,
-//     VideoConversion,
-// }
-
-// pub struct RequireRole(pub Role);
-
-// impl<E: Endpoint> Middleware<E> for RequireRole {
-//     type Output = RequireRoleEndpoint<E>;
-
-//     fn transform(&self, ep: E) -> Self::Output {
-//         RequireRoleEndpoint { ep, role: self.0 }
-//     }
-// }
-
-// pub struct RequireRoleEndpoint<E> {
-//     ep: E,
-//     role: Role,
-// }
-
-// impl<E: Endpoint> Endpoint for RequireRoleEndpoint<E> {
-//     type Output = Response;
-
-//     async fn call(&self, req: Request) -> Result<Self::Output> {
-//         let query = serde_urlencoded::from_str::<HashMap<String, String>>(
-//             req.uri().query().unwrap_or_default(),
-//         )
-//         .unwrap_or_default();
-//         let user = req.data::<user::Model>();
-//         let authorized = if let Some(user) = user {
-//             user.admin_role
-//                 || match self.role {
-//                     Role::Admin => user.admin_role,
-//                     Role::Settings => user.settings_role,
-//                     Role::Download => user.download_role,
-//                     Role::Upload => user.upload_role,
-//                     Role::Playlist => user.playlist_role,
-//                     Role::CoverArt => user.cover_art_role,
-//                     Role::Comment => user.comment_role,
-//                     Role::Podcast => user.podcast_role,
-//                     Role::Stream => user.stream_role,
-//                     Role::Jukebox => user.jukebox_role,
-//                     Role::Share => user.share_role,
-//                     Role::VideoConversion => user.video_conversion_role,
-//                 }
-//         } else {
-//             false
-//         };
-
-//         if authorized {
-//             return self.ep.call(req).await.map(IntoResponse::into_response);
-//         }
-
-//         let resp = SubsonicResponse::new_error(
-//             50,
-//             "The user is not authorized for the given operation".to_string(),
-//         );
-//         Ok(send_response(resp, &query.get("f").cloned()))
-//     }
-// }

@@ -1,0 +1,107 @@
+use crate::models::{user, music_folder};
+use crate::subsonic::common::{send_response, SubsonicParams};
+use crate::subsonic::models::{
+    SubsonicResponse, SubsonicResponseBody, User, Users,
+};
+use poem::{
+    handler,
+    web::{Data, Query},
+    IntoResponse,
+};
+use serde::Deserialize;
+use sea_orm::{DatabaseConnection, EntityTrait};
+use std::sync::Arc;
+
+#[derive(Deserialize)]
+pub struct GetUserQuery {
+    pub username: String,
+}
+
+#[handler]
+pub async fn get_users(
+    db: Data<&DatabaseConnection>,
+    current_user: Data<&Arc<user::Model>>,
+    params: Query<SubsonicParams>,
+) -> impl IntoResponse {
+    if !current_user.admin_role {
+        return send_response(
+            SubsonicResponse::new_error(40, "The user is not authorized for the given operation.".into()),
+            &params.f,
+        );
+    }
+
+    let users_with_folders = match user::Entity::find()
+        .find_with_related(music_folder::Entity)
+        .all(*db)
+        .await
+    {
+        Ok(u) => u,
+        Err(e) => {
+            log::error!("Database error: {}", e);
+            return send_response(
+                SubsonicResponse::new_error(0, "Database error".into()),
+                &params.f,
+            );
+        }
+    };
+
+    let subsonic_users: Vec<User> = users_with_folders
+        .into_iter()
+        .map(|(u, f)| User::from_db(u, f.into_iter().map(|mf| mf.id).collect()))
+        .collect();
+
+    send_response(
+        SubsonicResponse::new_ok(SubsonicResponseBody::Users(Users {
+            user: subsonic_users,
+        })),
+        &params.f,
+    )
+}
+
+#[handler]
+pub async fn get_user(
+    db: Data<&DatabaseConnection>,
+    current_user: Data<&Arc<user::Model>>,
+    params: Query<SubsonicParams>,
+    query: Query<GetUserQuery>,
+) -> impl IntoResponse {
+    let username = &query.username;
+
+    if !current_user.admin_role && current_user.username != *username {
+        return send_response(
+            SubsonicResponse::new_error(40, "The user is not authorized for the given operation.".into()),
+            &params.f,
+        );
+    }
+
+    let (user, folders) = match user::Entity::find_by_id(username.to_string())
+        .find_with_related(music_folder::Entity)
+        .all(*db)
+        .await
+    {
+        Ok(mut res) if !res.is_empty() => {
+            let (u, f) = res.remove(0);
+            (u, f.into_iter().map(|mf| mf.id).collect::<Vec<_>>())
+        }
+        Ok(_) => {
+            return send_response(
+                SubsonicResponse::new_error(70, "User not found".into()),
+                &params.f,
+            );
+        }
+        Err(e) => {
+            log::error!("Database error: {}", e);
+            return send_response(
+                SubsonicResponse::new_error(0, "Database error".into()),
+                &params.f,
+            );
+        }
+    };
+
+    send_response(
+        SubsonicResponse::new_ok(SubsonicResponseBody::User(User::from_db(
+            user, folders,
+        ))),
+        &params.f,
+    )
+}

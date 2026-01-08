@@ -13,9 +13,25 @@ use poem::{
     IntoResponse,
 };
 use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, QuerySelect};
-use std::collections::HashMap;
+use serde::Deserialize;
 use std::path::Path;
 use std::sync::Arc;
+
+#[derive(Deserialize)]
+pub struct IdQuery {
+    pub id: String,
+}
+
+#[derive(Deserialize)]
+pub struct LyricsQuery {
+    pub artist: String,
+    pub title: String,
+}
+
+#[derive(Deserialize)]
+pub struct UsernameQuery {
+    pub username: String,
+}
 
 async fn get_song_or_error(
     db: &DatabaseConnection,
@@ -51,10 +67,10 @@ async fn get_song_or_error(
 pub async fn stream(
     db: Data<&DatabaseConnection>,
     params: Query<SubsonicParams>,
-    query: Query<HashMap<String, String>>,
+    query: Query<IdQuery>,
     file_req: StaticFileRequest,
 ) -> impl IntoResponse {
-    let id = crate::get_id_or_error!(query, params);
+    let id = &query.id;
 
     let song = match get_song_or_error(*db, id, &params, true, "Audio file not found").await {
         Ok(s) => s,
@@ -82,10 +98,10 @@ pub async fn stream(
 pub async fn download(
     db: Data<&DatabaseConnection>,
     params: Query<SubsonicParams>,
-    query: Query<HashMap<String, String>>,
+    query: Query<IdQuery>,
     file_req: StaticFileRequest,
 ) -> impl IntoResponse {
-    let id = crate::get_id_or_error!(query, params);
+    let id = &query.id;
 
     let song = match get_song_or_error(*db, id, &params, true, "Audio file not found").await {
         Ok(s) => s,
@@ -133,10 +149,10 @@ pub async fn get_cover_art(
     db: Data<&DatabaseConnection>,
     config: Data<&Arc<Config>>,
     params: Query<SubsonicParams>,
-    query: Query<HashMap<String, String>>,
+    query: Query<IdQuery>,
     file_req: StaticFileRequest,
 ) -> impl IntoResponse {
-    let id = crate::get_id_or_error!(query, params);
+    let id = &query.id;
 
     let cover_art = if id.starts_with("al-") || id.starts_with("ar-") {
         id.to_string()
@@ -203,26 +219,10 @@ pub async fn get_cover_art(
 pub async fn get_lyrics(
     db: Data<&DatabaseConnection>,
     params: Query<SubsonicParams>,
-    query: Query<HashMap<String, String>>,
+    query: Query<LyricsQuery>,
 ) -> impl IntoResponse {
-    let artist = match query.get("artist") {
-        Some(a) => a,
-        None => {
-            return send_response(
-                SubsonicResponse::new_error(10, "Artist is required".into()),
-                &params.f,
-            )
-        }
-    };
-    let title = match query.get("title") {
-        Some(t) => t,
-        None => {
-            return send_response(
-                SubsonicResponse::new_error(10, "Title is required".into()),
-                &params.f,
-            )
-        }
-    };
+    let artist = &query.artist;
+    let title = &query.title;
 
     let song = match child::Entity::find()
         .filter(child::Column::Artist.eq(artist))
@@ -259,9 +259,9 @@ pub async fn get_lyrics(
 pub async fn get_lyrics_by_song_id(
     db: Data<&DatabaseConnection>,
     params: Query<SubsonicParams>,
-    query: Query<HashMap<String, String>>,
+    query: Query<IdQuery>,
 ) -> impl IntoResponse {
-    let id = crate::get_id_or_error!(query, params);
+    let id = &query.id;
 
     let song = match get_song_or_error(*db, id, &params, false, "Lyrics not found").await {
         Ok(s) => s,
@@ -297,19 +297,11 @@ pub async fn get_lyrics_by_song_id(
 #[handler]
 pub async fn get_avatar(
     config: Data<&Arc<Config>>,
-    params: Query<SubsonicParams>,
-    query: Query<HashMap<String, String>>,
+    _params: Query<SubsonicParams>,
+    query: Query<UsernameQuery>,
     file_req: StaticFileRequest,
 ) -> impl IntoResponse {
-    let username = match query.get("username") {
-        Some(u) => u,
-        None => {
-            return send_response(
-                SubsonicResponse::new_error(10, "Username is required".into()),
-                &params.f,
-            )
-        }
-    };
+    let username = &query.username;
 
     let avatar_dir = Path::new(&config.subsonic.data_dir).join("avatars");
     let hash = format!("{:x}", md5::compute(username));

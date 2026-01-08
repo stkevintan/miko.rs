@@ -1,12 +1,9 @@
-use crate::browser::{
-    map_album_to_child, map_album_to_id3, map_artist_with_stats_to_id3,
-    map_artist_with_stats_to_subsonic, map_child_to_subsonic, AlbumListOptions, Browser,
-};
+use crate::browser::{AlbumListOptions, Browser};
 use crate::subsonic::{
     common::{send_response, SubsonicParams},
     models::{
-        AlbumList, AlbumList2, RandomSongs, SongsByGenre, Starred, Starred2, SubsonicResponse,
-        SubsonicResponseBody,
+        AlbumID3, AlbumList, AlbumList2, Artist, ArtistID3, Child, RandomSongs, SongsByGenre,
+        Starred, Starred2, SubsonicResponse, SubsonicResponseBody,
     },
 };
 use poem::{
@@ -14,8 +11,29 @@ use poem::{
     web::{Data, Query},
     IntoResponse,
 };
-use std::collections::HashMap;
+use serde::Deserialize;
 use std::sync::Arc;
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SongsByGenreQuery {
+    pub genre: String,
+    #[serde(default = "default_count")]
+    pub count: u64,
+    #[serde(default)]
+    pub offset: u64,
+    pub music_folder_id: Option<i32>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MusicFolderQuery {
+    pub music_folder_id: Option<i32>,
+}
+
+fn default_count() -> u64 {
+    10
+}
 
 #[handler]
 pub async fn get_album_list2(
@@ -35,7 +53,7 @@ pub async fn get_album_list2(
     };
 
     let resp = SubsonicResponse::new_ok(SubsonicResponseBody::AlbumList2(AlbumList2 {
-        album: albums.into_iter().map(map_album_to_id3).collect(),
+        album: albums.into_iter().map(AlbumID3::from).collect(),
     }));
 
     send_response(resp, &params.f)
@@ -59,7 +77,7 @@ pub async fn get_album_list(
     };
 
     let resp = SubsonicResponse::new_ok(SubsonicResponseBody::AlbumList(AlbumList {
-        album: albums.into_iter().map(map_album_to_child).collect(),
+        album: albums.into_iter().map(Child::from_album_stats).collect(),
     }));
 
     send_response(resp, &params.f)
@@ -83,7 +101,7 @@ pub async fn get_random_songs(
     };
 
     let resp = SubsonicResponse::new_ok(SubsonicResponseBody::RandomSongs(RandomSongs {
-        song: songs.into_iter().map(map_child_to_subsonic).collect(),
+        song: songs.into_iter().map(Child::from).collect(),
     }));
 
     send_response(resp, &params.f)
@@ -93,32 +111,15 @@ pub async fn get_random_songs(
 pub async fn get_songs_by_genre(
     browser: Data<&Arc<Browser>>,
     params: Query<SubsonicParams>,
-    query: Query<HashMap<String, String>>,
+    query: Query<SongsByGenreQuery>,
 ) -> impl IntoResponse {
-    let genre = match query.get("genre") {
-        Some(g) => g,
-        None => {
-            return send_response(
-                SubsonicResponse::new_error(10, "Genre is required".into()),
-                &params.f,
-            );
-        }
-    };
-
-    let count = query
-        .get("count")
-        .and_then(|v| v.parse::<u64>().ok())
-        .unwrap_or(10);
-    let offset = query
-        .get("offset")
-        .and_then(|v| v.parse::<u64>().ok())
-        .unwrap_or(0);
-    let music_folder_id = query
-        .get("musicFolderId")
-        .and_then(|v| v.parse::<i32>().ok());
-
     let songs = match browser
-        .get_songs_by_genre(genre, count, offset, music_folder_id)
+        .get_songs_by_genre(
+            &query.genre,
+            query.count,
+            query.offset,
+            query.music_folder_id,
+        )
         .await
     {
         Ok(s) => s,
@@ -131,7 +132,7 @@ pub async fn get_songs_by_genre(
     };
 
     let resp = SubsonicResponse::new_ok(SubsonicResponseBody::SongsByGenre(SongsByGenre {
-        song: songs.into_iter().map(map_child_to_subsonic).collect(),
+        song: songs.into_iter().map(Child::from).collect(),
     }));
 
     send_response(resp, &params.f)
@@ -141,11 +142,9 @@ pub async fn get_songs_by_genre(
 pub async fn get_starred(
     browser: Data<&Arc<Browser>>,
     params: Query<SubsonicParams>,
-    query: Query<HashMap<String, String>>,
+    query: Query<MusicFolderQuery>,
 ) -> impl IntoResponse {
-    let music_folder_id = query
-        .get("musicFolderId")
-        .and_then(|v| v.parse::<i32>().ok());
+    let music_folder_id = query.music_folder_id;
 
     let (artists, albums, songs) = match browser.get_starred_items(music_folder_id).await {
         Ok(res) => res,
@@ -159,12 +158,9 @@ pub async fn get_starred(
     };
 
     let resp = SubsonicResponse::new_ok(SubsonicResponseBody::Starred(Starred {
-        artist: artists
-            .into_iter()
-            .map(map_artist_with_stats_to_subsonic)
-            .collect(),
-        album: albums.into_iter().map(map_album_to_child).collect(),
-        song: songs.into_iter().map(map_child_to_subsonic).collect(),
+        artist: artists.into_iter().map(Artist::from).collect(),
+        album: albums.into_iter().map(Child::from_album_stats).collect(),
+        song: songs.into_iter().map(Child::from).collect(),
     }));
 
     send_response(resp, &params.f)
@@ -174,11 +170,9 @@ pub async fn get_starred(
 pub async fn get_starred2(
     browser: Data<&Arc<Browser>>,
     params: Query<SubsonicParams>,
-    query: Query<HashMap<String, String>>,
+    query: Query<MusicFolderQuery>,
 ) -> impl IntoResponse {
-    let music_folder_id = query
-        .get("musicFolderId")
-        .and_then(|v| v.parse::<i32>().ok());
+    let music_folder_id = query.music_folder_id;
 
     let (artists, albums, songs) = match browser.get_starred_items(music_folder_id).await {
         Ok(res) => res,
@@ -192,12 +186,9 @@ pub async fn get_starred2(
     };
 
     let resp = SubsonicResponse::new_ok(SubsonicResponseBody::Starred2(Starred2 {
-        artist: artists
-            .into_iter()
-            .map(map_artist_with_stats_to_id3)
-            .collect(),
-        album: albums.into_iter().map(map_album_to_id3).collect(),
-        song: songs.into_iter().map(map_child_to_subsonic).collect(),
+        artist: artists.into_iter().map(ArtistID3::from).collect(),
+        album: albums.into_iter().map(AlbumID3::from).collect(),
+        song: songs.into_iter().map(Child::from).collect(),
     }));
 
     send_response(resp, &params.f)
