@@ -87,6 +87,10 @@ pub enum SubsonicResponseBody {
     SimilarSongs2(SimilarSongs2),
     #[serde(rename = "topSongs")]
     TopSongs(TopSongs),
+    #[serde(rename = "lyrics")]
+    Lyrics(Lyrics),
+    #[serde(rename = "lyricsList")]
+    LyricsList(LyricsList),
     #[serde(other)]
     None,
 }
@@ -589,4 +593,42 @@ pub struct SimilarSongs2 {
 pub struct TopSongs {
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub song: Vec<Child>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Lyrics {
+    #[serde(rename = "@artist", skip_serializing_if = "Option::is_none")]
+    pub artist: Option<String>,
+    #[serde(rename = "@title", skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    #[serde(rename = "$value")]
+    pub value: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct LyricsList {
+    #[serde(rename = "structuredLyrics")]
+    pub structured_lyrics: Vec<StructuredLyrics>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct StructuredLyrics {
+    #[serde(rename = "@synced")]
+    pub synced: bool,
+    #[serde(rename = "@lang", skip_serializing_if = "Option::is_none")]
+    pub lang: Option<String>,
+    #[serde(rename = "@displayArtist", skip_serializing_if = "Option::is_none")]
+    pub display_artist: Option<String>,
+    #[serde(rename = "@displayTitle", skip_serializing_if = "Option::is_none")]
+    pub display_title: Option<String>,
+    #[serde(rename = "line")]
+    pub lines: Vec<LyricsLine>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct LyricsLine {
+    #[serde(rename = "@start", skip_serializing_if = "Option::is_none")]
+    pub start: Option<i32>,
+    #[serde(rename = "$value")]
+    pub value: String,
 }

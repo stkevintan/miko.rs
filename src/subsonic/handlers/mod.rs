@@ -4,3 +4,5 @@ pub mod scan;
 pub mod lists;
 pub mod search;
 pub mod playlists;
+pub mod media;
+pub mod shared;

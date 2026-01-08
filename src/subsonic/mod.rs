@@ -5,19 +5,19 @@ pub mod handlers;
 pub mod auth;
 pub mod middleware;
 
-use poem::{Route, EndpointExt, get};
+use poem::{Route, EndpointExt};
 
 macro_rules! subsonic_routes {
     ($route:expr, $(($path:literal, $handler:expr)),* $(,)?) => {
         $route
             $(
-                .at($path, get($handler))
-                .at(concat!($path, ".view"), get($handler))
+                .at($path, poem::get($handler).head($handler))
+                .at(concat!($path, ".view"), poem::get($handler).head($handler))
             )*
     };
 }
 
-use crate::subsonic::handlers::{browsing, lists, playlists, scan, search, system};
+use crate::subsonic::handlers::{browsing, lists, playlists, scan, search, system, media, shared};
 
 pub fn create_route() -> Route {
     let route = subsonic_routes!(
@@ -35,8 +35,8 @@ pub fn create_route() -> Route {
         ("/getArtist", browsing::get_artist),
         ("/getAlbum", browsing::get_album),
         ("/getSong", browsing::get_song),
-        ("/getVideos", browsing::get_videos),
-        ("/getVideoInfo", browsing::get_video_info),
+        ("/getVideos", shared::not_supported),
+        ("/getVideoInfo", shared::not_supported),
         ("/getArtistInfo", browsing::get_artist_info),
         ("/getArtistInfo2", browsing::get_artist_info2),
         ("/getAlbumInfo", browsing::get_album_info),
@@ -44,6 +44,16 @@ pub fn create_route() -> Route {
         ("/getSimilarSongs", browsing::get_similar_songs),
         ("/getSimilarSongs2", browsing::get_similar_songs2),
         ("/getTopSongs", browsing::get_top_songs),
+
+        // media retrieval
+        ("/stream", media::stream),
+        ("/download", media::download),
+        ("/hls.m3u8", shared::not_supported),
+        ("/getCaptions", shared::not_supported),
+        ("/getCoverArt", media::get_cover_art),
+        ("/getLyrics", media::get_lyrics),
+        ("/getLyricsBySongId", media::get_lyrics_by_song_id),
+        ("/getAvatar", media::get_avatar),
 
         // playlists
         ("/getPlaylists", playlists::get_playlists),

@@ -286,22 +286,6 @@ pub async fn get_song(
 }
 
 #[handler]
-pub async fn get_videos(params: Query<SubsonicParams>) -> impl IntoResponse {
-    send_response(
-        SubsonicResponse::new_error(0, "Not supported".into()),
-        &params.f,
-    )
-}
-
-#[handler]
-pub async fn get_video_info(params: Query<SubsonicParams>) -> impl IntoResponse {
-    send_response(
-        SubsonicResponse::new_error(0, "Not supported".into()),
-        &params.f,
-    )
-}
-
-#[handler]
 pub async fn get_artist_info(
     params: Query<SubsonicParams>,
     query: Query<HashMap<String, String>>,

@@ -1,0 +1,337 @@
+use crate::config::Config;
+use crate::lyric;
+use crate::models::child;
+use crate::scanner::utils::get_cover_cache_dir;
+use crate::subsonic::common::{send_response, SubsonicParams};
+use crate::subsonic::models::{
+    Lyrics, LyricsLine, LyricsList, StructuredLyrics, SubsonicResponse, SubsonicResponseBody,
+};
+use poem::{
+    handler,
+    http::StatusCode,
+    web::{Data, Query, StaticFileRequest},
+    IntoResponse,
+};
+use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, QuerySelect};
+use std::collections::HashMap;
+use std::path::Path;
+use std::sync::Arc;
+
+async fn get_song_or_error(
+    db: &DatabaseConnection,
+    id: &str,
+    params: &SubsonicParams,
+    audio_only: bool,
+    not_found_msg: &str,
+) -> Result<child::Model, poem::Response> {
+    let mut find = child::Entity::find().filter(child::Column::Id.eq(id));
+    if audio_only {
+        find = find
+            .filter(child::Column::IsDir.eq(false))
+            .filter(child::Column::ContentType.starts_with("audio/"));
+    }
+
+    match find.one(db).await {
+        Ok(Some(s)) => Ok(s),
+        Ok(None) => Err(send_response(
+            SubsonicResponse::new_error(70, not_found_msg.into()),
+            &params.f,
+        )),
+        Err(e) => {
+            log::error!("Database error: {}", e);
+            Err(send_response(
+                SubsonicResponse::new_error(0, "Database error".into()),
+                &params.f,
+            ))
+        }
+    }
+}
+
+#[handler]
+pub async fn stream(
+    db: Data<&DatabaseConnection>,
+    params: Query<SubsonicParams>,
+    query: Query<HashMap<String, String>>,
+    file_req: StaticFileRequest,
+) -> impl IntoResponse {
+    let id = crate::get_id_or_error!(query, params);
+
+    let song = match get_song_or_error(*db, id, &params, true, "Audio file not found").await {
+        Ok(s) => s,
+        Err(r) => return r,
+    };
+
+    let path = Path::new(&song.path);
+    if !path.exists() {
+        return send_response(
+            SubsonicResponse::new_error(70, "File not found on disk".into()),
+            &params.f,
+        );
+    }
+
+    match file_req.create_response(path, false, false) {
+        Ok(resp) => resp.into_response(),
+        Err(e) => {
+            log::error!("Static file error: {:?}", e);
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}
+
+#[handler]
+pub async fn download(
+    db: Data<&DatabaseConnection>,
+    params: Query<SubsonicParams>,
+    query: Query<HashMap<String, String>>,
+    file_req: StaticFileRequest,
+) -> impl IntoResponse {
+    let id = crate::get_id_or_error!(query, params);
+
+    let song = match get_song_or_error(*db, id, &params, true, "Audio file not found").await {
+        Ok(s) => s,
+        Err(r) => return r,
+    };
+
+    let path = Path::new(&song.path);
+    if !path.exists() {
+        return send_response(
+            SubsonicResponse::new_error(70, "File not found on disk".into()),
+            &params.f,
+        );
+    }
+
+    let filename = path
+        .file_name()
+        .and_then(|f| f.to_str())
+        .unwrap_or("download");
+    let filename = filename.replace('"', "_");
+
+    match file_req.create_response(path, false, false) {
+        Ok(resp) => {
+            let mut res = resp.into_response();
+            if let Ok(header) = format!("attachment; filename=\"{}\"", filename).parse() {
+                res.headers_mut()
+                    .insert(poem::http::header::CONTENT_DISPOSITION, header);
+            } else {
+                log::error!(
+                    "Failed to create Content-Disposition header for filename: {}",
+                    filename
+                );
+                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+            }
+            res
+        }
+        Err(e) => {
+            log::error!("Static file error: {:?}", e);
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}
+
+#[handler]
+pub async fn get_cover_art(
+    db: Data<&DatabaseConnection>,
+    config: Data<&Arc<Config>>,
+    params: Query<SubsonicParams>,
+    query: Query<HashMap<String, String>>,
+    file_req: StaticFileRequest,
+) -> impl IntoResponse {
+    let id = crate::get_id_or_error!(query, params);
+
+    let cover_art = if id.starts_with("al-") || id.starts_with("ar-") {
+        id.to_string()
+    } else {
+        match child::Entity::find()
+            .filter(child::Column::Id.eq(id))
+            .select_only()
+            .column(child::Column::CoverArt)
+            .one(*db)
+            .await
+        {
+            Ok(Some(s)) => s.cover_art.unwrap_or_default(),
+            Ok(None) => {
+                return send_response(
+                    SubsonicResponse::new_error(70, "Cover art not found".into()),
+                    &params.f,
+                )
+            }
+            Err(e) => {
+                log::error!("Database error: {}", e);
+                return send_response(
+                    SubsonicResponse::new_error(0, "Database error".into()),
+                    &params.f,
+                );
+            }
+        }
+    };
+
+    if cover_art.is_empty() {
+        return send_response(
+            SubsonicResponse::new_error(70, "Cover art not found".into()),
+            &params.f,
+        );
+    }
+
+    let cache_dir = get_cover_cache_dir(&config);
+    // Sanitize to prevent path traversal
+    let safe_cover_art = Path::new(&cover_art)
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or_default();
+
+    if safe_cover_art.is_empty() || safe_cover_art != cover_art {
+        log::warn!("Potentially malicious cover art path: {}", cover_art);
+        return StatusCode::BAD_REQUEST.into_response();
+    }
+
+    let cache_path = cache_dir.join(safe_cover_art);
+
+    if cache_path.exists() {
+        return match file_req.create_response(&cache_path, false, false) {
+            Ok(resp) => resp.into_response(),
+            Err(e) => {
+                log::error!("Error serving cover art: {:?}", e);
+                StatusCode::INTERNAL_SERVER_ERROR.into_response()
+            }
+        };
+    }
+
+    StatusCode::NOT_FOUND.into_response()
+}
+
+#[handler]
+pub async fn get_lyrics(
+    db: Data<&DatabaseConnection>,
+    params: Query<SubsonicParams>,
+    query: Query<HashMap<String, String>>,
+) -> impl IntoResponse {
+    let artist = match query.get("artist") {
+        Some(a) => a,
+        None => {
+            return send_response(
+                SubsonicResponse::new_error(10, "Artist is required".into()),
+                &params.f,
+            )
+        }
+    };
+    let title = match query.get("title") {
+        Some(t) => t,
+        None => {
+            return send_response(
+                SubsonicResponse::new_error(10, "Title is required".into()),
+                &params.f,
+            )
+        }
+    };
+
+    let song = match child::Entity::find()
+        .filter(child::Column::Artist.eq(artist))
+        .filter(child::Column::Title.eq(title))
+        .one(*db)
+        .await
+    {
+        Ok(Some(s)) => s,
+        Ok(None) => {
+            return send_response(
+                SubsonicResponse::new_error(70, "Lyrics not found".into()),
+                &params.f,
+            )
+        }
+        Err(e) => {
+            log::error!("Database error: {}", e);
+            return send_response(
+                SubsonicResponse::new_error(0, "Database error".into()),
+                &params.f,
+            );
+        }
+    };
+
+    let resp = SubsonicResponse::new_ok(SubsonicResponseBody::Lyrics(Lyrics {
+        artist: Some(song.artist),
+        title: Some(song.title),
+        value: song.lyrics,
+    }));
+
+    send_response(resp, &params.f)
+}
+
+#[handler]
+pub async fn get_lyrics_by_song_id(
+    db: Data<&DatabaseConnection>,
+    params: Query<SubsonicParams>,
+    query: Query<HashMap<String, String>>,
+) -> impl IntoResponse {
+    let id = crate::get_id_or_error!(query, params);
+
+    let song = match get_song_or_error(*db, id, &params, false, "Lyrics not found").await {
+        Ok(s) => s,
+        Err(r) => return r,
+    };
+
+    if song.lyrics.is_empty() {
+        return send_response(
+            SubsonicResponse::new_error(70, "Lyrics not found".into()),
+            &params.f,
+        );
+    }
+
+    let (synced, parsed_lines) = lyric::parse(&song.lyrics);
+    let lines = parsed_lines
+        .into_iter()
+        .map(|(start, value)| LyricsLine { start, value })
+        .collect();
+
+    let resp = SubsonicResponse::new_ok(SubsonicResponseBody::LyricsList(LyricsList {
+        structured_lyrics: vec![StructuredLyrics {
+            synced,
+            lang: Some("xxx".to_string()),
+            display_artist: Some(song.artist),
+            display_title: Some(song.title),
+            lines,
+        }],
+    }));
+
+    send_response(resp, &params.f)
+}
+
+#[handler]
+pub async fn get_avatar(
+    config: Data<&Arc<Config>>,
+    params: Query<SubsonicParams>,
+    query: Query<HashMap<String, String>>,
+    file_req: StaticFileRequest,
+) -> impl IntoResponse {
+    let username = match query.get("username") {
+        Some(u) => u,
+        None => {
+            return send_response(
+                SubsonicResponse::new_error(10, "Username is required".into()),
+                &params.f,
+            )
+        }
+    };
+
+    let avatar_dir = Path::new(&config.subsonic.data_dir).join("avatars");
+    let hash = format!("{:x}", md5::compute(username));
+
+    let mut found_path = None;
+    for ext in &[".jpg", ".png"] {
+        let path = avatar_dir.join(format!("{}{}", hash, ext));
+        if path.exists() {
+            found_path = Some(path);
+            break;
+        }
+    }
+
+    if let Some(path) = found_path {
+        return match file_req.create_response(&path, false, false) {
+            Ok(resp) => resp.into_response(),
+             Err(e) => {
+                log::error!("Failed to serve avatar: {:?}", e);
+                StatusCode::INTERNAL_SERVER_ERROR.into_response()
+            }
+        };
+    }
+
+    StatusCode::NOT_FOUND.into_response()
+}
