@@ -2,6 +2,7 @@ mod api;
 mod browser;
 mod config;
 mod crypto;
+mod lyric;
 mod models;
 mod scanner;
 mod subsonic;

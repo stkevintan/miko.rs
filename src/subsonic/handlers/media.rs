@@ -1,11 +1,11 @@
 use crate::config::Config;
+use crate::lyric;
 use crate::models::child;
 use crate::scanner::utils::get_cover_cache_dir;
 use crate::subsonic::common::{send_response, SubsonicParams};
 use crate::subsonic::models::{
     Lyrics, LyricsLine, LyricsList, StructuredLyrics, SubsonicResponse, SubsonicResponseBody,
 };
-use once_cell::sync::Lazy;
 use poem::{
     handler,
     http::StatusCode,
@@ -17,8 +17,35 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
 
-static LYRICS_RE: Lazy<regex::Regex> =
-    Lazy::new(|| regex::Regex::new(r"^\[(\d+):(\d+)\.(\d+)\](.*)$").unwrap());
+async fn get_song_or_error(
+    db: &DatabaseConnection,
+    id: &str,
+    params: &SubsonicParams,
+    audio_only: bool,
+    not_found_msg: &str,
+) -> Result<child::Model, poem::Response> {
+    let mut find = child::Entity::find().filter(child::Column::Id.eq(id));
+    if audio_only {
+        find = find
+            .filter(child::Column::IsDir.eq(false))
+            .filter(child::Column::ContentType.starts_with("audio/"));
+    }
+
+    match find.one(db).await {
+        Ok(Some(s)) => Ok(s),
+        Ok(None) => Err(send_response(
+            SubsonicResponse::new_error(70, not_found_msg.into()),
+            &params.f,
+        )),
+        Err(e) => {
+            log::error!("Database error: {}", e);
+            Err(send_response(
+                SubsonicResponse::new_error(0, "Database error".into()),
+                &params.f,
+            ))
+        }
+    }
+}
 
 #[handler]
 pub async fn stream(
@@ -29,36 +56,10 @@ pub async fn stream(
 ) -> impl IntoResponse {
     let id = crate::get_id_or_error!(query, params);
 
-    let song = match child::Entity::find()
-        .filter(child::Column::Id.eq(id))
-        .select_only()
-        .column(child::Column::Path)
-        .column(child::Column::IsDir)
-        .one(*db)
-        .await
-    {
-        Ok(Some(s)) => s,
-        Ok(None) => {
-            return send_response(
-                SubsonicResponse::new_error(70, "Song not found".into()),
-                &params.f,
-            )
-        }
-        Err(e) => {
-            log::error!("Database error: {}", e);
-            return send_response(
-                SubsonicResponse::new_error(0, "Database error".into()),
-                &params.f,
-            );
-        }
+    let song = match get_song_or_error(*db, id, &params, true, "Audio file not found").await {
+        Ok(s) => s,
+        Err(r) => return r,
     };
-
-    if song.is_dir {
-        return send_response(
-            SubsonicResponse::new_error(70, "ID is a directory".into()),
-            &params.f,
-        );
-    }
 
     let path = Path::new(&song.path);
     if !path.exists() {
@@ -86,27 +87,9 @@ pub async fn download(
 ) -> impl IntoResponse {
     let id = crate::get_id_or_error!(query, params);
 
-    let song = match child::Entity::find()
-        .filter(child::Column::Id.eq(id))
-        .select_only()
-        .column(child::Column::Path)
-        .one(*db)
-        .await
-    {
-        Ok(Some(s)) => s,
-        Ok(None) => {
-            return send_response(
-                SubsonicResponse::new_error(70, "Song not found".into()),
-                &params.f,
-            )
-        }
-        Err(e) => {
-            log::error!("Database error: {}", e);
-            return send_response(
-                SubsonicResponse::new_error(0, "Database error".into()),
-                &params.f,
-            );
-        }
+    let song = match get_song_or_error(*db, id, &params, true, "Audio file not found").await {
+        Ok(s) => s,
+        Err(r) => return r,
     };
 
     let path = Path::new(&song.path);
@@ -121,6 +104,7 @@ pub async fn download(
         .file_name()
         .and_then(|f| f.to_str())
         .unwrap_or("download");
+    let filename = filename.replace('"', "_");
 
     match file_req.create_response(path, false, false) {
         Ok(resp) => {
@@ -279,25 +263,9 @@ pub async fn get_lyrics_by_song_id(
 ) -> impl IntoResponse {
     let id = crate::get_id_or_error!(query, params);
 
-    let song = match child::Entity::find()
-        .filter(child::Column::Id.eq(id))
-        .one(*db)
-        .await
-    {
-        Ok(Some(s)) => s,
-        Ok(None) => {
-            return send_response(
-                SubsonicResponse::new_error(70, "Lyrics not found".into()),
-                &params.f,
-            )
-        }
-        Err(e) => {
-            log::error!("Database error: {}", e);
-            return send_response(
-                SubsonicResponse::new_error(0, "Database error".into()),
-                &params.f,
-            );
-        }
+    let song = match get_song_or_error(*db, id, &params, false, "Lyrics not found").await {
+        Ok(s) => s,
+        Err(r) => return r,
     };
 
     if song.lyrics.is_empty() {
@@ -307,38 +275,11 @@ pub async fn get_lyrics_by_song_id(
         );
     }
 
-    let mut lines = Vec::new();
-    let mut synced = true;
-
-    for row in song.lyrics.lines() {
-        let row = row.trim();
-        if row.is_empty() {
-            continue;
-        }
-
-        if let Some(caps) = LYRICS_RE.captures(row) {
-            let min: i32 = caps[1].parse().unwrap_or(0);
-            let sec: i32 = caps[2].parse().unwrap_or(0);
-            let ms_str = &caps[3];
-            let mut ms: i32 = ms_str.parse().unwrap_or(0);
-            if ms_str.len() == 2 {
-                ms *= 10;
-            }
-            let text = caps[4].trim().to_string();
-            let start_time = (min * 60 + sec) * 1000 + ms;
-
-            lines.push(LyricsLine {
-                start: Some(start_time),
-                value: text,
-            });
-        } else {
-            synced = false;
-            lines.push(LyricsLine {
-                start: None,
-                value: row.to_string(),
-            });
-        }
-    }
+    let (synced, parsed_lines) = lyric::parse(&song.lyrics);
+    let lines = parsed_lines
+        .into_iter()
+        .map(|(start, value)| LyricsLine { start, value })
+        .collect();
 
     let resp = SubsonicResponse::new_ok(SubsonicResponseBody::LyricsList(LyricsList {
         structured_lyrics: vec![StructuredLyrics {
@@ -385,7 +326,10 @@ pub async fn get_avatar(
     if let Some(path) = found_path {
         return match file_req.create_response(&path, false, false) {
             Ok(resp) => resp.into_response(),
-            Err(_) => StatusCode::NOT_FOUND.into_response(),
+             Err(e) => {
+                log::error!("Failed to serve avatar: {:?}", e);
+                StatusCode::INTERNAL_SERVER_ERROR.into_response()
+            }
         };
     }
 
