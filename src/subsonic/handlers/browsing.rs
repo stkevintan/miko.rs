@@ -137,7 +137,6 @@ pub async fn get_music_directory(
                 play_count: Some(data.dir.play_count),
                 total_count: Some(data.total_count),
                 child: data.children.into_iter().map(Child::from).collect(),
-                parents: data.parents.into_iter().map(Child::from).collect(),
             }));
 
             send_response(resp, &params.f)

@@ -1,5 +1,6 @@
-use crate::browser::{AlbumListOptions, AlbumWithStats, ArtistWithStats, Browser};
-use crate::models::{album, album_artist, artist, child, song_artist};
+use crate::browser::types::{AlbumListOptions, AlbumWithStats, ArtistWithStats, ChildWithMetadata};
+use crate::browser::Browser;
+use crate::models::{album, album_artist, artist, child, genre, song_artist};
 use sea_orm::{
     ColumnTrait, DbErr, EntityTrait, JoinType, Order, QueryFilter, QueryOrder, QuerySelect,
 };
@@ -148,14 +149,15 @@ impl Browser {
             .await
     }
 
-    pub async fn get_album(&self, id: &str) -> Result<(AlbumWithStats, Vec<child::Model>), DbErr> {
+    pub async fn get_album(&self, id: &str) -> Result<(AlbumWithStats, Vec<ChildWithMetadata>), DbErr> {
         let album = self.get_album_with_stats(id).await?;
 
-        let songs = child::Entity::find()
+        let songs = Self::song_with_metadata_query()
             .filter(child::Column::AlbumId.eq(id))
             .filter(child::Column::IsDir.eq(false))
             .order_by_asc(child::Column::DiscNumber)
             .order_by_asc(child::Column::Track)
+            .into_model::<ChildWithMetadata>()
             .all(&self.db)
             .await?;
 
@@ -183,9 +185,11 @@ impl Browser {
             .ok_or(DbErr::RecordNotFound("Album not found".into()))
     }
 
-    pub async fn get_song(&self, id: &str) -> Result<child::Model, DbErr> {
-        child::Entity::find_by_id(id)
+    pub async fn get_song(&self, id: &str) -> Result<ChildWithMetadata, DbErr> {
+        Self::song_with_metadata_query()
+            .filter(child::Column::Id.eq(id))
             .filter(child::Column::IsDir.eq(false))
+            .into_model::<ChildWithMetadata>()
             .one(&self.db)
             .await?
             .ok_or(DbErr::RecordNotFound("Song not found".into()))
@@ -194,18 +198,18 @@ impl Browser {
     pub async fn get_random_songs(
         &self,
         opts: AlbumListOptions,
-    ) -> Result<Vec<child::Model>, sea_orm::DbErr> {
+    ) -> Result<Vec<ChildWithMetadata>, sea_orm::DbErr> {
         let size = opts.size.unwrap_or(10);
 
-        let mut query = child::Entity::find()
+        let mut query = Self::song_with_metadata_query()
             .filter(child::Column::IsDir.eq(false));
 
         if let Some(folder_id) = opts.music_folder_id {
             query = query.filter(child::Column::MusicFolderId.eq(folder_id));
         }
 
-        if let Some(ref genre) = opts.genre {
-            query = query.filter(child::Column::Genre.eq(genre.clone()));
+        if let Some(ref g_name) = opts.genre {
+            query = query.filter(genre::Column::Name.eq(g_name.clone()));
         }
 
         if let Some(from) = opts.from_year {
@@ -219,20 +223,21 @@ impl Browser {
         query
             .order_by(Expr::cust("RANDOM()"), Order::Asc)
             .limit(size)
+            .into_model::<ChildWithMetadata>()
             .all(&self.db)
             .await
     }
 
     pub async fn get_songs_by_genre(
         &self,
-        genre: &str,
+        genre_name: &str,
         count: u64,
         offset: u64,
         folder_id: Option<i32>,
-    ) -> Result<Vec<child::Model>, sea_orm::DbErr> {
-        let mut db_query = child::Entity::find()
+    ) -> Result<Vec<ChildWithMetadata>, sea_orm::DbErr> {
+        let mut db_query = Self::song_with_metadata_query()
             .filter(child::Column::IsDir.eq(false))
-            .filter(child::Column::Genre.eq(genre));
+            .filter(genre::Column::Name.eq(genre_name));
 
         if let Some(f_id) = folder_id {
             db_query = db_query.filter(child::Column::MusicFolderId.eq(f_id));
@@ -241,6 +246,7 @@ impl Browser {
         db_query
             .limit(count)
             .offset(offset)
+            .into_model::<ChildWithMetadata>()
             .all(&self.db)
             .await
     }
@@ -248,7 +254,7 @@ impl Browser {
     pub async fn get_starred_items(
         &self,
         folder_id: Option<i32>,
-    ) -> Result<(Vec<ArtistWithStats>, Vec<AlbumWithStats>, Vec<child::Model>), sea_orm::DbErr> {
+    ) -> Result<(Vec<ArtistWithStats>, Vec<AlbumWithStats>, Vec<ChildWithMetadata>), sea_orm::DbErr> {
         // Artists
         let mut artist_query = artist::Entity::find()
             .column_as(album_artist::Column::AlbumId.count(), "album_count")
@@ -295,14 +301,14 @@ impl Browser {
         .await?;
 
         // Songs
-        let mut song_query = child::Entity::find()
+        let mut song_query = Self::song_with_metadata_query()
             .filter(child::Column::IsDir.eq(false))
             .filter(child::Column::Starred.is_not_null());
 
         if let Some(f_id) = folder_id {
             song_query = song_query.filter(child::Column::MusicFolderId.eq(f_id));
         }
-        let songs = song_query.all(&self.db).await?;
+        let songs = song_query.into_model::<ChildWithMetadata>().all(&self.db).await?;
 
         Ok((artists, albums, songs))
     }

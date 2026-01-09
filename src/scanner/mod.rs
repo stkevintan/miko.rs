@@ -4,7 +4,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::mpsc;
 use sea_orm::{DatabaseConnection, EntityTrait, QueryFilter, ColumnTrait, Set, QuerySelect, ConnectionTrait};
 use crate::config::Config;
-use crate::models::{child, music_folder, artist, album, album_artist, genre, song_artist, song_genre};
+use crate::models::{child, music_folder, artist, album, album_artist, genre, song_artist, song_genre, lyrics};
 use crate::scanner::walker::{Walker, WalkTask};
 use std::path::Path;
 use std::collections::{HashMap, HashSet};
@@ -115,16 +115,11 @@ impl Scanner {
                     title: Set(task.name.clone()),
                     path: Set(task.path.clone()),
                     music_folder_id: Set(task.folder.id),
-                    album: Set(None),
-                    artist: Set(None),
-                    genre: Set(None),
-                    lyrics: Set(None),
                     content_type: Set(None),
                     suffix: Set(None),
                     transcoded_content_type: Set(None),
                     transcoded_suffix: Set(None),
                     album_id: Set(None),
-                    artist_id: Set(None),
                     r#type: Set("directory".to_string()),
                     track: Set(0),
                     year: Set(0),
@@ -168,6 +163,7 @@ impl Scanner {
 
             let mut many_to_many_artists = Vec::new();
             let mut many_to_many_genres = Vec::new();
+            let mut song_lyrics = None;
 
             let mut active_child = child::ActiveModel {
                 id: Set(id.clone()),
@@ -184,14 +180,9 @@ impl Scanner {
                 content_type: Set(Some(content_type)),
                 created: Set(Some(task.mod_time)),
                 music_folder_id: Set(task.folder.id),
-                artist: Set(None),
-                album: Set(None),
-                genre: Set(None),
-                lyrics: Set(None),
                 transcoded_content_type: Set(None),
                 transcoded_suffix: Set(None),
                 album_id: Set(None),
-                artist_id: Set(None),
                 r#type: Set("music".to_string()),
                 track: Set(0),
                 year: Set(0),
@@ -206,12 +197,10 @@ impl Scanner {
             };
 
             if let Some(t) = tag_data {
-                active_child.album = Set((!t.album.trim().is_empty()).then(|| t.album.clone()));
                 active_child.track = Set(t.track.unwrap_or(0));
                 active_child.disc_number = Set(t.disc.unwrap_or(0));
                 active_child.year = Set(t.year.unwrap_or(0));
-                active_child.genre = Set((!t.genre.trim().is_empty()).then(|| t.genre.clone()));
-                active_child.lyrics = Set((!t.lyrics.trim().is_empty()).then(|| t.lyrics.clone()));
+                song_lyrics = (!t.lyrics.trim().is_empty()).then(|| t.lyrics.clone());
                 active_child.duration = Set(t.duration);
                 active_child.bit_rate = Set(t.bitrate);
 
@@ -247,11 +236,6 @@ impl Scanner {
                         )
                         .exec_without_returning(&self.db)
                         .await?;
-                }
-
-                active_child.artist = Set((!t.artist.trim().is_empty()).then(|| t.artist.clone()));
-                if let Some(first_id) = many_to_many_artists.first() {
-                    active_child.artist_id = Set(Some(first_id.clone()));
                 }
 
                 if !t.album.trim().is_empty() {
@@ -336,16 +320,11 @@ impl Scanner {
                         child::Column::Size,
                         child::Column::Suffix,
                         child::Column::ContentType,
-                        child::Column::Artist,
-                        child::Column::Album,
-                        child::Column::Genre,
-                        child::Column::Lyrics,
                         child::Column::Track,
                         child::Column::DiscNumber,
                         child::Column::Year,
                         child::Column::Duration,
                         child::Column::BitRate,
-                        child::Column::ArtistId,
                         child::Column::AlbumId,
                     ])
                     .to_owned()
@@ -360,6 +339,18 @@ impl Scanner {
                 .filter(song_genre::Column::SongId.eq(id.clone()))
                 .exec(&self.db)
                 .await?;
+
+            // Handle lyrics
+            lyrics::Entity::delete_many()
+                .filter(lyrics::Column::SongId.eq(id.clone()))
+                .exec(&self.db)
+                .await?;
+            if let Some(content) = song_lyrics {
+                lyrics::Entity::insert(lyrics::ActiveModel {
+                    song_id: Set(id.clone()),
+                    content: Set(content),
+                }).exec_without_returning(&self.db).await?;
+            }
 
             if !many_to_many_artists.is_empty() {
                 song_artist::Entity::insert_many(many_to_many_artists.into_iter().map(|a_id| {

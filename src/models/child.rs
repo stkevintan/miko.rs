@@ -11,17 +11,10 @@ pub struct Model {
     pub is_dir: bool,
     #[sea_orm(index)]
     pub title: String,
-    #[sea_orm(index)]
-    pub album: Option<String>,
-    #[sea_orm(index)]
-    pub artist: Option<String>,
     #[sea_orm(default_value = 0)]
     pub track: i32,
     #[sea_orm(default_value = 0)]
     pub year: i32,
-    #[sea_orm(index)]
-    pub genre: Option<String>,
-    pub lyrics: Option<String>,
     #[sea_orm(default_value = 0)]
     pub size: i64,
     pub content_type: Option<String>,
@@ -50,8 +43,6 @@ pub struct Model {
     #[sea_orm(index)]
     pub album_id: Option<String>,
     #[sea_orm(index)]
-    pub artist_id: Option<String>,
-    #[sea_orm(index)]
     pub music_folder_id: i32,
     #[sea_orm(default_value = "music")]
     pub r#type: String,
@@ -65,6 +56,12 @@ pub enum Relation {
     SongArtist,
     #[sea_orm(has_many = "super::song_genre::Entity")]
     SongGenre,
+    #[sea_orm(
+        belongs_to = "super::album::Entity",
+        from = "Column::AlbumId",
+        to = "super::album::Column::Id"
+    )]
+    Album,
 }
 
 impl Related<super::artist::Entity> for Entity {

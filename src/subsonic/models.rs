@@ -1,7 +1,8 @@
 use crate::browser::{
-    AlbumWithStats, ArtistWithStats, GenreWithStats, PlaylistWithSongs, PlaylistWithStats,
+    AlbumWithStats, ArtistWithStats, ChildWithMetadata, GenreWithStats, PlaylistWithSongs,
+    PlaylistWithStats,
 };
-use crate::models::{artist, child, user};
+use crate::models::{artist, user};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
@@ -261,8 +262,6 @@ pub struct Directory {
     pub total_count: Option<i64>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub child: Vec<Child>,
-    #[serde(rename = "parent", skip_serializing_if = "Vec::is_empty")]
-    pub parents: Vec<Child>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -370,8 +369,8 @@ impl Child {
     }
 }
 
-impl From<child::Model> for Child {
-    fn from(c: child::Model) -> Self {
+impl From<ChildWithMetadata> for Child {
+    fn from(c: ChildWithMetadata) -> Self {
         let cover_art = if let Some(ref aid) = c.album_id {
             Some(format!("al-{}", aid))
         } else {

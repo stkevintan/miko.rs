@@ -1,11 +1,49 @@
-use crate::browser::{Browser, DirectoryWithChildren, GenreWithStats};
-use crate::models::{artist, child, genre, song_genre, album};
+use crate::browser::{Browser, ChildWithMetadata, DirectoryWithChildren, GenreWithStats};
+use crate::models::{artist, child, genre, song_genre, album, song_artist};
 use sea_orm::{
-    ColumnTrait, DbErr, EntityTrait, JoinType, PaginatorTrait, QueryFilter, QueryOrder, QuerySelect
+    ColumnTrait, DbErr, EntityTrait, JoinType, PaginatorTrait, QueryFilter, QueryOrder, QuerySelect, RelationTrait
 };
 use sea_orm::sea_query::Expr;
 
 impl Browser {
+    pub fn song_with_metadata_query() -> sea_orm::Select<child::Entity> {
+        child::Entity::find()
+            .column_as(artist::Column::Name, "artist")
+            .column_as(artist::Column::Id, "artist_id")
+            .column_as(genre::Column::Name, "genre")
+            .column_as(album::Column::Name, "album")
+            .join_rev(
+                JoinType::LeftJoin,
+                song_artist::Entity::belongs_to(child::Entity)
+                    .from(song_artist::Column::SongId)
+                    .to(child::Column::Id)
+                    .into(),
+            )
+            .join_rev(
+                JoinType::LeftJoin,
+                artist::Entity::belongs_to(song_artist::Entity)
+                    .from(artist::Column::Id)
+                    .to(song_artist::Column::ArtistId)
+                    .into(),
+            )
+            .join_rev(
+                JoinType::LeftJoin,
+                song_genre::Entity::belongs_to(child::Entity)
+                    .from(song_genre::Column::SongId)
+                    .to(child::Column::Id)
+                    .into(),
+            )
+            .join_rev(
+                JoinType::LeftJoin,
+                genre::Entity::belongs_to(song_genre::Entity)
+                    .from(genre::Column::Name)
+                    .to(song_genre::Column::GenreName)
+                    .into(),
+            )
+            .join(JoinType::LeftJoin, child::Relation::Album.def())
+            .group_by(child::Column::Id)
+    }
+
     pub async fn get_indexes(
         &self,
         folder_id: Option<i32>,
@@ -57,7 +95,7 @@ impl Browser {
             .count(&self.db)
             .await?;
 
-        let mut query = child::Entity::find()
+        let mut query = Self::song_with_metadata_query()
             .filter(child::Column::Parent.eq(dir.id.clone()))
             .order_by_desc(child::Column::IsDir)
             .order_by_asc(child::Column::Title);
@@ -66,30 +104,12 @@ impl Browser {
             query = query.offset(offset).limit(limit);
         }
 
-        let children = query.all(&self.db).await?;
-
-        let mut parents = Vec::new();
-        if let Some(parent_id) = dir.parent.as_ref() {
-            let mut current_parent_id = Some(parent_id.clone());
-            while let Some(pid) = current_parent_id {
-                if let Some(p) = child::Entity::find_by_id(pid)
-                    .one(&self.db)
-                    .await?
-                {
-                    current_parent_id = p.parent.clone();
-                    parents.push(p);
-                } else {
-                    break;
-                }
-            }
-            parents.reverse();
-        }
+        let children = query.into_model::<ChildWithMetadata>().all(&self.db).await?;
 
         Ok(DirectoryWithChildren {
             dir,
             children,
             total_count: total_count as i64,
-            parents,
         })
     }
 

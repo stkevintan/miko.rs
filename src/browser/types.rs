@@ -64,14 +64,45 @@ pub struct PlaylistWithStats {
 
 pub struct PlaylistWithSongs {
     pub playlist: PlaylistWithStats,
-    pub entry: Vec<child::Model>,
+    pub entry: Vec<ChildWithMetadata>,
 }
 
 pub struct DirectoryWithChildren {
     pub dir: child::Model,
-    pub children: Vec<child::Model>,
+    pub children: Vec<ChildWithMetadata>,
     pub total_count: i64,
-    pub parents: Vec<child::Model>,
+}
+
+#[derive(Debug, FromQueryResult, Clone)]
+pub struct ChildWithMetadata {
+    pub id: String,
+    pub parent: Option<String>,
+    pub is_dir: bool,
+    pub title: String,
+    pub album: Option<String>,
+    pub artist: Option<String>,
+    pub track: i32,
+    pub year: i32,
+    pub genre: Option<String>,
+    pub size: i64,
+    pub content_type: Option<String>,
+    pub suffix: Option<String>,
+    pub transcoded_content_type: Option<String>,
+    pub transcoded_suffix: Option<String>,
+    pub duration: i32,
+    pub bit_rate: i32,
+    pub path: String,
+    pub is_video: bool,
+    pub user_rating: i32,
+    pub average_rating: f64,
+    pub play_count: i64,
+    pub last_played: Option<chrono::DateTime<chrono::Utc>>,
+    pub disc_number: i32,
+    pub created: Option<chrono::DateTime<chrono::Utc>>,
+    pub starred: Option<chrono::DateTime<chrono::Utc>>,
+    pub album_id: Option<String>,
+    pub artist_id: Option<String>,
+    pub r#type: String,
 }
 
 #[derive(Debug, Default, Deserialize)]
