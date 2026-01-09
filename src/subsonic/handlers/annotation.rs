@@ -110,15 +110,16 @@ pub async fn set_rating(
     query: Query<SetRatingQuery>,
 ) -> impl IntoResponse {
     use crate::models::{child, album, artist};
+    let SetRatingQuery { id, rating } = query.0;
     
-    if query.rating < 0 || query.rating > 5 {
+    if rating < 0 || rating > 5 {
         return send_response(SubsonicResponse::new_error(0, "Invalid rating".into()), &params.f);
     }
 
     // Try child first
     let res = child::Entity::update_many()
-        .filter(child::Column::Id.eq(query.id.clone()))
-        .col_expr(child::Column::UserRating, Expr::value(query.rating))
+        .filter(child::Column::Id.eq(id.clone()))
+        .col_expr(child::Column::UserRating, Expr::value(rating))
         .exec(db.0)
         .await;
 
@@ -135,8 +136,8 @@ pub async fn set_rating(
 
     // Try album
     let res = album::Entity::update_many()
-        .filter(album::Column::Id.eq(query.id.clone()))
-        .col_expr(album::Column::UserRating, Expr::value(query.rating))
+        .filter(album::Column::Id.eq(id.clone()))
+        .col_expr(album::Column::UserRating, Expr::value(rating))
         .exec(db.0)
         .await;
 
@@ -153,8 +154,8 @@ pub async fn set_rating(
 
     // Try artist
     let res = artist::Entity::update_many()
-        .filter(artist::Column::Id.eq(query.id.clone()))
-        .col_expr(artist::Column::UserRating, Expr::value(query.rating))
+        .filter(artist::Column::Id.eq(id))
+        .col_expr(artist::Column::UserRating, Expr::value(rating))
         .exec(db.0)
         .await;
 
