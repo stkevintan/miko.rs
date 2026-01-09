@@ -17,7 +17,7 @@ macro_rules! subsonic_routes {
     };
 }
 
-use crate::subsonic::handlers::{browsing, lists, playlists, scan, search, system, media, shared, user};
+use crate::subsonic::handlers::{browsing, lists, playlists, scan, search, system, media, shared, user, annotation};
 
 pub fn create_route() -> Route {
     let route = subsonic_routes!(
@@ -87,6 +87,12 @@ pub fn create_route() -> Route {
         ("/getNowPlaying", lists::get_now_playing),
         ("/getStarred", lists::get_starred),
         ("/getStarred2", lists::get_starred2),
+
+        // annotation
+        ("/star", annotation::star),
+        ("/unstar", annotation::unstar),
+        ("/setRating", annotation::set_rating),
+        ("/scrobble", annotation::scrobble),
     );
     Route::new().nest("/", route.with(middleware::SubsonicAuth))
 }

@@ -223,6 +223,21 @@ impl Browser {
             .await
     }
 
+    pub async fn get_songs_by_ids(
+        &self,
+        ids: Vec<String>,
+    ) -> Result<Vec<ChildWithMetadata>, sea_orm::DbErr> {
+        if ids.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        Self::song_with_metadata_query()
+            .filter(child::Column::Id.is_in(ids))
+            .into_model::<ChildWithMetadata>()
+            .all(&self.db)
+            .await
+    }
+
     pub async fn get_starred_items(
         &self,
         folder_id: Option<i32>,

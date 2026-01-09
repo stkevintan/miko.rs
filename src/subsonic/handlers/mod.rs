@@ -7,3 +7,4 @@ pub mod playlists;
 pub mod media;
 pub mod shared;
 pub mod user;
+pub mod annotation;
