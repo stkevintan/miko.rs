@@ -2,7 +2,7 @@ use sea_orm_migration::prelude::*;
 use sea_orm_migration::prelude::async_trait::async_trait;
 
 #[derive(Iden)]
-pub enum Users {
+enum Users {
     #[iden = "users"]
     Table,
     Username,
@@ -29,7 +29,7 @@ pub enum Users {
 }
 
 #[derive(Iden)]
-pub enum MusicFolders {
+enum MusicFolders {
     #[iden = "music_folders"]
     Table,
     Id,
@@ -38,7 +38,7 @@ pub enum MusicFolders {
 }
 
 #[derive(Iden)]
-pub enum UserMusicFolders {
+enum UserMusicFolders {
     #[iden = "user_music_folders"]
     Table,
     Username,
@@ -263,54 +263,6 @@ impl MigrationTrait for Migration {
             )
             .await?;
 
-        // UserMusicFolders
-        manager
-            .create_table(
-                Table::create()
-                    .table(UserMusicFolders::Table)
-                    .if_not_exists()
-                    .col(ColumnDef::new(UserMusicFolders::Username).string().not_null())
-                    .col(ColumnDef::new(UserMusicFolders::MusicFolderId).integer().not_null())
-                    .primary_key(Index::create().col(UserMusicFolders::Username).col(UserMusicFolders::MusicFolderId))
-                    .to_owned(),
-            )
-            .await?;
-
-        // Children (Songs/Directories)
-        manager
-            .create_table(
-                Table::create()
-                    .table(Children::Table)
-                    .if_not_exists()
-                    .col(ColumnDef::new(Children::Id).string().not_null().primary_key())
-                    .col(ColumnDef::new(Children::Parent).string())
-                    .col(ColumnDef::new(Children::IsDir).boolean().not_null())
-                    .col(ColumnDef::new(Children::Title).string().not_null())
-                    .col(ColumnDef::new(Children::Track).integer().not_null().default(0))
-                    .col(ColumnDef::new(Children::Year).integer().not_null().default(0))
-                    .col(ColumnDef::new(Children::Size).big_integer().not_null().default(0))
-                    .col(ColumnDef::new(Children::ContentType).string())
-                    .col(ColumnDef::new(Children::Suffix).string())
-                    .col(ColumnDef::new(Children::TranscodedContentType).string())
-                    .col(ColumnDef::new(Children::TranscodedSuffix).string())
-                    .col(ColumnDef::new(Children::Duration).integer().not_null().default(0))
-                    .col(ColumnDef::new(Children::BitRate).integer().not_null().default(0))
-                    .col(ColumnDef::new(Children::Path).string().not_null().unique_key())
-                    .col(ColumnDef::new(Children::IsVideo).boolean().not_null().default(false))
-                    .col(ColumnDef::new(Children::UserRating).integer().not_null().default(0))
-                    .col(ColumnDef::new(Children::AverageRating).double().not_null().default(0.0))
-                    .col(ColumnDef::new(Children::PlayCount).big_integer().not_null().default(0))
-                    .col(ColumnDef::new(Children::LastPlayed).date_time())
-                    .col(ColumnDef::new(Children::DiscNumber).integer().not_null().default(0))
-                    .col(ColumnDef::new(Children::Created).date_time())
-                    .col(ColumnDef::new(Children::Starred).date_time())
-                    .col(ColumnDef::new(Children::AlbumId).string())
-                    .col(ColumnDef::new(Children::MusicFolderId).integer().not_null())
-                    .col(ColumnDef::new(Children::Type).string().not_null().default("music"))
-                    .to_owned(),
-            )
-            .await?;
-
         // Artists
         manager
             .create_table(
@@ -355,6 +307,94 @@ impl MigrationTrait for Migration {
             )
             .await?;
 
+        // UserMusicFolders
+        manager
+            .create_table(
+                Table::create()
+                    .table(UserMusicFolders::Table)
+                    .if_not_exists()
+                    .col(ColumnDef::new(UserMusicFolders::Username).string().not_null())
+                    .col(ColumnDef::new(UserMusicFolders::MusicFolderId).integer().not_null())
+                    .primary_key(Index::create().col(UserMusicFolders::Username).col(UserMusicFolders::MusicFolderId))
+                    .foreign_key(
+                        ForeignKey::create()
+                            .name("fk-user_music_folders-username")
+                            .from(UserMusicFolders::Table, UserMusicFolders::Username)
+                            .to(Users::Table, Users::Username)
+                            .on_delete(ForeignKeyAction::Cascade)
+                            .on_update(ForeignKeyAction::Cascade),
+                    )
+                    .foreign_key(
+                        ForeignKey::create()
+                            .name("fk-user_music_folders-music_folder_id")
+                            .from(UserMusicFolders::Table, UserMusicFolders::MusicFolderId)
+                            .to(MusicFolders::Table, MusicFolders::Id)
+                            .on_delete(ForeignKeyAction::Cascade)
+                            .on_update(ForeignKeyAction::Cascade),
+                    )
+                    .to_owned(),
+            )
+            .await?;
+
+        // Children (Songs/Directories)
+        manager
+            .create_table(
+                Table::create()
+                    .table(Children::Table)
+                    .if_not_exists()
+                    .col(ColumnDef::new(Children::Id).string().not_null().primary_key())
+                    .col(ColumnDef::new(Children::Parent).string())
+                    .col(ColumnDef::new(Children::IsDir).boolean().not_null())
+                    .col(ColumnDef::new(Children::Title).string().not_null())
+                    .col(ColumnDef::new(Children::Track).integer().not_null().default(0))
+                    .col(ColumnDef::new(Children::Year).integer().not_null().default(0))
+                    .col(ColumnDef::new(Children::Size).big_integer().not_null().default(0))
+                    .col(ColumnDef::new(Children::ContentType).string())
+                    .col(ColumnDef::new(Children::Suffix).string())
+                    .col(ColumnDef::new(Children::TranscodedContentType).string())
+                    .col(ColumnDef::new(Children::TranscodedSuffix).string())
+                    .col(ColumnDef::new(Children::Duration).integer().not_null().default(0))
+                    .col(ColumnDef::new(Children::BitRate).integer().not_null().default(0))
+                    .col(ColumnDef::new(Children::Path).string().not_null().unique_key())
+                    .col(ColumnDef::new(Children::IsVideo).boolean().not_null().default(false))
+                    .col(ColumnDef::new(Children::UserRating).integer().not_null().default(0))
+                    .col(ColumnDef::new(Children::AverageRating).double().not_null().default(0.0))
+                    .col(ColumnDef::new(Children::PlayCount).big_integer().not_null().default(0))
+                    .col(ColumnDef::new(Children::LastPlayed).date_time())
+                    .col(ColumnDef::new(Children::DiscNumber).integer().not_null().default(0))
+                    .col(ColumnDef::new(Children::Created).date_time())
+                    .col(ColumnDef::new(Children::Starred).date_time())
+                    .col(ColumnDef::new(Children::AlbumId).string())
+                    .col(ColumnDef::new(Children::MusicFolderId).integer().not_null())
+                    .col(ColumnDef::new(Children::Type).string().not_null().default("music"))
+                    .foreign_key(
+                        ForeignKey::create()
+                            .name("fk-children-parent")
+                            .from(Children::Table, Children::Parent)
+                            .to(Children::Table, Children::Id)
+                            .on_delete(ForeignKeyAction::Cascade)
+                            .on_update(ForeignKeyAction::Cascade),
+                    )
+                    .foreign_key(
+                        ForeignKey::create()
+                            .name("fk-children-album_id")
+                            .from(Children::Table, Children::AlbumId)
+                            .to(Albums::Table, Albums::Id)
+                            .on_delete(ForeignKeyAction::SetNull)
+                            .on_update(ForeignKeyAction::Cascade),
+                    )
+                    .foreign_key(
+                        ForeignKey::create()
+                            .name("fk-children-music_folder_id")
+                            .from(Children::Table, Children::MusicFolderId)
+                            .to(MusicFolders::Table, MusicFolders::Id)
+                            .on_delete(ForeignKeyAction::Cascade)
+                            .on_update(ForeignKeyAction::Cascade),
+                    )
+                    .to_owned(),
+            )
+            .await?;
+
         // SongArtists
         manager
             .create_table(
@@ -364,6 +404,22 @@ impl MigrationTrait for Migration {
                     .col(ColumnDef::new(SongArtists::SongId).string().not_null())
                     .col(ColumnDef::new(SongArtists::ArtistId).string().not_null())
                     .primary_key(Index::create().col(SongArtists::SongId).col(SongArtists::ArtistId))
+                    .foreign_key(
+                        ForeignKey::create()
+                            .name("fk-song_artists-song_id")
+                            .from(SongArtists::Table, SongArtists::SongId)
+                            .to(Children::Table, Children::Id)
+                            .on_delete(ForeignKeyAction::Cascade)
+                            .on_update(ForeignKeyAction::Cascade),
+                    )
+                    .foreign_key(
+                        ForeignKey::create()
+                            .name("fk-song_artists-artist_id")
+                            .from(SongArtists::Table, SongArtists::ArtistId)
+                            .to(Artists::Table, Artists::Id)
+                            .on_delete(ForeignKeyAction::Cascade)
+                            .on_update(ForeignKeyAction::Cascade),
+                    )
                     .to_owned(),
             )
             .await?;
@@ -377,6 +433,22 @@ impl MigrationTrait for Migration {
                     .col(ColumnDef::new(SongGenres::SongId).string().not_null())
                     .col(ColumnDef::new(SongGenres::GenreName).string().not_null())
                     .primary_key(Index::create().col(SongGenres::SongId).col(SongGenres::GenreName))
+                    .foreign_key(
+                        ForeignKey::create()
+                            .name("fk-song_genres-song_id")
+                            .from(SongGenres::Table, SongGenres::SongId)
+                            .to(Children::Table, Children::Id)
+                            .on_delete(ForeignKeyAction::Cascade)
+                            .on_update(ForeignKeyAction::Cascade),
+                    )
+                    .foreign_key(
+                        ForeignKey::create()
+                            .name("fk-song_genres-genre_name")
+                            .from(SongGenres::Table, SongGenres::GenreName)
+                            .to(Genres::Table, Genres::Name)
+                            .on_delete(ForeignKeyAction::Cascade)
+                            .on_update(ForeignKeyAction::Cascade),
+                    )
                     .to_owned(),
             )
             .await?;
@@ -390,6 +462,22 @@ impl MigrationTrait for Migration {
                     .col(ColumnDef::new(AlbumArtists::AlbumId).string().not_null())
                     .col(ColumnDef::new(AlbumArtists::ArtistId).string().not_null())
                     .primary_key(Index::create().col(AlbumArtists::AlbumId).col(AlbumArtists::ArtistId))
+                    .foreign_key(
+                        ForeignKey::create()
+                            .name("fk-album_artists-album_id")
+                            .from(AlbumArtists::Table, AlbumArtists::AlbumId)
+                            .to(Albums::Table, Albums::Id)
+                            .on_delete(ForeignKeyAction::Cascade)
+                            .on_update(ForeignKeyAction::Cascade),
+                    )
+                    .foreign_key(
+                        ForeignKey::create()
+                            .name("fk-album_artists-artist_id")
+                            .from(AlbumArtists::Table, AlbumArtists::ArtistId)
+                            .to(Artists::Table, Artists::Id)
+                            .on_delete(ForeignKeyAction::Cascade)
+                            .on_update(ForeignKeyAction::Cascade),
+                    )
                     .to_owned(),
             )
             .await?;
@@ -407,6 +495,14 @@ impl MigrationTrait for Migration {
                     .col(ColumnDef::new(Playlists::Public).boolean().not_null().default(false))
                     .col(ColumnDef::new(Playlists::CreatedAt).date_time().not_null())
                     .col(ColumnDef::new(Playlists::UpdatedAt).date_time().not_null())
+                    .foreign_key(
+                        ForeignKey::create()
+                            .name("fk-playlists-owner")
+                            .from(Playlists::Table, Playlists::Owner)
+                            .to(Users::Table, Users::Username)
+                            .on_delete(ForeignKeyAction::Cascade)
+                            .on_update(ForeignKeyAction::Cascade),
+                    )
                     .to_owned(),
             )
             .await?;
@@ -432,6 +528,22 @@ impl MigrationTrait for Migration {
                             .col(PlaylistSongs::PlaylistId)
                             .col(PlaylistSongs::Index),
                     )
+                    .foreign_key(
+                        ForeignKey::create()
+                            .name("fk-playlist_songs-playlist_id")
+                            .from(PlaylistSongs::Table, PlaylistSongs::PlaylistId)
+                            .to(Playlists::Table, Playlists::Id)
+                            .on_delete(ForeignKeyAction::Cascade)
+                            .on_update(ForeignKeyAction::Cascade),
+                    )
+                    .foreign_key(
+                        ForeignKey::create()
+                            .name("fk-playlist_songs-song_id")
+                            .from(PlaylistSongs::Table, PlaylistSongs::SongId)
+                            .to(Children::Table, Children::Id)
+                            .on_delete(ForeignKeyAction::Cascade)
+                            .on_update(ForeignKeyAction::Cascade),
+                    )
                     .to_owned(),
             )
             .await?;
@@ -444,6 +556,14 @@ impl MigrationTrait for Migration {
                     .if_not_exists()
                     .col(ColumnDef::new(Lyrics::SongId).string().not_null().primary_key())
                     .col(ColumnDef::new(Lyrics::Content).text().not_null())
+                    .foreign_key(
+                        ForeignKey::create()
+                            .name("fk-lyrics-song_id")
+                            .from(Lyrics::Table, Lyrics::SongId)
+                            .to(Children::Table, Children::Id)
+                            .on_delete(ForeignKeyAction::Cascade)
+                            .on_update(ForeignKeyAction::Cascade),
+                    )
                     .to_owned(),
             )
             .await?;
@@ -457,6 +577,22 @@ impl MigrationTrait for Migration {
                     .col(ColumnDef::new(AlbumGenres::AlbumId).string().not_null())
                     .col(ColumnDef::new(AlbumGenres::GenreName).string().not_null())
                     .primary_key(Index::create().col(AlbumGenres::AlbumId).col(AlbumGenres::GenreName))
+                    .foreign_key(
+                        ForeignKey::create()
+                            .name("fk-album_genres-album_id")
+                            .from(AlbumGenres::Table, AlbumGenres::AlbumId)
+                            .to(Albums::Table, Albums::Id)
+                            .on_delete(ForeignKeyAction::Cascade)
+                            .on_update(ForeignKeyAction::Cascade),
+                    )
+                    .foreign_key(
+                        ForeignKey::create()
+                            .name("fk-album_genres-genre_name")
+                            .from(AlbumGenres::Table, AlbumGenres::GenreName)
+                            .to(Genres::Table, Genres::Name)
+                            .on_delete(ForeignKeyAction::Cascade)
+                            .on_update(ForeignKeyAction::Cascade),
+                    )
                     .to_owned(),
             )
             .await?;
@@ -472,6 +608,22 @@ impl MigrationTrait for Migration {
                     .col(ColumnDef::new(NowPlaying::SongId).string().not_null())
                     .col(ColumnDef::new(NowPlaying::UpdatedAt).date_time().not_null())
                     .primary_key(Index::create().col(NowPlaying::Username).col(NowPlaying::PlayerName))
+                    .foreign_key(
+                        ForeignKey::create()
+                            .name("fk-now_playing-username")
+                            .from(NowPlaying::Table, NowPlaying::Username)
+                            .to(Users::Table, Users::Username)
+                            .on_delete(ForeignKeyAction::Cascade)
+                            .on_update(ForeignKeyAction::Cascade),
+                    )
+                    .foreign_key(
+                        ForeignKey::create()
+                            .name("fk-now_playing-song_id")
+                            .from(NowPlaying::Table, NowPlaying::SongId)
+                            .to(Children::Table, Children::Id)
+                            .on_delete(ForeignKeyAction::Cascade)
+                            .on_update(ForeignKeyAction::Cascade),
+                    )
                     .to_owned(),
             )
             .await?;
@@ -489,6 +641,22 @@ impl MigrationTrait for Migration {
                     .col(ColumnDef::new(Bookmark::CreatedAt).date_time().not_null())
                     .col(ColumnDef::new(Bookmark::UpdatedAt).date_time().not_null())
                     .primary_key(Index::create().col(Bookmark::Username).col(Bookmark::SongId))
+                    .foreign_key(
+                        ForeignKey::create()
+                            .name("fk-bookmark-username")
+                            .from(Bookmark::Table, Bookmark::Username)
+                            .to(Users::Table, Users::Username)
+                            .on_delete(ForeignKeyAction::Cascade)
+                            .on_update(ForeignKeyAction::Cascade),
+                    )
+                    .foreign_key(
+                        ForeignKey::create()
+                            .name("fk-bookmark-song_id")
+                            .from(Bookmark::Table, Bookmark::SongId)
+                            .to(Children::Table, Children::Id)
+                            .on_delete(ForeignKeyAction::Cascade)
+                            .on_update(ForeignKeyAction::Cascade),
+                    )
                     .to_owned(),
             )
             .await?;
@@ -504,6 +672,14 @@ impl MigrationTrait for Migration {
                     .col(ColumnDef::new(PlayQueue::Position).big_integer().not_null().default(0))
                     .col(ColumnDef::new(PlayQueue::Changed).date_time().not_null())
                     .col(ColumnDef::new(PlayQueue::ChangedBy).string().not_null())
+                    .foreign_key(
+                        ForeignKey::create()
+                            .name("fk-play_queue-username")
+                            .from(PlayQueue::Table, PlayQueue::Username)
+                            .to(Users::Table, Users::Username)
+                            .on_delete(ForeignKeyAction::Cascade)
+                            .on_update(ForeignKeyAction::Cascade),
+                    )
                     .to_owned(),
             )
             .await?;
@@ -518,6 +694,22 @@ impl MigrationTrait for Migration {
                     .col(ColumnDef::new(PlayQueueSong::Index).integer().not_null())
                     .col(ColumnDef::new(PlayQueueSong::SongId).string().not_null())
                     .primary_key(Index::create().col(PlayQueueSong::Username).col(PlayQueueSong::Index))
+                    .foreign_key(
+                        ForeignKey::create()
+                            .name("fk-play_queue_song-username")
+                            .from(PlayQueueSong::Table, PlayQueueSong::Username)
+                            .to(Users::Table, Users::Username)
+                            .on_delete(ForeignKeyAction::Cascade)
+                            .on_update(ForeignKeyAction::Cascade),
+                    )
+                    .foreign_key(
+                        ForeignKey::create()
+                            .name("fk-play_queue_song-song_id")
+                            .from(PlayQueueSong::Table, PlayQueueSong::SongId)
+                            .to(Children::Table, Children::Id)
+                            .on_delete(ForeignKeyAction::Cascade)
+                            .on_update(ForeignKeyAction::Cascade),
+                    )
                     .to_owned(),
             )
             .await?;
@@ -537,10 +729,10 @@ impl MigrationTrait for Migration {
         manager.drop_table(Table::drop().table(AlbumArtists::Table).to_owned()).await?;
         manager.drop_table(Table::drop().table(SongGenres::Table).to_owned()).await?;
         manager.drop_table(Table::drop().table(SongArtists::Table).to_owned()).await?;
+        manager.drop_table(Table::drop().table(Children::Table).to_owned()).await?;
         manager.drop_table(Table::drop().table(Genres::Table).to_owned()).await?;
         manager.drop_table(Table::drop().table(Albums::Table).to_owned()).await?;
         manager.drop_table(Table::drop().table(Artists::Table).to_owned()).await?;
-        manager.drop_table(Table::drop().table(Children::Table).to_owned()).await?;
         manager.drop_table(Table::drop().table(UserMusicFolders::Table).to_owned()).await?;
         manager.drop_table(Table::drop().table(MusicFolders::Table).to_owned()).await?;
         manager.drop_table(Table::drop().table(Users::Table).to_owned()).await?;
