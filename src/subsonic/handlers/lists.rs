@@ -2,10 +2,11 @@ use crate::browser::{AlbumListOptions, Browser};
 use crate::subsonic::{
     common::{send_response, SubsonicParams},
     models::{
-        AlbumID3, AlbumList, AlbumList2, Artist, ArtistID3, Child, RandomSongs, SongsByGenre,
-        Starred, Starred2, SubsonicResponse, SubsonicResponseBody, NowPlaying, NowPlayingEntry,
+        AlbumID3, AlbumList, AlbumList2, Artist, ArtistID3, Child, NowPlaying, NowPlayingEntry,
+        RandomSongs, SongsByGenre, Starred, Starred2, SubsonicResponse, SubsonicResponseBody,
     },
 };
+use chrono::Utc;
 use poem::{
     handler,
     web::{Data, Query},
@@ -14,7 +15,6 @@ use poem::{
 use sea_orm::DatabaseConnection;
 use serde::Deserialize;
 use std::sync::Arc;
-use chrono::Utc;
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -196,6 +196,8 @@ pub async fn get_starred2(
     send_response(resp, &params.f)
 }
 
+const NOW_PLAYING_EXPIRATION_MINUTES: i64 = 10;
+
 #[handler]
 pub async fn get_now_playing(
     db: Data<&DatabaseConnection>,
@@ -206,7 +208,7 @@ pub async fn get_now_playing(
     use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 
     // Clean up outdated records (older than 10 minutes)
-    let ten_minutes_ago = Utc::now() - chrono::Duration::minutes(10);
+    let ten_minutes_ago = Utc::now() - chrono::Duration::minutes(NOW_PLAYING_EXPIRATION_MINUTES);
     let delete_result = now_playing::Entity::delete_many()
         .filter(now_playing::Column::UpdatedAt.lt(ten_minutes_ago))
         .exec(db.0)
