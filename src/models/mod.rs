@@ -12,3 +12,4 @@ pub mod album_genre;
 pub mod playlist;
 pub mod playlist_song;
 pub mod lyrics;
+pub mod now_playing;

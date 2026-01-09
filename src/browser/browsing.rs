@@ -131,12 +131,12 @@ impl Browser {
             .ok_or(DbErr::RecordNotFound("Directory not found".to_string()))?;
 
         let total_count = child::Entity::find()
-            .filter(child::Column::Parent.eq(dir.id.clone()))
+            .filter(child::Column::Parent.eq(&dir.id))
             .count(&self.db)
             .await?;
 
         let mut query = Self::song_with_metadata_query()
-            .filter(child::Column::Parent.eq(dir.id.clone()))
+            .filter(child::Column::Parent.eq(&dir.id))
             .order_by_desc(child::Column::IsDir)
             .order_by_asc(child::Column::Title);
 
