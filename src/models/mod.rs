@@ -13,3 +13,6 @@ pub mod playlist;
 pub mod playlist_song;
 pub mod lyrics;
 pub mod now_playing;
+pub mod bookmark;
+pub mod play_queue;
+pub mod play_queue_song;
