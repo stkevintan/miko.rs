@@ -7,9 +7,8 @@ pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
     pub username: String,
     #[sea_orm(primary_key, auto_increment = false)]
-    pub player_id: i32,
+    pub player_name: String,
     pub song_id: String,
-    pub player_name: Option<String>,
     pub updated_at: DateTimeUtc,
 }
 

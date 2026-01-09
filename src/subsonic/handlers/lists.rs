@@ -266,10 +266,9 @@ pub async fn get_now_playing(
             let minutes_ago = (now - record.updated_at).num_minutes() as i32;
             entries.push(NowPlayingEntry {
                 child: song_metadata.clone().into(),
-                username: record.username.clone(),
+                username: record.username,
                 minutes_ago,
-                player_id: record.player_id,
-                player_name: record.player_name.clone(),
+                player_name: record.player_name,
             });
         }
     }

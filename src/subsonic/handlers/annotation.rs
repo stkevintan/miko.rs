@@ -181,17 +181,25 @@ pub async fn scrobble(
     use crate::models::{child, now_playing};
     use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, Set};
 
-    let submission = query.submission.unwrap_or(true);
-    let username = params.u.clone().unwrap_or_else(|| "guest".to_string());
-    let player_id = 1; // Default player ID for now
+    let ScrobbleQuery { id: song_id, submission } = query.0;
+    let submission = submission.unwrap_or(false);
+    let username = params
+        .u
+        .as_deref()
+        .map(ammonia::clean)
+        .unwrap_or_else(|| "guest".to_string());
+    let player_name = params
+        .c
+        .as_deref()
+        .map(ammonia::clean)
+        .unwrap_or_else(|| "unknown".to_string());
 
     if !submission {
         let now = chrono::Utc::now();
         let np = now_playing::ActiveModel {
             username: Set(username),
-            player_id: Set(player_id),
-            song_id: Set(query.id.clone()),
-            player_name: Set(params.c.clone()),
+            player_name: Set(player_name),
+            song_id: Set(song_id),
             updated_at: Set(now),
         };
 
@@ -199,11 +207,10 @@ pub async fn scrobble(
             .on_conflict(
                 sea_orm::sea_query::OnConflict::columns([
                     now_playing::Column::Username,
-                    now_playing::Column::PlayerId,
+                    now_playing::Column::PlayerName,
                 ])
                 .update_columns([
                     now_playing::Column::SongId,
-                    now_playing::Column::PlayerName,
                     now_playing::Column::UpdatedAt,
                 ])
                 .to_owned(),
@@ -223,7 +230,7 @@ pub async fn scrobble(
 
     let now = chrono::Utc::now();
     let res = child::Entity::update_many()
-        .filter(child::Column::Id.eq(query.id.clone()))
+        .filter(child::Column::Id.eq(song_id))
         .col_expr(child::Column::PlayCount, Expr::col(child::Column::PlayCount).add(1))
         .col_expr(child::Column::LastPlayed, Expr::value(Some(now)))
         .exec(db.0)

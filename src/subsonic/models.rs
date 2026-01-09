@@ -591,10 +591,8 @@ pub struct NowPlayingEntry {
     pub username: String,
     #[serde(rename = "@minutesAgo")]
     pub minutes_ago: i32,
-    #[serde(rename = "@playerId")]
-    pub player_id: i32,
-    #[serde(rename = "@playerName", skip_serializing_if = "Option::is_none")]
-    pub player_name: Option<String>,
+    #[serde(rename = "@playerName")]
+    pub player_name: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
