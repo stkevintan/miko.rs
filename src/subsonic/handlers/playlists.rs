@@ -1,6 +1,6 @@
 use crate::browser::{Browser, UpdatePlaylistOptions};
 use crate::models::user;
-use crate::subsonic::common::{send_response, SubsonicParams};
+use crate::subsonic::common::{send_response, SubsonicParams, deserialize_vec};
 use crate::subsonic::models::{Playlist, Playlists, SubsonicResponse, SubsonicResponseBody};
 use poem::web::{Data, Query};
 use poem::{handler, IntoResponse};
@@ -71,7 +71,8 @@ pub async fn get_playlist(
 #[serde(rename_all = "camelCase")]
 pub struct CreatePlaylistParams {
     pub name: String,
-    pub song_id: Option<Vec<String>>,
+    #[serde(default, deserialize_with = "deserialize_vec")]
+    pub song_id: Vec<String>,
 }
 
 #[handler]
@@ -83,7 +84,7 @@ pub async fn create_playlist(
 ) -> impl IntoResponse {
     let name = query.name.clone();
     let owner = current_user.username.clone();
-    let song_ids = query.song_id.clone().unwrap_or_default();
+    let song_ids = query.song_id.clone();
 
     match browser.create_playlist(name, owner, song_ids).await {
         Ok(_) => {
@@ -105,8 +106,10 @@ pub struct UpdatePlaylistParams {
     pub name: Option<String>,
     pub comment: Option<String>,
     pub public: Option<bool>,
-    pub song_id_to_add: Option<Vec<String>>,
-    pub song_index_to_remove: Option<Vec<i32>>,
+    #[serde(default, deserialize_with = "deserialize_vec")]
+    pub song_id_to_add: Vec<String>,
+    #[serde(default, deserialize_with = "deserialize_vec")]
+    pub song_index_to_remove: Vec<i32>,
 }
 
 #[handler]
@@ -121,8 +124,8 @@ pub async fn update_playlist(
         name: query.name.clone(),
         comment: query.comment.clone(),
         public: query.public,
-        song_ids_to_add: query.song_id_to_add.clone().unwrap_or_default(),
-        song_indices_to_remove: query.song_index_to_remove.clone().unwrap_or_default(),
+        song_ids_to_add: query.song_id_to_add.clone(),
+        song_indices_to_remove: query.song_index_to_remove.clone(),
     };
 
     match browser

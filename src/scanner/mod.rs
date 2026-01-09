@@ -264,12 +264,12 @@ impl Scanner {
                             task.mod_time,
                             seen_artists,
                             seen_albums,
+                            seen_genres,
                         )
                         .await?;
                     active_child.album_id = Set(Some(album_id.clone()));
                 }
 
-                let mut new_genres = Vec::new();
                 let filtered_genres: Vec<String> = t.genres.iter()
                     .map(|g| g.trim())
                     .filter(|g| !g.is_empty())
@@ -277,24 +277,9 @@ impl Scanner {
                     .collect();
 
                 for g_name in &filtered_genres {
-                    many_to_many_genres.push(g_name.clone());
-                    if !seen_genres.contains(g_name) {
-                        new_genres.push(genre::ActiveModel {
-                            name: Set(g_name.clone()),
-                        });
-                        seen_genres.insert(g_name.clone());
+                    if let Ok(g_name) = self.ensure_genre(g_name, seen_genres).await {
+                        many_to_many_genres.push(g_name);
                     }
-                }
-
-                if !new_genres.is_empty() {
-                    genre::Entity::insert_many(new_genres)
-                        .on_conflict(
-                            sea_orm::sea_query::OnConflict::column(genre::Column::Name)
-                                .do_nothing()
-                                .to_owned(),
-                        )
-                        .exec_without_returning(&self.db)
-                        .await?;
                 }
 
                 if t.has_image {
@@ -439,6 +424,22 @@ impl Scanner {
         Ok(id)
     }
 
+    async fn ensure_genre(&self, name: &str, seen: &mut HashSet<String>) -> Result<String, anyhow::Error> {
+        let name = name.trim();
+        if !seen.contains(name) {
+            let obj = genre::ActiveModel {
+                name: Set(name.to_string()),
+            };
+            genre::Entity::insert(obj).on_conflict(
+                sea_orm::sea_query::OnConflict::column(genre::Column::Name)
+                    .do_nothing()
+                    .to_owned()
+            ).exec_without_returning(&self.db).await?;
+            seen.insert(name.to_string());
+        }
+        Ok(name.to_string())
+    }
+
     async fn ensure_album(
         &self,
         name: String,
@@ -448,6 +449,7 @@ impl Scanner {
         created: chrono::DateTime<chrono::Utc>,
         seen_artists: &mut HashSet<String>,
         seen_albums: &mut HashSet<String>,
+        seen_genres: &mut HashSet<String>,
     ) -> Result<String, anyhow::Error> {
         let artist_name = artist_names.join("; ");
         let id = utils::generate_album_id(&artist_name, &name);
@@ -513,10 +515,12 @@ impl Scanner {
             let g_name = g_name.trim();
             if g_name.is_empty() { continue; }
 
-            album_genre_models.push(album_genre::ActiveModel {
-                album_id: Set(id.clone()),
-                genre_name: Set(g_name.to_string()),
-            });
+            if let Ok(g_name) = self.ensure_genre(g_name, seen_genres).await {
+                album_genre_models.push(album_genre::ActiveModel {
+                    album_id: Set(id.clone()),
+                    genre_name: Set(g_name),
+                });
+            }
         }
 
         if !album_genre_models.is_empty() {
