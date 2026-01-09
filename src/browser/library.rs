@@ -1,6 +1,6 @@
 use crate::browser::types::{AlbumListOptions, AlbumWithStats, ArtistWithStats, ChildWithMetadata};
 use crate::browser::Browser;
-use crate::models::{album, album_artist, artist, child, genre, song_artist};
+use crate::models::{album, album_artist, artist, child, genre, song_artist, album_genre};
 use sea_orm::{
     ColumnTrait, DbErr, EntityTrait, JoinType, Order, QueryFilter, QueryOrder, QuerySelect,
 };
@@ -15,19 +15,7 @@ impl Browser {
         let size = opts.size.unwrap_or(10);
         let offset = opts.offset.unwrap_or(0);
 
-        let mut query = album::Entity::find()
-            .column_as(child::Column::Id.count(), "song_count")
-            .column_as(child::Column::Duration.sum(), "duration")
-            .column_as(child::Column::PlayCount.sum(), "play_count")
-            .column_as(child::Column::LastPlayed.max(), "last_played")
-            .join_rev(
-                JoinType::LeftJoin,
-                child::Entity::belongs_to(album::Entity)
-                    .from(child::Column::AlbumId)
-                    .to(album::Column::Id)
-                    .into(),
-            )
-            .group_by(album::Column::Id);
+        let mut query = Self::album_with_stats_query();
 
         if let Some(folder_id) = opts.music_folder_id {
             query = query.filter(child::Column::MusicFolderId.eq(folder_id));
@@ -44,7 +32,15 @@ impl Browser {
             }
             "byGenre" => {
                 if let Some(ref genre) = opts.genre {
-                    query = query.filter(album::Column::Genre.eq(genre.clone()));
+                    query = query.filter(
+                        album::Column::Id.in_subquery(
+                            Query::select()
+                                .column(album_genre::Column::AlbumId)
+                                .from(album_genre::Entity)
+                                .and_where(album_genre::Column::GenreName.eq(genre.clone()))
+                                .to_owned()
+                        )
+                    );
                 }
             }
             "starred" => {
@@ -63,7 +59,7 @@ impl Browser {
             "recent" => query.order_by_desc(Expr::cust("last_played")),
             "starred" => query.order_by_desc(album::Column::Starred),
             "alphabeticalByName" => query.order_by_asc(album::Column::Name),
-            "alphabeticalByArtist" => query.order_by_asc(album::Column::Artist),
+            "alphabeticalByArtist" => query.order_by_asc(artist::Column::Name),
             "byYear" => query.order_by_desc(album::Column::Year),
             _ => query.order_by_desc(album::Column::Created),
         };
@@ -121,7 +117,7 @@ impl Browser {
     }
 
     pub async fn get_albums_by_artist(&self, artist_id: &str) -> Result<Vec<AlbumWithStats>, DbErr> {
-        album::Entity::find()
+        Self::album_with_stats_query()
             .join_rev(
                 JoinType::InnerJoin,
                 album_artist::Entity::belongs_to(album::Entity)
@@ -130,18 +126,6 @@ impl Browser {
                     .into(),
             )
             .filter(album_artist::Column::ArtistId.eq(artist_id))
-            .column_as(child::Column::Id.count(), "song_count")
-            .column_as(child::Column::Duration.sum(), "duration")
-            .column_as(child::Column::PlayCount.sum(), "play_count")
-            .column_as(child::Column::LastPlayed.max(), "last_played")
-            .join_rev(
-                JoinType::LeftJoin,
-                child::Entity::belongs_to(album::Entity)
-                    .from(child::Column::AlbumId)
-                    .to(album::Column::Id)
-                    .into(),
-            )
-            .group_by(album::Column::Id)
             .order_by_desc(album::Column::Year)
             .order_by_asc(album::Column::Name)
             .into_model::<AlbumWithStats>()
@@ -165,20 +149,8 @@ impl Browser {
     }
 
     async fn get_album_with_stats(&self, id: &str) -> Result<AlbumWithStats, DbErr> {
-        album::Entity::find()
+        Self::album_with_stats_query()
             .filter(album::Column::Id.eq(id))
-            .column_as(child::Column::Id.count(), "song_count")
-            .column_as(child::Column::Duration.sum(), "duration")
-            .column_as(child::Column::PlayCount.sum(), "play_count")
-            .column_as(child::Column::LastPlayed.max(), "last_played")
-            .join_rev(
-                JoinType::LeftJoin,
-                child::Entity::belongs_to(album::Entity)
-                    .from(child::Column::AlbumId)
-                    .to(album::Column::Id)
-                    .into(),
-            )
-            .group_by(album::Column::Id)
             .into_model::<AlbumWithStats>()
             .one(&self.db)
             .await?

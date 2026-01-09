@@ -25,20 +25,8 @@ impl Browser {
             .group_by(artist::Column::Id);
 
         // Albums
-        let mut album_query = album::Entity::find()
-            .column_as(child::Column::Id.count(), "song_count")
-            .column_as(child::Column::Duration.sum(), "duration")
-            .column_as(child::Column::PlayCount.sum(), "play_count")
-            .column_as(child::Column::LastPlayed.max(), "last_played")
-            .join_rev(
-                JoinType::LeftJoin,
-                child::Entity::belongs_to(album::Entity)
-                    .from(child::Column::AlbumId)
-                    .to(album::Column::Id)
-                    .into(),
-            )
-            .filter(album::Column::Name.like(&search_query))
-            .group_by(album::Column::Id);
+        let mut album_query = Self::album_with_stats_query()
+            .filter(album::Column::Name.like(&search_query));
 
         let mut song_query = Self::song_with_metadata_query()
             .filter(child::Column::IsDir.eq(false))

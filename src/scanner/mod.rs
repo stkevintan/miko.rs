@@ -4,7 +4,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::mpsc;
 use sea_orm::{DatabaseConnection, EntityTrait, QueryFilter, ColumnTrait, Set, QuerySelect, ConnectionTrait};
 use crate::config::Config;
-use crate::models::{child, music_folder, artist, album, album_artist, genre, song_artist, song_genre, lyrics};
+use crate::models::{child, music_folder, artist, album, album_artist, genre, song_artist, song_genre, album_genre, lyrics};
 use crate::scanner::walker::{Walker, WalkTask};
 use std::path::Path;
 use std::collections::{HashMap, HashSet};
@@ -264,7 +264,7 @@ impl Scanner {
                             t.album.clone(),
                             album_artists,
                             t.year.unwrap_or(0),
-                            t.genre.clone(),
+                            t.genres.clone(),
                             task.mod_time,
                             seen_artists,
                             seen_albums,
@@ -448,7 +448,7 @@ impl Scanner {
         name: String,
         artist_names: Vec<String>,
         year: i32,
-        genre: String,
+        genres: Vec<String>,
         created: chrono::DateTime<chrono::Utc>,
         seen_artists: &mut HashSet<String>,
         seen_albums: &mut HashSet<String>,
@@ -457,23 +457,11 @@ impl Scanner {
         let id = utils::generate_album_id(&artist_name, &name);
 
         if !seen_albums.contains(&id) {
-            // get first artist as main artist
-            let main_artist = if artist_names.is_empty() {
-                "Unknown Artist".to_string()
-            } else {
-                artist_names[0].clone()
-            };
-
-            let artist_id = self.ensure_artist(&main_artist, seen_artists).await?;
-
             let obj = album::ActiveModel {
                 id: Set(id.clone()),
                 name: Set(name),
-                artist: Set((!artist_name.trim().is_empty()).then(|| artist_name.clone())),
-                artist_id: Set(Some(artist_id)),
                 created: Set(created),
                 year: Set(year),
-                genre: Set((!genre.trim().is_empty()).then(|| genre)),
                 user_rating: Set(0),
                 average_rating: Set(0.0),
                 ..Default::default()
@@ -481,38 +469,74 @@ impl Scanner {
             album::Entity::insert(obj)
                 .on_conflict(
                     sea_orm::sea_query::OnConflict::column(album::Column::Id)
-                        .update_columns([album::Column::Year, album::Column::Genre])
+                        .update_columns([album::Column::Year])
                         .to_owned(),
                 )
                 .exec_without_returning(&self.db)
                 .await?;
 
-            let mut album_artist_models = Vec::new();
-            for a_name in &artist_names {
-                if let Ok(a_id) = self.ensure_artist(a_name, seen_artists).await {
-                    album_artist_models.push(album_artist::ActiveModel {
-                        album_id: Set(id.clone()),
-                        artist_id: Set(a_id),
-                    });
-                }
-            }
-
-            if !album_artist_models.is_empty() {
-                album_artist::Entity::insert_many(album_artist_models)
-                    .on_conflict(
-                        sea_orm::sea_query::OnConflict::columns([
-                            album_artist::Column::AlbumId,
-                            album_artist::Column::ArtistId,
-                        ])
-                        .do_nothing()
-                        .to_owned(),
-                    )
-                    .exec_without_returning(&self.db)
-                    .await?;
-            }
+            // Clear existing junctions when we first encounter the album in this scan
+            album_artist::Entity::delete_many()
+                .filter(album_artist::Column::AlbumId.eq(id.clone()))
+                .exec(&self.db)
+                .await?;
+            album_genre::Entity::delete_many()
+                .filter(album_genre::Column::AlbumId.eq(id.clone()))
+                .exec(&self.db)
+                .await?;
 
             seen_albums.insert(id.clone());
         }
+
+        let mut album_artist_models = Vec::new();
+        for a_name in &artist_names {
+            if let Ok(a_id) = self.ensure_artist(a_name, seen_artists).await {
+                album_artist_models.push(album_artist::ActiveModel {
+                    album_id: Set(id.clone()),
+                    artist_id: Set(a_id),
+                });
+            }
+        }
+
+        if !album_artist_models.is_empty() {
+            album_artist::Entity::insert_many(album_artist_models)
+                .on_conflict(
+                    sea_orm::sea_query::OnConflict::columns([
+                        album_artist::Column::AlbumId,
+                        album_artist::Column::ArtistId,
+                    ])
+                    .do_nothing()
+                    .to_owned(),
+                )
+                .exec_without_returning(&self.db)
+                .await?;
+        }
+
+        let mut album_genre_models = Vec::new();
+        for g_name in &genres {
+            let g_name = g_name.trim();
+            if g_name.is_empty() { continue; }
+
+            album_genre_models.push(album_genre::ActiveModel {
+                album_id: Set(id.clone()),
+                genre_name: Set(g_name.to_string()),
+            });
+        }
+
+        if !album_genre_models.is_empty() {
+            album_genre::Entity::insert_many(album_genre_models)
+                .on_conflict(
+                    sea_orm::sea_query::OnConflict::columns([
+                        album_genre::Column::AlbumId,
+                        album_genre::Column::GenreName,
+                    ])
+                    .do_nothing()
+                    .to_owned(),
+                )
+                .exec_without_returning(&self.db)
+                .await?;
+        }
+
         Ok(id)
     }
 
@@ -602,17 +626,17 @@ impl Scanner {
         // 3. Prune orphaned albums (no more songs referencing them)
         // First delete junction records for those albums
         self.db.execute_unprepared("DELETE FROM album_artists WHERE NOT EXISTS (SELECT 1 FROM children WHERE children.album_id = album_artists.album_id)").await?;
+        self.db.execute_unprepared("DELETE FROM album_genres WHERE NOT EXISTS (SELECT 1 FROM children WHERE children.album_id = album_genres.album_id)").await?;
         self.db.execute_unprepared("DELETE FROM albums WHERE NOT EXISTS (SELECT 1 FROM children WHERE children.album_id = albums.id)").await?;
         
         // 4. Prune orphaned artists
         self.db.execute_unprepared("DELETE FROM artists \
-            WHERE NOT EXISTS (SELECT 1 FROM albums WHERE albums.artist_id = artists.id) \
-            AND NOT EXISTS (SELECT 1 FROM song_artists WHERE song_artists.artist_id = artists.id) \
+            WHERE NOT EXISTS (SELECT 1 FROM song_artists WHERE song_artists.artist_id = artists.id) \
             AND NOT EXISTS (SELECT 1 FROM album_artists WHERE album_artists.artist_id = artists.id)").await?;
         
         // 5. Prune orphaned genres
         self.db.execute_unprepared("DELETE FROM genres \
-            WHERE NOT EXISTS (SELECT 1 FROM albums WHERE albums.genre = genres.name) \
+            WHERE NOT EXISTS (SELECT 1 FROM album_genres WHERE album_genres.genre_name = genres.name) \
             AND NOT EXISTS (SELECT 1 FROM song_genres WHERE song_genres.genre_name = genres.name)").await?;
 
         // Cleanup side table

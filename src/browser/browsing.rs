@@ -1,5 +1,5 @@
 use crate::browser::{Browser, ChildWithMetadata, DirectoryWithChildren, GenreWithStats};
-use crate::models::{artist, child, genre, song_genre, album, song_artist};
+use crate::models::{artist, child, genre, song_genre, album, song_artist, album_artist, album_genre};
 use sea_orm::{
     ColumnTrait, DbErr, EntityTrait, JoinType, PaginatorTrait, QueryFilter, QueryOrder, QuerySelect, RelationTrait
 };
@@ -8,9 +8,9 @@ use sea_orm::sea_query::Expr;
 impl Browser {
     pub fn song_with_metadata_query() -> sea_orm::Select<child::Entity> {
         child::Entity::find()
-            .column_as(artist::Column::Name, "artist")
-            .column_as(artist::Column::Id, "artist_id")
-            .column_as(genre::Column::Name, "genre")
+            .column_as(Expr::cust("GROUP_CONCAT(DISTINCT artists.name)"), "artist")
+            .column_as(Expr::cust("MIN(artists.id)"), "artist_id")
+            .column_as(Expr::cust("GROUP_CONCAT(DISTINCT genres.name)"), "genre")
             .column_as(album::Column::Name, "album")
             .join_rev(
                 JoinType::LeftJoin,
@@ -42,6 +42,46 @@ impl Browser {
             )
             .join(JoinType::LeftJoin, child::Relation::Album.def())
             .group_by(child::Column::Id)
+    }
+
+    pub fn album_with_stats_query() -> sea_orm::Select<album::Entity> {
+        album::Entity::find()
+            .column_as(child::Column::Id.count(), "song_count")
+            .column_as(child::Column::Duration.sum(), "duration")
+            .column_as(child::Column::PlayCount.sum(), "play_count")
+            .column_as(child::Column::LastPlayed.max(), "last_played")
+            .column_as(Expr::cust("GROUP_CONCAT(DISTINCT artists.name)"), "artist")
+            .column_as(Expr::cust("MIN(artists.id)"), "artist_id")
+            .column_as(Expr::cust("GROUP_CONCAT(DISTINCT album_genres.genre_name)"), "genre")
+            .join_rev(
+                JoinType::LeftJoin,
+                child::Entity::belongs_to(album::Entity)
+                    .from(child::Column::AlbumId)
+                    .to(album::Column::Id)
+                    .into(),
+            )
+            .join_rev(
+                JoinType::LeftJoin,
+                album_artist::Entity::belongs_to(album::Entity)
+                    .from(album_artist::Column::AlbumId)
+                    .to(album::Column::Id)
+                    .into(),
+            )
+            .join_rev(
+                JoinType::LeftJoin,
+                artist::Entity::belongs_to(album_artist::Entity)
+                    .from(artist::Column::Id)
+                    .to(album_artist::Column::ArtistId)
+                    .into(),
+            )
+            .join_rev(
+                JoinType::LeftJoin,
+                album_genre::Entity::belongs_to(album::Entity)
+                    .from(album_genre::Column::AlbumId)
+                    .to(album::Column::Id)
+                    .into(),
+            )
+            .group_by(album::Column::Id)
     }
 
     pub async fn get_indexes(
@@ -118,7 +158,7 @@ impl Browser {
             .select_only()
             .column_as(genre::Column::Name, "value")
             .column_as(Expr::cust("COUNT(DISTINCT song_genres.song_id)"), "song_count")
-            .column_as(Expr::cust("COUNT(DISTINCT albums.id)"), "album_count")
+            .column_as(Expr::cust("COUNT(DISTINCT album_genres.album_id)"), "album_count")
             .join_rev(
                 JoinType::LeftJoin,
                 song_genre::Entity::belongs_to(genre::Entity)
@@ -128,8 +168,8 @@ impl Browser {
             )
             .join_rev(
                 JoinType::LeftJoin,
-                album::Entity::belongs_to(genre::Entity)
-                    .from(album::Column::Genre)
+                album_genre::Entity::belongs_to(genre::Entity)
+                    .from(album_genre::Column::GenreName)
                     .to(genre::Column::Name)
                     .into(),
             )
