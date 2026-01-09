@@ -1,4 +1,5 @@
 use crate::browser::Browser;
+use crate::models::user;
 use crate::subsonic::{
     common::{send_response, SubsonicParams},
     models::{Bookmark, Bookmarks, Child, PlayQueue, SubsonicResponse, SubsonicResponseBody},
@@ -34,9 +35,10 @@ pub struct SavePlayQueueQuery {
 #[handler]
 pub async fn get_bookmarks(
     browser: Data<&Arc<Browser>>,
+    user: Data<&Arc<user::Model>>,
     params: Query<SubsonicParams>,
 ) -> impl IntoResponse {
-    let username = params.u.as_deref().unwrap_or("guest");
+    let username = &user.username;
 
     match browser.get_bookmarks(username).await {
         Ok(res) => {
@@ -72,10 +74,11 @@ pub async fn get_bookmarks(
 #[handler]
 pub async fn create_bookmark(
     browser: Data<&Arc<Browser>>,
+    user: Data<&Arc<user::Model>>,
     params: Query<SubsonicParams>,
     query: Query<CreateBookmarkQuery>,
 ) -> impl IntoResponse {
-    let username = params.u.as_deref().unwrap_or("guest");
+    let username = &user.username;
     let position = query.position.unwrap_or(0);
 
     match browser
@@ -99,10 +102,11 @@ pub async fn create_bookmark(
 #[handler]
 pub async fn delete_bookmark(
     browser: Data<&Arc<Browser>>,
+    user: Data<&Arc<user::Model>>,
     params: Query<SubsonicParams>,
     query: Query<DeleteBookmarkQuery>,
 ) -> impl IntoResponse {
-    let username = params.u.as_deref().unwrap_or("guest");
+    let username = &user.username;
 
     match browser.delete_bookmark(username, &query.id).await {
         Ok(_) => send_response(
@@ -122,9 +126,10 @@ pub async fn delete_bookmark(
 #[handler]
 pub async fn get_play_queue(
     browser: Data<&Arc<Browser>>,
+    user: Data<&Arc<user::Model>>,
     params: Query<SubsonicParams>,
 ) -> impl IntoResponse {
-    let username = params.u.as_deref().unwrap_or("guest");
+    let username = &user.username;
 
     match browser.get_play_queue(username).await {
         Ok(Some((pq, songs))) => {
@@ -170,10 +175,11 @@ pub async fn get_play_queue(
 #[handler]
 pub async fn save_play_queue(
     browser: Data<&Arc<Browser>>,
+    user: Data<&Arc<user::Model>>,
     params: Query<SubsonicParams>,
     query: Query<SavePlayQueueQuery>,
 ) -> impl IntoResponse {
-    let username = params.u.as_deref().unwrap_or("guest");
+    let username = &user.username;
     let client_name = params.c.as_deref().unwrap_or("Default");
     let position = query.position.unwrap_or(0);
 
