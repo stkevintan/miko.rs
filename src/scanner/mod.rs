@@ -211,10 +211,9 @@ impl Scanner {
                 active_child.bit_rate = Set(t.bitrate);
 
                 let mut new_artists = Vec::new();
-                let filtered_artists: Vec<String> = t.artists.iter()
+                let filtered_artists: Vec<&str> = t.artists.iter()
                     .map(|a| a.trim())
                     .filter(|a| !a.is_empty())
-                    .map(|a| a.to_string())
                     .collect();
 
                 for a_name in &filtered_artists {
@@ -223,7 +222,7 @@ impl Scanner {
                     if !seen_artists.contains(&a_id) {
                         new_artists.push(artist::ActiveModel {
                             id: Set(a_id.clone()),
-                            name: Set(a_name.clone()),
+                            name: Set(a_name.to_string()),
                             artist_image_url: Set(None),
                             user_rating: Set(0),
                             average_rating: Set(0.0),
@@ -245,26 +244,23 @@ impl Scanner {
                 }
 
                 if !t.album.trim().is_empty() {
-                    let album_artists = if filtered_artists.is_empty() {
-                        let filtered_album_artists: Vec<String> = t.album_artists.iter()
+                    let mut album_artists: Vec<&str> = t.album_artists.iter()
                             .map(|a| a.trim())
                             .filter(|a| !a.is_empty())
-                            .map(|a| a.to_string())
                             .collect();
-                        if filtered_album_artists.is_empty() {
-                            vec!["Unknown Artist".to_string()]
-                        } else {
-                            filtered_album_artists
-                        }
-                    } else {
-                        filtered_artists.clone()
-                    };
+                    if album_artists.is_empty() {
+                        album_artists = filtered_artists;
+                    }
+                    if album_artists.is_empty() {
+                        album_artists.push("Unknown Artist");
+                    }
+
                     let album_id = self
                         .ensure_album(
                             t.album.clone(),
                             album_artists,
                             t.year.unwrap_or(0),
-                            t.genres.clone(),
+                            t.genres.iter().map(|g| g.as_str()).collect(),
                             task.mod_time,
                             seen_artists,
                             seen_albums,
@@ -446,9 +442,9 @@ impl Scanner {
     async fn ensure_album(
         &self,
         name: String,
-        artist_names: Vec<String>,
+        artist_names: Vec<&str>,
         year: i32,
-        genres: Vec<String>,
+        genres: Vec<&str>,
         created: chrono::DateTime<chrono::Utc>,
         seen_artists: &mut HashSet<String>,
         seen_albums: &mut HashSet<String>,
