@@ -47,8 +47,8 @@ impl Browser {
     pub fn album_with_stats_query() -> sea_orm::Select<album::Entity> {
         album::Entity::find()
             .column_as(child::Column::Id.count(), "song_count")
-            .column_as(child::Column::Duration.sum(), "duration")
-            .column_as(child::Column::PlayCount.sum(), "play_count")
+            .column_as(Expr::cust("COALESCE(SUM(duration), 0)"), "duration")
+            .column_as(Expr::cust("COALESCE(SUM(play_count), 0)"), "play_count")
             .column_as(child::Column::LastPlayed.max(), "last_played")
             .column_as(Expr::cust("GROUP_CONCAT(DISTINCT artists.name)"), "artist")
             .column_as(Expr::cust("MIN(artists.id)"), "artist_id")

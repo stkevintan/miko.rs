@@ -6,6 +6,7 @@ use sea_orm::{
     QueryFilter, QuerySelect, TransactionTrait, Set, TransactionError,
     JoinType, QueryOrder,
 };
+use sea_orm::sea_query::Expr;
 use std::collections::HashSet;
 use chrono::Utc;
 
@@ -172,7 +173,7 @@ impl Browser {
     ) -> Result<Vec<PlaylistWithStats>, DbErr> {
         let mut query = playlist::Entity::find()
             .column_as(playlist_song::Column::SongId.count(), "song_count")
-            .column_as(child::Column::Duration.sum(), "duration")
+            .column_as(Expr::cust("COALESCE(SUM(duration), 0)"), "duration")
             .join_rev(
                 JoinType::LeftJoin,
                 playlist_song::Entity::belongs_to(playlist::Entity)
@@ -201,7 +202,7 @@ impl Browser {
         let playlist = playlist::Entity::find()
             .filter(playlist::Column::Id.eq(id))
             .column_as(playlist_song::Column::SongId.count(), "song_count")
-            .column_as(child::Column::Duration.sum(), "duration")
+            .column_as(Expr::cust("COALESCE(SUM(duration), 0)"), "duration")
             .join_rev(
                 JoinType::LeftJoin,
                 playlist_song::Entity::belongs_to(playlist::Entity)
