@@ -51,10 +51,19 @@ pub fn send_response(resp: SubsonicResponse, format: &Option<String>) -> Respons
 pub fn clean_json_attributes(value: &mut serde_json::Value) {
     match value {
         serde_json::Value::Object(map) => {
-            // If there's a "$value" key, we want to flatten its contents into the current object
-            if let Some(serde_json::Value::Object(inner_map)) = map.remove("$value") {
-                for (k, v) in inner_map {
-                    map.insert(k, v);
+            // If there's a "$value" key, we want to handle it
+            if let Some(v) = map.remove("$value") {
+                match v {
+                    serde_json::Value::Object(inner_map) => {
+                        // Flatten contents if it's an object
+                        for (k, v) in inner_map {
+                            map.insert(k, v);
+                        }
+                    }
+                    _ => {
+                        // Otherwise rename to "value" for Subsonic JSON compatibility
+                        map.insert("value".to_string(), v);
+                    }
                 }
             }
 

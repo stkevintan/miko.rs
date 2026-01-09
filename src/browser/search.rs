@@ -1,4 +1,5 @@
-use crate::browser::{AlbumWithStats, ArtistWithStats, Browser, SearchOptions};
+use crate::browser::types::{AlbumWithStats, ArtistWithStats, ChildWithMetadata, SearchOptions};
+use crate::browser::Browser;
 use crate::models::{album, album_artist, artist, child, song_artist};
 use sea_orm::{
     ColumnTrait, DbErr, EntityTrait, JoinType, PaginatorTrait, QueryFilter, QuerySelect,
@@ -6,8 +7,9 @@ use sea_orm::{
 use sea_orm::sea_query::{Expr, Query};
 
 impl Browser {
-    pub async fn search(&self, opts: SearchOptions) -> Result<(Vec<ArtistWithStats>, Vec<AlbumWithStats>, Vec<child::Model>), DbErr> {
-        let search_query = format!("%{}%", opts.query);
+    pub async fn search(&self, opts: SearchOptions) -> Result<(Vec<ArtistWithStats>, Vec<AlbumWithStats>, Vec<ChildWithMetadata>), DbErr> {
+        let clean_query = opts.query.trim().trim_matches('"');
+        let search_query = format!("%{}%", clean_query);
         
         // Artists
         let mut artist_query = artist::Entity::find()
@@ -23,27 +25,15 @@ impl Browser {
             .group_by(artist::Column::Id);
 
         // Albums
-        let mut album_query = album::Entity::find()
-            .column_as(child::Column::Id.count(), "song_count")
-            .column_as(child::Column::Duration.sum(), "duration")
-            .column_as(child::Column::PlayCount.sum(), "play_count")
-            .column_as(child::Column::LastPlayed.max(), "last_played")
-            .join_rev(
-                JoinType::LeftJoin,
-                child::Entity::belongs_to(album::Entity)
-                    .from(child::Column::AlbumId)
-                    .to(album::Column::Id)
-                    .into(),
-            )
-            .filter(album::Column::Name.like(&search_query))
-            .group_by(album::Column::Id);
+        let mut album_query = Self::album_with_stats_query()
+            .filter(album::Column::Name.like(&search_query));
 
-        let mut song_query = child::Entity::find()
+        let mut song_query = Self::song_with_metadata_query()
             .filter(child::Column::IsDir.eq(false))
             .filter(
                 child::Column::Title.like(&search_query)
-                    .or(child::Column::Album.like(&search_query))
-                    .or(child::Column::Artist.like(&search_query))
+                    .or(album::Column::Name.like(&search_query))
+                    .or(artist::Column::Name.like(&search_query))
             );
 
         if let Some(folder_id) = opts.music_folder_id {
@@ -84,25 +74,27 @@ impl Browser {
         let songs = song_query
             .limit(opts.song_count)
             .offset(opts.song_offset)
+            .into_model::<ChildWithMetadata>()
             .all(&self.db)
             .await?;
 
         Ok((artists, albums, songs))
     }
 
-    pub async fn search_songs(&self, query: &str, count: u64, offset: u64) -> Result<(Vec<child::Model>, u64), DbErr> {
-        let search_query = format!("%{}%", query);
+    pub async fn search_songs(&self, query: &str, count: u64, offset: u64) -> Result<(Vec<ChildWithMetadata>, u64), DbErr> {
+        let clean_query = query.trim().trim_matches('"');
+        let search_query = format!("%{}%", clean_query);
         
-        let q = child::Entity::find()
+        let q = Self::song_with_metadata_query()
             .filter(child::Column::IsDir.eq(false))
             .filter(
                 child::Column::Title.like(&search_query)
-                    .or(child::Column::Album.like(&search_query))
-                    .or(child::Column::Artist.like(&search_query))
+                    .or(album::Column::Name.like(&search_query))
+                    .or(artist::Column::Name.like(&search_query))
             );
 
         let total = q.clone().count(&self.db).await?;
-        let songs = q.limit(count).offset(offset).all(&self.db).await?;
+        let songs = q.limit(count).offset(offset).into_model::<ChildWithMetadata>().all(&self.db).await?;
 
         Ok((songs, total))
     }

@@ -2,7 +2,6 @@ mod api;
 mod browser;
 mod config;
 mod crypto;
-mod lyric;
 mod models;
 mod scanner;
 mod subsonic;
@@ -10,11 +9,15 @@ mod subsonic;
 use crate::browser::Browser;
 use crate::config::Config;
 use crate::models::{
-    album, album_artist, artist, child, genre, music_folder, playlist, playlist_song, song_artist, song_genre, user, user_music_folder
+    album, album_artist, album_genre, artist, child, genre, lyrics, music_folder, playlist, playlist_song, song_artist, song_genre, user, user_music_folder
 };
 use crate::scanner::Scanner;
 use chrono::Utc;
-use poem::{listener::TcpListener, middleware::Tracing, EndpointExt, Route, Server};
+use poem::{
+    listener::TcpListener,
+    middleware::{Cors, Tracing},
+    EndpointExt, Route, Server,
+};
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, ConnectionTrait, Database, DatabaseConnection, EntityTrait,
     PaginatorTrait, QueryFilter, Schema, Set,
@@ -39,6 +42,8 @@ async fn setup_schema(db: &DatabaseConnection) -> Result<(), anyhow::Error> {
         schema.create_table_from_entity(album_artist::Entity),
         schema.create_table_from_entity(playlist::Entity),
         schema.create_table_from_entity(playlist_song::Entity),
+        schema.create_table_from_entity(lyrics::Entity),
+        schema.create_table_from_entity(album_genre::Entity),
     ];
 
     for mut table in tables {
@@ -177,7 +182,13 @@ async fn main() -> Result<(), anyhow::Error> {
         .data(config)
         .data(scanner)
         .data(browser)
-        .with(Tracing);
+        .with(Tracing)
+        .with(
+            Cors::new()
+                .allow_origin_regex("*")
+                .allow_methods(vec!["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
+                .allow_headers(vec!["*"]),
+        );
 
     Server::new(TcpListener::bind(addr)).run(app).await?;
 

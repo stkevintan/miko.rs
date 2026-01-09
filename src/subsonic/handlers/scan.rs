@@ -6,9 +6,10 @@ use serde::Deserialize;
 use std::sync::Arc;
 
 #[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct StartScanQuery {
     #[serde(default)]
-    pub inc: Option<String>,
+    pub full_scan: Option<bool>,
 }
 
 #[handler]
@@ -37,9 +38,7 @@ pub async fn start_scan(
     params: Query<SubsonicParams>,
     query: Query<StartScanQuery>,
 ) -> impl IntoResponse {
-    let incremental = query.inc.as_deref()
-        .map(|v| v == "1" || v == "true" || v == "yes")
-        .unwrap_or(true); 
+    let incremental = !query.full_scan.unwrap_or(false);
 
     let scanner_ptr = Arc::clone(*scanner);
     tokio::spawn(async move {

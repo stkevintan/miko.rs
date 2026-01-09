@@ -1,6 +1,6 @@
+use crate::browser::{Browser, ChildWithMetadata};
 use crate::config::Config;
-use crate::lyric;
-use crate::models::child;
+use crate::models::{artist, child, lyrics};
 use crate::scanner::utils::get_cover_cache_dir;
 use crate::subsonic::common::{send_response, SubsonicParams};
 use crate::subsonic::models::{
@@ -12,7 +12,7 @@ use poem::{
     web::{Data, Query, StaticFileRequest},
     IntoResponse,
 };
-use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, QuerySelect};
+use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter};
 use serde::Deserialize;
 use std::path::Path;
 use std::sync::Arc;
@@ -39,15 +39,15 @@ async fn get_song_or_error(
     params: &SubsonicParams,
     audio_only: bool,
     not_found_msg: &str,
-) -> Result<child::Model, poem::Response> {
-    let mut find = child::Entity::find().filter(child::Column::Id.eq(id));
+) -> Result<ChildWithMetadata, poem::Response> {
+    let mut find = Browser::song_with_metadata_query().filter(child::Column::Id.eq(id));
     if audio_only {
         find = find
             .filter(child::Column::IsDir.eq(false))
             .filter(child::Column::ContentType.starts_with("audio/"));
     }
 
-    match find.one(db).await {
+    match find.into_model::<ChildWithMetadata>().one(db).await {
         Ok(Some(s)) => Ok(s),
         Ok(None) => Err(send_response(
             SubsonicResponse::new_error(70, not_found_msg.into()),
@@ -157,14 +157,17 @@ pub async fn get_cover_art(
     let cover_art = if id.starts_with("al-") || id.starts_with("ar-") {
         id.to_string()
     } else {
-        match child::Entity::find()
-            .filter(child::Column::Id.eq(id))
-            .select_only()
-            .column(child::Column::CoverArt)
+        match child::Entity::find_by_id(id.to_string())
             .one(*db)
             .await
         {
-            Ok(Some(s)) => s.cover_art.unwrap_or_default(),
+            Ok(Some(s)) => {
+                if let Some(aid) = s.album_id {
+                    format!("al-{}", aid)
+                } else {
+                    s.id
+                }
+            }
             Ok(None) => {
                 return send_response(
                     SubsonicResponse::new_error(70, "Cover art not found".into()),
@@ -224,9 +227,10 @@ pub async fn get_lyrics(
     let artist = &query.artist;
     let title = &query.title;
 
-    let song = match child::Entity::find()
-        .filter(child::Column::Artist.eq(artist))
+    let song = match Browser::song_with_metadata_query()
+        .filter(artist::Column::Name.eq(artist))
         .filter(child::Column::Title.eq(title))
+        .into_model::<ChildWithMetadata>()
         .one(*db)
         .await
     {
@@ -246,10 +250,20 @@ pub async fn get_lyrics(
         }
     };
 
+    let lyric = match lyrics::Entity::find_by_id(&song.id).one(*db).await {
+        Ok(Some(l)) => l.content,
+        _ => {
+            return send_response(
+                SubsonicResponse::new_error(70, "Lyrics not found".into()),
+                &params.f,
+            )
+        }
+    };
+
     let resp = SubsonicResponse::new_ok(SubsonicResponseBody::Lyrics(Lyrics {
-        artist: Some(song.artist),
+        artist: song.artist,
         title: Some(song.title),
-        value: song.lyrics,
+        value: lyric,
     }));
 
     send_response(resp, &params.f)
@@ -268,14 +282,17 @@ pub async fn get_lyrics_by_song_id(
         Err(r) => return r,
     };
 
-    if song.lyrics.is_empty() {
-        return send_response(
-            SubsonicResponse::new_error(70, "Lyrics not found".into()),
-            &params.f,
-        );
-    }
+    let lyric_model = match lyrics::Entity::find_by_id(&song.id).one(*db).await {
+        Ok(Some(l)) => l,
+        _ => {
+            return send_response(
+                SubsonicResponse::new_error(70, "Lyrics not found".into()),
+                &params.f,
+            )
+        }
+    };
 
-    let (synced, parsed_lines) = lyric::parse(&song.lyrics);
+    let (synced, parsed_lines) = lyric_model.parse();
     let lines = parsed_lines
         .into_iter()
         .map(|(start, value)| LyricsLine { start, value })
@@ -285,7 +302,7 @@ pub async fn get_lyrics_by_song_id(
         structured_lyrics: vec![StructuredLyrics {
             synced,
             lang: Some("xxx".to_string()),
-            display_artist: Some(song.artist),
+            display_artist: song.artist,
             display_title: Some(song.title),
             lines,
         }],

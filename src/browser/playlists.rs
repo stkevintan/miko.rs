@@ -1,4 +1,5 @@
-use crate::browser::{Browser, PlaylistWithSongs, PlaylistWithStats, UpdatePlaylistOptions};
+use crate::browser::types::{PlaylistWithSongs, PlaylistWithStats, UpdatePlaylistOptions, ChildWithMetadata};
+use crate::browser::Browser;
 use crate::models::{child, playlist, playlist_song};
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, DbErr, EntityTrait,
@@ -24,7 +25,7 @@ impl Browser {
                         owner: Set(owner),
                         created_at: Set(now),
                         updated_at: Set(now),
-                        comment: Set("".to_string()),
+                        comment: Set(None),
                         public: Set(false),
                         ..Default::default()
                     };
@@ -78,7 +79,7 @@ impl Browser {
                         p.name = Set(name);
                     }
                     if let Some(comment) = opts.comment {
-                        p.comment = Set(comment);
+                        p.comment = Set(Some(comment));
                     }
                     if let Some(public) = opts.public {
                         p.public = Set(public);
@@ -221,7 +222,7 @@ impl Browser {
             .await?;
 
         if let Some(playlist) = playlist {
-            let songs = child::Entity::find()
+            let songs = Self::song_with_metadata_query()
                 .join_rev(
                     JoinType::InnerJoin,
                     playlist_song::Entity::belongs_to(child::Entity)
@@ -231,6 +232,7 @@ impl Browser {
                 )
                 .filter(playlist_song::Column::PlaylistId.eq(id))
                 .order_by_asc(playlist_song::Column::Position)
+                .into_model::<ChildWithMetadata>()
                 .all(&self.db)
                 .await?;
 
