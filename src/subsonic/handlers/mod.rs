@@ -8,3 +8,4 @@ pub mod media;
 pub mod shared;
 pub mod user;
 pub mod annotation;
+pub mod bookmarks;

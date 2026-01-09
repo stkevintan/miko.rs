@@ -9,7 +9,9 @@ mod subsonic;
 use crate::browser::Browser;
 use crate::config::Config;
 use crate::models::{
-    album, album_artist, album_genre, artist, child, genre, lyrics, music_folder, now_playing, playlist, playlist_song, song_artist, song_genre, user, user_music_folder
+    album, album_artist, album_genre, artist, bookmark, child, genre, lyrics, music_folder,
+    now_playing, play_queue, play_queue_song, playlist, playlist_song, song_artist, song_genre,
+    user, user_music_folder,
 };
 use crate::scanner::Scanner;
 use chrono::Utc;
@@ -45,6 +47,9 @@ async fn setup_schema(db: &DatabaseConnection) -> Result<(), anyhow::Error> {
         schema.create_table_from_entity(lyrics::Entity),
         schema.create_table_from_entity(album_genre::Entity),
         schema.create_table_from_entity(now_playing::Entity),
+        schema.create_table_from_entity(bookmark::Entity),
+        schema.create_table_from_entity(play_queue::Entity),
+        schema.create_table_from_entity(play_queue_song::Entity),
     ];
 
     for mut table in tables {

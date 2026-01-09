@@ -41,6 +41,30 @@ pub struct Model {
 pub enum Relation {
     #[sea_orm(has_many = "super::user_music_folder::Entity")]
     UserMusicFolders,
+    #[sea_orm(has_many = "super::bookmark::Entity")]
+    Bookmarks,
+    #[sea_orm(has_one = "super::play_queue::Entity")]
+    PlayQueue,
+    #[sea_orm(has_many = "super::play_queue_song::Entity")]
+    PlayQueueSongs,
+}
+
+impl Related<super::bookmark::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::Bookmarks.def()
+    }
+}
+
+impl Related<super::play_queue::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::PlayQueue.def()
+    }
+}
+
+impl Related<super::play_queue_song::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::PlayQueueSongs.def()
+    }
 }
 
 impl Related<super::music_folder::Entity> for Entity {

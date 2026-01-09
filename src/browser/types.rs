@@ -105,6 +105,31 @@ pub struct ChildWithMetadata {
     pub r#type: String,
 }
 
+#[derive(Debug, Clone)]
+pub struct BookmarkWithMetadata {
+    pub b_username: String,
+    pub b_song_id: String,
+    pub b_position: i64,
+    pub b_comment: Option<String>,
+    pub b_created_at: chrono::DateTime<chrono::Utc>,
+    pub b_updated_at: chrono::DateTime<chrono::Utc>,
+    pub child: ChildWithMetadata,
+}
+
+impl FromQueryResult for BookmarkWithMetadata {
+    fn from_query_result(res: &sea_orm::QueryResult, pre: &str) -> Result<Self, sea_orm::DbErr> {
+        Ok(Self {
+            b_username: res.try_get(pre, "b_username")?,
+            b_song_id: res.try_get(pre, "b_song_id")?,
+            b_position: res.try_get(pre, "b_position")?,
+            b_comment: res.try_get(pre, "b_comment")?,
+            b_created_at: res.try_get(pre, "b_created_at")?,
+            b_updated_at: res.try_get(pre, "b_updated_at")?,
+            child: ChildWithMetadata::from_query_result(res, pre)?,
+        })
+    }
+}
+
 #[derive(Debug, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdatePlaylistOptions {

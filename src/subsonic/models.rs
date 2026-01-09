@@ -100,6 +100,10 @@ pub enum SubsonicResponseBody {
     User(User),
     #[serde(rename = "users")]
     Users(Users),
+    #[serde(rename = "bookmarks")]
+    Bookmarks(Bookmarks),
+    #[serde(rename = "playQueue")]
+    PlayQueue(PlayQueue),
     #[serde(other)]
     None,
 }
@@ -613,6 +617,46 @@ pub struct Starred2 {
     pub album: Vec<AlbumID3>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub song: Vec<Child>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Bookmarks {
+    #[serde(rename = "bookmark", skip_serializing_if = "Vec::is_empty", default)]
+    pub bookmark: Vec<Bookmark>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Bookmark {
+    #[serde(flatten)]
+    pub entry: Child,
+    #[serde(rename = "@position")]
+    pub position: i64,
+    #[serde(rename = "@comment", skip_serializing_if = "Option::is_none")]
+    pub comment: Option<String>,
+    #[serde(rename = "@created")]
+    pub created: chrono::DateTime<chrono::Utc>,
+    #[serde(rename = "@changed")]
+    pub changed: chrono::DateTime<chrono::Utc>,
+    #[serde(rename = "@username")]
+    pub username: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlayQueue {
+    #[serde(rename = "@current", skip_serializing_if = "Option::is_none")]
+    pub current: Option<String>,
+    #[serde(rename = "@position", skip_serializing_if = "Option::is_none")]
+    pub position: Option<i64>,
+    #[serde(rename = "@changed", skip_serializing_if = "Option::is_none")]
+    pub changed: Option<chrono::DateTime<chrono::Utc>>,
+    #[serde(rename = "@changedBy", skip_serializing_if = "Option::is_none")]
+    pub changed_by: Option<String>,
+    #[serde(rename = "@username")]
+    pub username: String,
+    #[serde(rename = "entry", skip_serializing_if = "Vec::is_empty", default)]
+    pub entry: Vec<Child>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
