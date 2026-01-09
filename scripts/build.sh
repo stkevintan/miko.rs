@@ -6,7 +6,7 @@ APP_NAME="miko-rs"
 VERSION=$(grep '^version =' Cargo.toml | head -n1 | cut -d '"' -f2)
 BIN_DIR="bin"
 
-mkdir -p $BIN_DIR
+mkdir -p "$BIN_DIR"
 
 build_target() {
     local target=$1
@@ -24,7 +24,7 @@ build_target() {
         cargo build --release --target $target
     fi
 
-    local output_name="${APP_NAME}-${os}-${arch}${suffix}"
+    local output_name="${APP_NAME}-${os}-${arch}-${VERSION}${suffix}"
 
     cp "target/${target}/release/${APP_NAME}${suffix}" "${BIN_DIR}/${output_name}"
 }

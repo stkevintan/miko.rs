@@ -10,9 +10,8 @@ COPY bin/ /bin/
 FROM debian:bookworm-slim
 
 # Install runtime dependencies (OpenSSL is usually needed for Rust apps)
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
-    libssl3 \
     && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user for security

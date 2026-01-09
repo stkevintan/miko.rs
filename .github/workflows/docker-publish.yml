@@ -56,8 +56,9 @@ jobs:
       - name: Rename and Prepare Binary
         shell: bash
         run: |
+          VERSION=$(grep '^version =' Cargo.toml | head -n1 | cut -d '"' -f2)
           mkdir -p output
-          cp target/${{ matrix.target }}/release/miko-rs${{ matrix.suffix }} output/${{ matrix.bin_name }}${{ matrix.suffix }}
+          cp target/${{ matrix.target }}/release/miko-rs${{ matrix.suffix }} output/${{ matrix.bin_name }}-${VERSION}${{ matrix.suffix }}
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
