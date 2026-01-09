@@ -148,14 +148,13 @@ impl Browser {
                         .await?;
 
                     if !song_ids.is_empty() {
-                        let mut entries = Vec::new();
-                        for (i, sid) in song_ids.into_iter().enumerate() {
-                            entries.push(play_queue_song::ActiveModel {
+                           let entries = song_ids.into_iter().enumerate().map(|(i, sid)| {
+                            play_queue_song::ActiveModel {
                                 username: Set(username.clone()),
                                 song_id: Set(sid),
                                 position: Set(i as i32),
-                            });
-                        }
+                            }
+                        });
                         play_queue_song::Entity::insert_many(entries).exec(txn).await?;
                     }
 
