@@ -14,12 +14,9 @@ use serde::Deserialize;
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StarQuery {
-    #[serde(default)]
-    pub id: Vec<String>,
-    #[serde(default)]
-    pub album_id: Vec<String>,
-    #[serde(default)]
-    pub artist_id: Vec<String>,
+    pub id: Option<String>,
+    pub album_id: Option<String>,
+    pub artist_id: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -43,30 +40,27 @@ async fn update_starred_status(
 ) -> Result<(), sea_orm::DbErr> {
     use crate::models::{album, artist, child};
 
-    if !query.id.is_empty() {
+    if let Some(id) = query.id {
         child::Entity::update_many()
-            .filter(child::Column::Id.is_in(&query.id))
+            .filter(child::Column::Id.eq(id))
             .col_expr(child::Column::Starred, Expr::value(value))
             .exec(db)
             .await?;
     }
-
-    if !query.album_id.is_empty() {
+    if let Some(album_id) = query.album_id {
         album::Entity::update_many()
-            .filter(album::Column::Id.is_in(&query.album_id))
+            .filter(album::Column::Id.eq(album_id))
             .col_expr(album::Column::Starred, Expr::value(value))
             .exec(db)
             .await?;
     }
-
-    if !query.artist_id.is_empty() {
+    if let Some(artist_id) = query.artist_id {
         artist::Entity::update_many()
-            .filter(artist::Column::Id.is_in(&query.artist_id))
+            .filter(artist::Column::Id.eq(artist_id))
             .col_expr(artist::Column::Starred, Expr::value(value))
             .exec(db)
             .await?;
     }
-
     Ok(())
 }
 
@@ -120,6 +114,7 @@ pub async fn set_rating(
     query: Query<SetRatingQuery>,
 ) -> impl IntoResponse {
     use crate::models::{album, artist, child};
+
     if query.rating < 0 || query.rating > 5 {
         return send_response(
             SubsonicResponse::new_error(0, "Invalid rating".into()),
@@ -127,82 +122,81 @@ pub async fn set_rating(
         );
     }
 
-    // Try child first
-    let res = child::Entity::update_many()
+    match child::Entity::update_many()
         .filter(child::Column::Id.eq(&query.id))
         .col_expr(child::Column::UserRating, Expr::value(query.rating))
         .exec(db.0)
-        .await;
-
-    match res {
-        Ok(result) if result.rows_affected > 0 => {
-            return send_response(
-                SubsonicResponse::new_ok(SubsonicResponseBody::None),
-                &params.f,
-            );
+        .await
+    {
+        Ok(res) => {
+            if res.rows_affected > 0 {
+                return send_response(
+                    SubsonicResponse::new_ok(SubsonicResponseBody::None),
+                    &params.f,
+                );
+            }
         }
         Err(e) => {
-            log::error!("Database error in set_rating (child): {}", e);
+            log::error!("Database error in set_rating: {}", e);
             return send_response(
                 SubsonicResponse::new_error(0, "Failed to set rating".into()),
                 &params.f,
             );
         }
-        _ => {}
     }
 
-    // Try album
-    let res = album::Entity::update_many()
+    // Try album if child not found
+    match album::Entity::update_many()
         .filter(album::Column::Id.eq(&query.id))
         .col_expr(album::Column::UserRating, Expr::value(query.rating))
         .exec(db.0)
-        .await;
-
-    match res {
-        Ok(result) if result.rows_affected > 0 => {
-            return send_response(
-                SubsonicResponse::new_ok(SubsonicResponseBody::None),
-                &params.f,
-            );
+        .await
+    {
+        Ok(res) => {
+            if res.rows_affected > 0 {
+                return send_response(
+                    SubsonicResponse::new_ok(SubsonicResponseBody::None),
+                    &params.f,
+                );
+            }
         }
         Err(e) => {
-            log::error!("Database error in set_rating (album): {}", e);
+            log::error!("Database error in set_rating: {}", e);
             return send_response(
                 SubsonicResponse::new_error(0, "Failed to set rating".into()),
                 &params.f,
             );
         }
-        _ => {}
     }
 
-    // Try artist
-    let res = artist::Entity::update_many()
+    // Try artist if album not found
+    match artist::Entity::update_many()
         .filter(artist::Column::Id.eq(&query.id))
         .col_expr(artist::Column::UserRating, Expr::value(query.rating))
         .exec(db.0)
-        .await;
-
-    match res {
-        Ok(result) if result.rows_affected > 0 => {
-            return send_response(
-                SubsonicResponse::new_ok(SubsonicResponseBody::None),
-                &params.f,
-            );
+        .await
+    {
+        Ok(res) => {
+            if res.rows_affected > 0 {
+                send_response(
+                    SubsonicResponse::new_ok(SubsonicResponseBody::None),
+                    &params.f,
+                )
+            } else {
+                send_response(
+                    SubsonicResponse::new_error(70, "Item not found".into()),
+                    &params.f,
+                )
+            }
         }
         Err(e) => {
-            log::error!("Database error in set_rating (artist): {}", e);
-            return send_response(
+            log::error!("Database error in set_rating: {}", e);
+            send_response(
                 SubsonicResponse::new_error(0, "Failed to set rating".into()),
                 &params.f,
-            );
+            )
         }
-        _ => {}
     }
-
-    send_response(
-        SubsonicResponse::new_error(70, "Item not found".into()),
-        &params.f,
-    )
 }
 
 #[handler]
