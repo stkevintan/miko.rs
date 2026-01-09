@@ -6,13 +6,10 @@ mod models;
 mod scanner;
 mod subsonic;
 
+use migration::{Migrator, MigratorTrait};
 use crate::browser::Browser;
 use crate::config::Config;
-use crate::models::{
-    album, album_artist, album_genre, artist, bookmark, child, genre, lyrics, music_folder,
-    now_playing, play_queue, play_queue_song, playlist, playlist_song, song_artist, song_genre,
-    user, user_music_folder,
-};
+use crate::models::{music_folder, user};
 use crate::scanner::Scanner;
 use chrono::Utc;
 use poem::{
@@ -21,44 +18,10 @@ use poem::{
     EndpointExt, Route, Server,
 };
 use sea_orm::{
-    ActiveModelTrait, ColumnTrait, ConnectionTrait, Database, DatabaseConnection, EntityTrait,
-    PaginatorTrait, QueryFilter, Schema, Set,
+    ActiveModelTrait, ColumnTrait, Database, DatabaseConnection, EntityTrait, PaginatorTrait,
+    QueryFilter, Set,
 };
 use std::sync::Arc;
-
-async fn setup_schema(db: &DatabaseConnection) -> Result<(), anyhow::Error> {
-    let builder = db.get_database_backend();
-    let schema = Schema::new(builder);
-
-    // Create tables if they don't exist
-    let tables = [
-        schema.create_table_from_entity(user::Entity),
-        schema.create_table_from_entity(music_folder::Entity),
-        schema.create_table_from_entity(user_music_folder::Entity),
-        schema.create_table_from_entity(child::Entity),
-        schema.create_table_from_entity(artist::Entity),
-        schema.create_table_from_entity(album::Entity),
-        schema.create_table_from_entity(genre::Entity),
-        schema.create_table_from_entity(song_artist::Entity),
-        schema.create_table_from_entity(song_genre::Entity),
-        schema.create_table_from_entity(album_artist::Entity),
-        schema.create_table_from_entity(playlist::Entity),
-        schema.create_table_from_entity(playlist_song::Entity),
-        schema.create_table_from_entity(lyrics::Entity),
-        schema.create_table_from_entity(album_genre::Entity),
-        schema.create_table_from_entity(now_playing::Entity),
-        schema.create_table_from_entity(bookmark::Entity),
-        schema.create_table_from_entity(play_queue::Entity),
-        schema.create_table_from_entity(play_queue_song::Entity),
-    ];
-
-    for mut table in tables {
-        let stmt = builder.build(table.if_not_exists());
-        db.execute(stmt).await?;
-    }
-
-    Ok(())
-}
 
 async fn init_default_user(
     db: &DatabaseConnection,
@@ -164,9 +127,10 @@ async fn main() -> Result<(), anyhow::Error> {
         .await
         .expect("Failed to connect to database");
 
-    setup_schema(&db)
+    Migrator::up(&db, None)
         .await
-        .expect("Failed to setup database schema");
+        .expect("Failed to run migrations");
+
     init_default_user(&db, &config.server.password_secret)
         .await
         .expect("Failed to initialize default user");

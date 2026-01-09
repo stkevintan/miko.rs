@@ -34,3 +34,4 @@ pathdiff = "0.2.3"
 regex = "1.10"
 once_cell = "1.19"
 ammonia = "4.0"
+migration = { path = "migration" }
