@@ -1,5 +1,5 @@
 use crate::subsonic::{
-    common::{send_response, SubsonicParams, deserialize_vec_or_string},
+    common::{send_response, SubsonicParams, deserialize_vec},
     models::{SubsonicResponse, SubsonicResponseBody},
 };
 use poem::{
@@ -14,11 +14,11 @@ use serde::Deserialize;
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StarQuery {
-    #[serde(default, deserialize_with = "deserialize_vec_or_string")]
+    #[serde(default, deserialize_with = "deserialize_vec")]
     pub id: Vec<String>,
-    #[serde(default, deserialize_with = "deserialize_vec_or_string")]
+    #[serde(default, deserialize_with = "deserialize_vec")]
     pub album_id: Vec<String>,
-    #[serde(default, deserialize_with = "deserialize_vec_or_string")]
+    #[serde(default, deserialize_with = "deserialize_vec")]
     pub artist_id: Vec<String>,
 }
 
