@@ -180,9 +180,9 @@ pub async fn save_play_queue(
     match browser
         .save_play_queue(
             username,
-            query.current.clone(),
+            query.0.current,
             position,
-            query.id.clone(),
+            query.0.id,
             client_name,
         )
         .await

@@ -1,38 +1,43 @@
-use crate::browser::types::ChildWithMetadata;
+use crate::browser::types::{ChildWithMetadata, BookmarkWithMetadata};
 use crate::browser::Browser;
-use crate::models::{bookmark, play_queue, play_queue_song};
+use crate::models::{bookmark, child, play_queue, play_queue_song};
 use chrono::Utc;
 use sea_orm::{
-    ColumnTrait, DbErr, EntityTrait, QueryFilter, QueryOrder, Set, TransactionError, TransactionTrait,
+    ColumnTrait, DbErr, EntityTrait, JoinType, QueryFilter, QueryOrder, QuerySelect, RelationTrait, Set, TransactionError, TransactionTrait,
 };
 
 impl Browser {
     pub async fn get_bookmarks(&self, username: &str) -> Result<Vec<(bookmark::Model, ChildWithMetadata)>, DbErr> {
-        let bookmarks = bookmark::Entity::find()
+        let results = Self::song_with_metadata_query()
+            .join(JoinType::InnerJoin, child::Relation::Bookmarks.def())
             .filter(bookmark::Column::Username.eq(username))
             .order_by_desc(bookmark::Column::UpdatedAt)
+            .column_as(bookmark::Column::Username, "b_username")
+            .column_as(bookmark::Column::SongId, "b_song_id")
+            .column_as(bookmark::Column::Position, "b_position")
+            .column_as(bookmark::Column::Comment, "b_comment")
+            .column_as(bookmark::Column::CreatedAt, "b_created_at")
+            .column_as(bookmark::Column::UpdatedAt, "b_updated_at")
+            .into_model::<BookmarkWithMetadata>()
             .all(&self.db)
             .await?;
 
-        if bookmarks.is_empty() {
-            return Ok(Vec::new());
-        }
-
-        let song_ids: Vec<String> = bookmarks.iter().map(|b| b.song_id.clone()).collect();
-        let songs = self.get_songs_by_ids(&song_ids).await?;
-        let song_map: std::collections::HashMap<String, ChildWithMetadata> = songs
+        Ok(results
             .into_iter()
-            .map(|s| (s.id.clone(), s))
-            .collect();
-
-        let mut result = Vec::new();
-        for b in bookmarks {
-            if let Some(s) = song_map.get(&b.song_id) {
-                result.push((b, s.clone()));
-            }
-        }
-
-        Ok(result)
+            .map(|r| {
+                (
+                    bookmark::Model {
+                        username: r.b_username,
+                        song_id: r.b_song_id,
+                        position: r.b_position,
+                        comment: r.b_comment,
+                        created_at: r.b_created_at,
+                        updated_at: r.b_updated_at,
+                    },
+                    r.child,
+                )
+            })
+            .collect())
     }
 
     pub async fn create_bookmark(
@@ -86,27 +91,16 @@ impl Browser {
             .await?;
 
         if let Some(queue) = queue {
-            let songs_with_pos = play_queue_song::Entity::find()
+            let songs = Self::song_with_metadata_query()
+                .join(JoinType::InnerJoin, child::Relation::PlayQueueSongs.def())
                 .filter(play_queue_song::Column::Username.eq(username))
+                .group_by(play_queue_song::Column::Position)
                 .order_by_asc(play_queue_song::Column::Position)
+                .into_model::<ChildWithMetadata>()
                 .all(&self.db)
                 .await?;
 
-            let song_ids: Vec<String> = songs_with_pos.iter().map(|s| s.song_id.clone()).collect();
-            let songs = self.get_songs_by_ids(&song_ids).await?;
-            let song_map: std::collections::HashMap<String, ChildWithMetadata> = songs
-                .into_iter()
-                .map(|s| (s.id.clone(), s))
-                .collect();
-
-            let mut result_songs = Vec::new();
-            for s_pos in songs_with_pos {
-                if let Some(s) = song_map.get(&s_pos.song_id) {
-                    result_songs.push(s.clone());
-                }
-            }
-
-            Ok(Some((queue, result_songs)))
+            Ok(Some((queue, songs)))
         } else {
             Ok(None)
         }

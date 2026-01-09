@@ -62,6 +62,22 @@ pub enum Relation {
         to = "super::album::Column::Id"
     )]
     Album,
+    #[sea_orm(has_many = "super::bookmark::Entity")]
+    Bookmarks,
+    #[sea_orm(has_many = "super::play_queue_song::Entity")]
+    PlayQueueSongs,
+}
+
+impl Related<super::bookmark::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::Bookmarks.def()
+    }
+}
+
+impl Related<super::play_queue_song::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::PlayQueueSongs.def()
+    }
 }
 
 impl Related<super::artist::Entity> for Entity {
