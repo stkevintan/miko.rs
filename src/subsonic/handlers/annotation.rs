@@ -1,5 +1,5 @@
 use crate::subsonic::{
-    common::{send_response, SubsonicParams},
+    common::{send_response, SubsonicParams, deserialize_vec_or_string},
     models::{SubsonicResponse, SubsonicResponseBody},
 };
 use poem::{
@@ -14,9 +14,12 @@ use serde::Deserialize;
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StarQuery {
-    pub id: Option<String>,
-    pub album_id: Option<String>,
-    pub artist_id: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_vec_or_string")]
+    pub id: Vec<String>,
+    #[serde(default, deserialize_with = "deserialize_vec_or_string")]
+    pub album_id: Vec<String>,
+    #[serde(default, deserialize_with = "deserialize_vec_or_string")]
+    pub artist_id: Vec<String>,
 }
 
 #[derive(Deserialize)]
@@ -40,23 +43,23 @@ async fn update_starred_status(
 ) -> Result<(), sea_orm::DbErr> {
     use crate::models::{album, artist, child};
 
-    if let Some(id) = query.id {
+    if !query.id.is_empty() {
         child::Entity::update_many()
-            .filter(child::Column::Id.eq(id))
+            .filter(child::Column::Id.is_in(query.id))
             .col_expr(child::Column::Starred, Expr::value(value))
             .exec(db)
             .await?;
     }
-    if let Some(album_id) = query.album_id {
+    if !query.album_id.is_empty() {
         album::Entity::update_many()
-            .filter(album::Column::Id.eq(album_id))
+            .filter(album::Column::Id.is_in(query.album_id))
             .col_expr(album::Column::Starred, Expr::value(value))
             .exec(db)
             .await?;
     }
-    if let Some(artist_id) = query.artist_id {
+    if !query.artist_id.is_empty() {
         artist::Entity::update_many()
-            .filter(artist::Column::Id.eq(artist_id))
+            .filter(artist::Column::Id.is_in(query.artist_id))
             .col_expr(artist::Column::Starred, Expr::value(value))
             .exec(db)
             .await?;
