@@ -11,7 +11,7 @@ This project implements the Subsonic API (version 1.16.1) to support various mus
 #### ✅ Implemented
 - **System**: `ping`, `getLicense`, `getOpenSubsonicExtensions`
 - **Browsing**: `getMusicFolders`, `getIndexes`, `getMusicDirectory`, `getGenres`, `getArtists`, `getArtist`, `getAlbum`, `getSong`, `getArtistInfo`, `getArtistInfo2`, `getAlbumInfo`, `getAlbumInfo2`, `getSimilarSongs`, `getSimilarSongs2`, `getTopSongs`
-- **Media Retrieval**: `stream`, `download`, `getCoverArt`, `getLyrics`, `getLyricsBySongId`, `getAvatar`
+- **Media Retrieval**: `stream`, `download`, `getCoverArt`, `getLyrics`, `getAvatar`
 - **Playlists**: `getPlaylists`, `getPlaylist`, `createPlaylist`, `updatePlaylist`, `deletePlaylist`
 - **Searching**: `search`, `search2`, `search3`
 - **Scanning**: `getScanStatus`, `startScan`
@@ -20,6 +20,11 @@ This project implements the Subsonic API (version 1.16.1) to support various mus
 - **Bookmarks**: `getBookmarks`, `createBookmark`, `deleteBookmark`
 - **Play Queue**: `getPlayQueue`, `savePlayQueue`
 - **User Management**: `getUser`, `getUsers`
+
+### OpenSubsonic Extensions & Enhancements
+- **Extended Lyrics**: Supports `getLyricsBySongId` for better lyrics compatibility with modern clients.
+- **Incremental Scanning**: `startScan` is incremental by default. It only scans for new or modified files.
+    - To trigger a full re-scan, append `fullScan=true` to the request.
 
 #### ❌ Not Implemented / Planned
 - **Videos**: `getVideos`, `getVideoInfo`, `hls.m3u8`, `getCaptions`
