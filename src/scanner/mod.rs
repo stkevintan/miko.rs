@@ -173,7 +173,13 @@ impl Scanner {
                     .as_ref()
                     .filter(|t| !t.title.trim().is_empty())
                     .map(|t| t.title.clone())
-                    .unwrap_or_else(|| task.name.clone())),
+                    .unwrap_or_else(|| {
+                        Path::new(&task.name)
+                            .file_stem()
+                            .and_then(|s| s.to_str())
+                            .map(|s| s.to_string())
+                            .unwrap_or_else(|| task.name.clone())
+                    })),
                 path: Set(task.path.clone()),
                 size: Set(task.size as i64),
                 suffix: Set(Some(suffix)),
@@ -583,29 +589,34 @@ impl Scanner {
     pub async fn prune(&self) -> Result<(), anyhow::Error> {
         log::info!("Pruning deleted files and orphaned records...");
 
-        // Delete junction records for songs that are NOT in _scanner_seen
+        // 1. Delete associated data for songs that are NOT in _scanner_seen
+        // Order matters: delete dependents first to satisfy foreign key constraints.
+        self.db.execute_unprepared("DELETE FROM lyrics WHERE NOT EXISTS (SELECT 1 FROM _scanner_seen WHERE _scanner_seen.id = lyrics.song_id)").await?;
         self.db.execute_unprepared("DELETE FROM song_artists WHERE NOT EXISTS (SELECT 1 FROM _scanner_seen WHERE _scanner_seen.id = song_artists.song_id)").await?;
         self.db.execute_unprepared("DELETE FROM song_genres WHERE NOT EXISTS (SELECT 1 FROM _scanner_seen WHERE _scanner_seen.id = song_genres.song_id)").await?;
+        self.db.execute_unprepared("DELETE FROM playlist_songs WHERE NOT EXISTS (SELECT 1 FROM _scanner_seen WHERE _scanner_seen.id = playlist_songs.song_id)").await?;
 
-        // Delete children that are NOT in _scanner_seen
+        // 2. Delete children that are NOT in _scanner_seen
         self.db.execute_unprepared("DELETE FROM children WHERE NOT EXISTS (SELECT 1 FROM _scanner_seen WHERE _scanner_seen.id = children.id)").await?;
 
-        // Drop the side table but keep it for next scan
-        self.db.execute_unprepared("DELETE FROM _scanner_seen").await?;
-
-        // 2. Prune orphaned albums
+        // 3. Prune orphaned albums (no more songs referencing them)
+        // First delete junction records for those albums
+        self.db.execute_unprepared("DELETE FROM album_artists WHERE NOT EXISTS (SELECT 1 FROM children WHERE children.album_id = album_artists.album_id)").await?;
         self.db.execute_unprepared("DELETE FROM albums WHERE NOT EXISTS (SELECT 1 FROM children WHERE children.album_id = albums.id)").await?;
         
-        // 3. Prune orphaned artists
+        // 4. Prune orphaned artists
         self.db.execute_unprepared("DELETE FROM artists \
-            WHERE NOT EXISTS (SELECT 1 FROM children WHERE children.artist_id = artists.id) \
-            AND NOT EXISTS (SELECT 1 FROM albums WHERE albums.artist_id = artists.id) \
-            AND NOT EXISTS (SELECT 1 FROM song_artists WHERE song_artists.artist_id = artists.id)").await?;
+            WHERE NOT EXISTS (SELECT 1 FROM albums WHERE albums.artist_id = artists.id) \
+            AND NOT EXISTS (SELECT 1 FROM song_artists WHERE song_artists.artist_id = artists.id) \
+            AND NOT EXISTS (SELECT 1 FROM album_artists WHERE album_artists.artist_id = artists.id)").await?;
         
-        // 4. Prune orphaned genres
+        // 5. Prune orphaned genres
         self.db.execute_unprepared("DELETE FROM genres \
-            WHERE NOT EXISTS (SELECT 1 FROM children WHERE children.genre = genres.name) \
+            WHERE NOT EXISTS (SELECT 1 FROM albums WHERE albums.genre = genres.name) \
             AND NOT EXISTS (SELECT 1 FROM song_genres WHERE song_genres.genre_name = genres.name)").await?;
+
+        // Cleanup side table
+        self.db.execute_unprepared("DELETE FROM _scanner_seen").await?;
 
         Ok(())
     }
