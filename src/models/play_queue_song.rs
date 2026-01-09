@@ -7,9 +7,9 @@ pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
     pub username: String,
     #[sea_orm(primary_key, auto_increment = false)]
+    pub index: i32,
+    // song can be duplicated in queue, so not primary key
     pub song_id: String,
-    #[sea_orm(primary_key, auto_increment = false)]
-    pub position: i32,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

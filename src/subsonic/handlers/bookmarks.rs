@@ -1,7 +1,7 @@
 use crate::browser::Browser;
 use crate::models::user;
 use crate::subsonic::{
-    common::{send_response, SubsonicParams},
+    common::{send_response, SubsonicParams, deserialize_vec_or_string},
     models::{Bookmark, Bookmarks, Child, PlayQueue, SubsonicResponse, SubsonicResponseBody},
 };
 use poem::{
@@ -28,7 +28,7 @@ pub struct DeleteBookmarkQuery {
 pub struct SavePlayQueueQuery {
     pub current: Option<String>,
     pub position: Option<i64>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_vec_or_string")]
     pub id: Vec<String>,
 }
 

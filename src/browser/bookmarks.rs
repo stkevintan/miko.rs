@@ -91,11 +91,11 @@ impl Browser {
             .await?;
 
         if let Some(queue) = queue {
+            // play_queue_song::Column::Index represents the order of songs in the list.
             let songs = Self::song_with_metadata_query()
                 .join(JoinType::InnerJoin, child::Relation::PlayQueueSongs.def())
                 .filter(play_queue_song::Column::Username.eq(username))
-                .group_by(play_queue_song::Column::Position)
-                .order_by_asc(play_queue_song::Column::Position)
+                .order_by_asc(play_queue_song::Column::Index)
                 .into_model::<ChildWithMetadata>()
                 .all(&self.db)
                 .await?;
@@ -152,7 +152,7 @@ impl Browser {
                             play_queue_song::ActiveModel {
                                 username: Set(username.clone()),
                                 song_id: Set(sid),
-                                position: Set(i as i32),
+                                index: Set(i as i32),
                             }
                         });
                         play_queue_song::Entity::insert_many(entries).exec(txn).await?;

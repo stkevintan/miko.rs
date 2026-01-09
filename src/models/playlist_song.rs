@@ -4,13 +4,12 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Serialize, Deserialize)]
 #[sea_orm(table_name = "playlist_songs")]
 pub struct Model {
-    #[sea_orm(primary_key)]
-    pub id: i32,
-    #[sea_orm(index)]
+    #[sea_orm(primary_key, auto_increment = false)]
     pub playlist_id: i32,
-    #[sea_orm(index)]
+    #[sea_orm(primary_key, auto_increment = false)]
     pub song_id: String,
-    pub position: i32,
+    // TODO: create unique index on (playlist_id, index)
+    pub index: i32,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

@@ -38,7 +38,7 @@ impl Browser {
                             songs.push(playlist_song::ActiveModel {
                                 playlist_id: Set(p.id),
                                 song_id: Set(song_id),
-                                position: Set(i as i32),
+                                index: Set(i as i32),
                                 ..Default::default()
                             });
                         }
@@ -91,7 +91,7 @@ impl Browser {
                     if !opts.song_ids_to_add.is_empty() || !opts.song_indices_to_remove.is_empty() {
                         let songs = playlist_song::Entity::find()
                             .filter(playlist_song::Column::PlaylistId.eq(playlist_id))
-                            .order_by_asc(playlist_song::Column::Position)
+                            .order_by_asc(playlist_song::Column::Index)
                             .all(txn)
                             .await?;
 
@@ -130,7 +130,7 @@ impl Browser {
                                 .map(|(i, sid)| playlist_song::ActiveModel {
                                     playlist_id: Set(playlist_id),
                                     song_id: Set(sid),
-                                    position: Set(i as i32),
+                                    index: Set(i as i32),
                                     ..Default::default()
                                 })
                                 .collect();
@@ -171,7 +171,7 @@ impl Browser {
         target_username: &str,
     ) -> Result<Vec<PlaylistWithStats>, DbErr> {
         let mut query = playlist::Entity::find()
-            .column_as(playlist_song::Column::Id.count(), "song_count")
+            .column_as(playlist_song::Column::SongId.count(), "song_count")
             .column_as(child::Column::Duration.sum(), "duration")
             .join_rev(
                 JoinType::LeftJoin,
@@ -200,7 +200,7 @@ impl Browser {
     pub async fn get_playlist(&self, id: i32) -> Result<Option<PlaylistWithSongs>, DbErr> {
         let playlist = playlist::Entity::find()
             .filter(playlist::Column::Id.eq(id))
-            .column_as(playlist_song::Column::Id.count(), "song_count")
+            .column_as(playlist_song::Column::SongId.count(), "song_count")
             .column_as(child::Column::Duration.sum(), "duration")
             .join_rev(
                 JoinType::LeftJoin,
@@ -231,7 +231,7 @@ impl Browser {
                         .into(),
                 )
                 .filter(playlist_song::Column::PlaylistId.eq(id))
-                .order_by_asc(playlist_song::Column::Position)
+                .order_by_asc(playlist_song::Column::Index)
                 .into_model::<ChildWithMetadata>()
                 .all(&self.db)
                 .await?;
