@@ -246,7 +246,7 @@ pub async fn get_now_playing(
         .into_iter()
         .collect();
 
-    let songs = match browser.get_songs_by_ids(song_ids).await {
+    let songs = match browser.get_songs_by_ids(&song_ids).await {
         Ok(s) => s,
         Err(e) => {
             log::error!("Failed to get songs for now playing: {}", e);

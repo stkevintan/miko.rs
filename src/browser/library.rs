@@ -37,7 +37,7 @@ impl Browser {
                             Query::select()
                                 .column(album_genre::Column::AlbumId)
                                 .from(album_genre::Entity)
-                                .and_where(album_genre::Column::GenreName.eq(genre.clone()))
+                                .and_where(album_genre::Column::GenreName.eq(genre))
                                 .to_owned()
                         )
                     );
@@ -181,7 +181,7 @@ impl Browser {
         }
 
         if let Some(ref g_name) = opts.genre {
-            query = query.filter(genre::Column::Name.eq(g_name.clone()));
+            query = query.filter(genre::Column::Name.eq(g_name));
         }
 
         if let Some(from) = opts.from_year {
@@ -225,7 +225,7 @@ impl Browser {
 
     pub async fn get_songs_by_ids(
         &self,
-        ids: Vec<String>,
+        ids: &[String],
     ) -> Result<Vec<ChildWithMetadata>, sea_orm::DbErr> {
         if ids.is_empty() {
             return Ok(Vec::new());

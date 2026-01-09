@@ -7,10 +7,8 @@ use poem::{
     web::{Data, Query},
     IntoResponse,
 };
-use sea_orm::{
-    ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter,
-};
 use sea_orm::sea_query::Expr;
+use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter};
 use serde::Deserialize;
 
 #[derive(Deserialize)]
@@ -43,11 +41,11 @@ async fn update_starred_status(
     query: StarQuery,
     value: Option<chrono::DateTime<chrono::Utc>>,
 ) -> Result<(), sea_orm::DbErr> {
-    use crate::models::{child, album, artist};
+    use crate::models::{album, artist, child};
 
     if !query.id.is_empty() {
         child::Entity::update_many()
-            .filter(child::Column::Id.is_in(query.id))
+            .filter(child::Column::Id.is_in(&query.id))
             .col_expr(child::Column::Starred, Expr::value(value))
             .exec(db)
             .await?;
@@ -55,7 +53,7 @@ async fn update_starred_status(
 
     if !query.album_id.is_empty() {
         album::Entity::update_many()
-            .filter(album::Column::Id.is_in(query.album_id))
+            .filter(album::Column::Id.is_in(&query.album_id))
             .col_expr(album::Column::Starred, Expr::value(value))
             .exec(db)
             .await?;
@@ -63,7 +61,7 @@ async fn update_starred_status(
 
     if !query.artist_id.is_empty() {
         artist::Entity::update_many()
-            .filter(artist::Column::Id.is_in(query.artist_id))
+            .filter(artist::Column::Id.is_in(&query.artist_id))
             .col_expr(artist::Column::Starred, Expr::value(value))
             .exec(db)
             .await?;
@@ -80,10 +78,16 @@ pub async fn star(
 ) -> impl IntoResponse {
     let now = chrono::Utc::now();
     match update_starred_status(db.0, query.0, Some(now)).await {
-        Ok(_) => send_response(SubsonicResponse::new_ok(SubsonicResponseBody::None), &params.f),
+        Ok(_) => send_response(
+            SubsonicResponse::new_ok(SubsonicResponseBody::None),
+            &params.f,
+        ),
         Err(e) => {
             log::error!("Database error in star: {}", e);
-            send_response(SubsonicResponse::new_error(0, "Failed to star items".into()), &params.f)
+            send_response(
+                SubsonicResponse::new_error(0, "Failed to star items".into()),
+                &params.f,
+            )
         }
     }
 }
@@ -95,10 +99,16 @@ pub async fn unstar(
     query: Query<StarQuery>,
 ) -> impl IntoResponse {
     match update_starred_status(db.0, query.0, None).await {
-        Ok(_) => send_response(SubsonicResponse::new_ok(SubsonicResponseBody::None), &params.f),
+        Ok(_) => send_response(
+            SubsonicResponse::new_ok(SubsonicResponseBody::None),
+            &params.f,
+        ),
         Err(e) => {
             log::error!("Database error in unstar: {}", e);
-            send_response(SubsonicResponse::new_error(0, "Failed to unstar items".into()), &params.f)
+            send_response(
+                SubsonicResponse::new_error(0, "Failed to unstar items".into()),
+                &params.f,
+            )
         }
     }
 }
@@ -109,68 +119,90 @@ pub async fn set_rating(
     params: Query<SubsonicParams>,
     query: Query<SetRatingQuery>,
 ) -> impl IntoResponse {
-    use crate::models::{child, album, artist};
-    let SetRatingQuery { id, rating } = query.0;
-    
-    if rating < 0 || rating > 5 {
-        return send_response(SubsonicResponse::new_error(0, "Invalid rating".into()), &params.f);
+    use crate::models::{album, artist, child};
+    if query.rating < 0 || query.rating > 5 {
+        return send_response(
+            SubsonicResponse::new_error(0, "Invalid rating".into()),
+            &params.f,
+        );
     }
 
     // Try child first
     let res = child::Entity::update_many()
-        .filter(child::Column::Id.eq(id.clone()))
-        .col_expr(child::Column::UserRating, Expr::value(rating))
+        .filter(child::Column::Id.eq(&query.id))
+        .col_expr(child::Column::UserRating, Expr::value(query.rating))
         .exec(db.0)
         .await;
 
     match res {
         Ok(result) if result.rows_affected > 0 => {
-            return send_response(SubsonicResponse::new_ok(SubsonicResponseBody::None), &params.f);
+            return send_response(
+                SubsonicResponse::new_ok(SubsonicResponseBody::None),
+                &params.f,
+            );
         }
         Err(e) => {
             log::error!("Database error in set_rating (child): {}", e);
-            return send_response(SubsonicResponse::new_error(0, "Failed to set rating".into()), &params.f);
+            return send_response(
+                SubsonicResponse::new_error(0, "Failed to set rating".into()),
+                &params.f,
+            );
         }
         _ => {}
     }
 
     // Try album
     let res = album::Entity::update_many()
-        .filter(album::Column::Id.eq(id.clone()))
-        .col_expr(album::Column::UserRating, Expr::value(rating))
+        .filter(album::Column::Id.eq(&query.id))
+        .col_expr(album::Column::UserRating, Expr::value(query.rating))
         .exec(db.0)
         .await;
 
     match res {
         Ok(result) if result.rows_affected > 0 => {
-            return send_response(SubsonicResponse::new_ok(SubsonicResponseBody::None), &params.f);
+            return send_response(
+                SubsonicResponse::new_ok(SubsonicResponseBody::None),
+                &params.f,
+            );
         }
         Err(e) => {
             log::error!("Database error in set_rating (album): {}", e);
-            return send_response(SubsonicResponse::new_error(0, "Failed to set rating".into()), &params.f);
+            return send_response(
+                SubsonicResponse::new_error(0, "Failed to set rating".into()),
+                &params.f,
+            );
         }
         _ => {}
     }
 
     // Try artist
     let res = artist::Entity::update_many()
-        .filter(artist::Column::Id.eq(id))
-        .col_expr(artist::Column::UserRating, Expr::value(rating))
+        .filter(artist::Column::Id.eq(&query.id))
+        .col_expr(artist::Column::UserRating, Expr::value(query.rating))
         .exec(db.0)
         .await;
 
     match res {
         Ok(result) if result.rows_affected > 0 => {
-            return send_response(SubsonicResponse::new_ok(SubsonicResponseBody::None), &params.f);
+            return send_response(
+                SubsonicResponse::new_ok(SubsonicResponseBody::None),
+                &params.f,
+            );
         }
         Err(e) => {
             log::error!("Database error in set_rating (artist): {}", e);
-            return send_response(SubsonicResponse::new_error(0, "Failed to set rating".into()), &params.f);
+            return send_response(
+                SubsonicResponse::new_error(0, "Failed to set rating".into()),
+                &params.f,
+            );
         }
         _ => {}
     }
 
-    send_response(SubsonicResponse::new_error(70, "Item not found".into()), &params.f)
+    send_response(
+        SubsonicResponse::new_error(70, "Item not found".into()),
+        &params.f,
+    )
 }
 
 #[handler]
@@ -182,7 +214,10 @@ pub async fn scrobble(
     use crate::models::{child, now_playing};
     use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, Set};
 
-    let ScrobbleQuery { id: song_id, submission } = query.0;
+    let ScrobbleQuery {
+        id: song_id,
+        submission,
+    } = query.0;
     let submission = submission.unwrap_or(false);
     let username = params
         .u
@@ -210,10 +245,7 @@ pub async fn scrobble(
                     now_playing::Column::Username,
                     now_playing::Column::PlayerName,
                 ])
-                .update_columns([
-                    now_playing::Column::SongId,
-                    now_playing::Column::UpdatedAt,
-                ])
+                .update_columns([now_playing::Column::SongId, now_playing::Column::UpdatedAt])
                 .to_owned(),
             )
             .exec(db.0)
@@ -221,6 +253,10 @@ pub async fn scrobble(
 
         if let Err(e) = result {
             log::error!("Database error in update now playing: {}", e);
+            return send_response(
+                SubsonicResponse::new_error(0, "Failed to update now playing status".into()),
+                &params.f,
+            );
         }
 
         return send_response(
@@ -231,17 +267,26 @@ pub async fn scrobble(
 
     let now = chrono::Utc::now();
     let res = child::Entity::update_many()
-        .filter(child::Column::Id.eq(song_id))
-        .col_expr(child::Column::PlayCount, Expr::col(child::Column::PlayCount).add(1))
+        .filter(child::Column::Id.eq(&song_id))
+        .col_expr(
+            child::Column::PlayCount,
+            Expr::col(child::Column::PlayCount).add(1),
+        )
         .col_expr(child::Column::LastPlayed, Expr::value(Some(now)))
         .exec(db.0)
         .await;
 
     match res {
-        Ok(_) => send_response(SubsonicResponse::new_ok(SubsonicResponseBody::None), &params.f),
+        Ok(_) => send_response(
+            SubsonicResponse::new_ok(SubsonicResponseBody::None),
+            &params.f,
+        ),
         Err(e) => {
             log::error!("Database error in scrobble: {}", e);
-            send_response(SubsonicResponse::new_error(0, "Failed to scrobble".into()), &params.f)
+            send_response(
+                SubsonicResponse::new_error(0, "Failed to scrobble".into()),
+                &params.f,
+            )
         }
     }
 }
