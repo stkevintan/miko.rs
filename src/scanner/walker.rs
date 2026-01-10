@@ -8,6 +8,7 @@ pub struct WalkTask {
     pub path: String,
     pub is_dir: bool,
     pub name: String,
+    pub ext: String,
     pub size: u64,
     pub mod_time: chrono::DateTime<chrono::Utc>,
     pub folder: music_folder::Model,
@@ -28,10 +29,14 @@ impl Walker {
                     Err(_) => continue,
                 };
 
+                let p = entry.path();
+                // get ext and name
+                let ext = p.extension().and_then(|s| s.to_str()).unwrap_or("").to_lowercase();
                 // filter only dir or audio files
-                if !metadata.is_dir() &&!is_audio_file(entry.path()){
+                if !metadata.is_dir() &&!is_audio_file(ext.as_str()){
                     continue
                 }
+                let name = p.file_stem().and_then(|s| s.to_str()).unwrap_or("").to_string();
 
                 let mod_time: chrono::DateTime<chrono::Utc> = metadata.modified()
                     .unwrap_or_else(|_| std::time::SystemTime::now())
@@ -40,7 +45,8 @@ impl Walker {
                 let task = WalkTask {
                     path: entry.path().to_string_lossy().replace('\\', "/"),
                     is_dir: entry.file_type().is_dir(),
-                    name: entry.file_name().to_string_lossy().into_owned(),
+                    name: name,
+                    ext: ext,
                     size: metadata.len(),
                     mod_time,
                     folder: folder.clone(),

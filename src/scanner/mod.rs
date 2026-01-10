@@ -1,30 +1,63 @@
-use std::sync::Arc;
+use crate::config::Config;
+use crate::models::{
+    album, album_artist, album_genre, artist, child, genre, lyrics, music_folder, song_artist,
+    song_genre,
+};
+use crate::scanner::walker::{WalkTask, Walker};
+use sea_orm::{
+    ColumnTrait, ConnectionTrait, DatabaseConnection, EntityTrait, QueryFilter, QuerySelect, Set,
+};
+use std::path::Path;
 use std::sync::atomic::{AtomicBool, AtomicI64};
+use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::mpsc;
-use sea_orm::{DatabaseConnection, EntityTrait, QueryFilter, ColumnTrait, Set, QuerySelect, ConnectionTrait};
-use crate::config::Config;
-use crate::models::{child, music_folder, artist, album, album_artist, genre, song_artist, song_genre, album_genre, lyrics};
-use crate::scanner::walker::{Walker, WalkTask};
-use std::path::Path;
-use std::collections::{HashMap, HashSet};
 
-pub mod walker;
 pub mod tags;
 pub mod utils;
+pub mod walker;
+
+pub enum UpsertMessage {
+    Artist(artist::ActiveModel),
+    Album(album::ActiveModel),
+    Genre(genre::ActiveModel),
+    Song(child::ActiveModel),
+    SongArtist(song_artist::ActiveModel),
+    SongGenre(song_genre::ActiveModel),
+    AlbumArtist(album_artist::ActiveModel),
+    AlbumGenre(album_genre::ActiveModel),
+    Lyrics(lyrics::ActiveModel),
+    Seen(String),
+    Flush,
+}
 
 pub struct Scanner {
     db: DatabaseConnection,
     cfg: Arc<Config>,
-    is_scanning: AtomicBool,
-    scan_count: AtomicI64,
-    total_count: AtomicI64,
-    last_scan_time: AtomicI64,
+    is_scanning: Arc<AtomicBool>,
+    scan_count: Arc<AtomicI64>,
+    total_count: Arc<AtomicI64>,
+    last_scan_time: Arc<AtomicI64>,
+    upsert_tx: mpsc::Sender<UpsertMessage>,
 }
 
-struct ScanGuard<'a>(&'a AtomicBool);
+impl Clone for Scanner {
+    fn clone(&self) -> Self {
+        Self {
+            db: self.db.clone(),
+            cfg: self.cfg.clone(),
+            is_scanning: self.is_scanning.clone(),
+            scan_count: self.scan_count.clone(),
+            total_count: self.total_count.clone(),
+            last_scan_time: self.last_scan_time.clone(),
+            upsert_tx: self.upsert_tx.clone(),
+        }
+    }
+}
 
-impl<'a> Drop for ScanGuard<'a> {
+struct ScanGuard(Arc<AtomicBool>);
+
+impl<'a> Drop for ScanGuard {
     fn drop(&mut self) {
         self.0.store(false, std::sync::atomic::Ordering::SeqCst);
     }
@@ -32,13 +65,136 @@ impl<'a> Drop for ScanGuard<'a> {
 
 impl Scanner {
     pub fn new(db: DatabaseConnection, cfg: Arc<Config>) -> Self {
+        let (tx, rx) = mpsc::channel(2000);
+        let flusher_db = db.clone();
+        tokio::spawn(async move {
+            Self::run_flusher(flusher_db, rx).await;
+        });
+
         Self {
             db,
             cfg,
-            is_scanning: AtomicBool::new(false),
-            scan_count: AtomicI64::new(0),
-            total_count: AtomicI64::new(0),
-            last_scan_time: AtomicI64::new(0),
+            is_scanning: Arc::new(AtomicBool::new(false)),
+            scan_count: Arc::new(AtomicI64::new(0)),
+            total_count: Arc::new(AtomicI64::new(0)),
+            last_scan_time: Arc::new(AtomicI64::new(0)),
+            upsert_tx: tx,
+        }
+    }
+
+    async fn run_flusher(db: DatabaseConnection, mut rx: mpsc::Receiver<UpsertMessage>) {
+        let mut artists = Vec::new();
+        let mut albums = Vec::new();
+        let mut genres = Vec::new();
+        let mut songs = Vec::new();
+        let mut song_artists = Vec::new();
+        let mut song_genres = Vec::new();
+        let mut album_artists = Vec::new();
+        let mut album_genres = Vec::new();
+        let mut lyrics_vec = Vec::new();
+        let mut seen_ids = Vec::new();
+
+        let flush_interval = std::time::Duration::from_millis(500);
+        let mut last_flush = std::time::Instant::now();
+
+        loop {
+            let msg = tokio::select! {
+                m = rx.recv() => m,
+                _ = tokio::time::sleep(flush_interval) => None,
+            };
+
+            let mut force_flush = false;
+            let is_none = msg.is_none();
+
+            if let Some(m) = msg {
+                match m {
+                    UpsertMessage::Artist(v) => artists.push(v),
+                    UpsertMessage::Album(v) => albums.push(v),
+                    UpsertMessage::Genre(v) => genres.push(v),
+                    UpsertMessage::Song(v) => songs.push(v),
+                    UpsertMessage::SongArtist(v) => song_artists.push(v),
+                    UpsertMessage::SongGenre(v) => song_genres.push(v),
+                    UpsertMessage::AlbumArtist(v) => album_artists.push(v),
+                    UpsertMessage::AlbumGenre(v) => album_genres.push(v),
+                    UpsertMessage::Lyrics(v) => lyrics_vec.push(v),
+                    UpsertMessage::Seen(v) => seen_ids.push(v),
+                    UpsertMessage::Flush => force_flush = true,
+                }
+            }
+
+            let overdue = last_flush.elapsed() >= flush_interval || force_flush;
+            
+            if artists.len() >= 100 || (overdue && !artists.is_empty()) {
+                let _ = artist::Entity::insert_many(artists.drain(..))
+                    .on_conflict(sea_orm::sea_query::OnConflict::column(artist::Column::Id).do_nothing().to_owned())
+                    .exec_without_returning(&db).await;
+            }
+            if albums.len() >= 100 || (overdue && !albums.is_empty()) {
+                let _ = album::Entity::insert_many(albums.drain(..))
+                    .on_conflict(sea_orm::sea_query::OnConflict::column(album::Column::Id).update_columns([album::Column::Year]).to_owned())
+                    .exec_without_returning(&db).await;
+            }
+            if genres.len() >= 50 || (overdue && !genres.is_empty()) {
+                let _ = genre::Entity::insert_many(genres.drain(..))
+                    .on_conflict(sea_orm::sea_query::OnConflict::column(genre::Column::Name).do_nothing().to_owned())
+                    .exec_without_returning(&db).await;
+            }
+            if songs.len() >= 100 || (overdue && !songs.is_empty()) {
+                let _ = child::Entity::insert_many(songs.drain(..))
+                    .on_conflict(sea_orm::sea_query::OnConflict::column(child::Column::Id).update_columns([
+                        child::Column::Parent, child::Column::Title, child::Column::Path, child::Column::Size, 
+                        child::Column::Suffix, child::Column::ContentType, child::Column::Track, 
+                        child::Column::DiscNumber, child::Column::Year, child::Column::Duration, 
+                        child::Column::BitRate, child::Column::AlbumId
+                    ]).to_owned())
+                    .exec_without_returning(&db).await;
+            }
+            if song_artists.len() >= 200 || (overdue && !song_artists.is_empty()) {
+                let _ = song_artist::Entity::insert_many(song_artists.drain(..))
+                    .on_conflict(sea_orm::sea_query::OnConflict::columns([song_artist::Column::SongId, song_artist::Column::ArtistId]).do_nothing().to_owned())
+                    .exec_without_returning(&db).await;
+            }
+            if song_genres.len() >= 200 || (overdue && !song_genres.is_empty()) {
+                let _ = song_genre::Entity::insert_many(song_genres.drain(..))
+                    .on_conflict(sea_orm::sea_query::OnConflict::columns([song_genre::Column::SongId, song_genre::Column::GenreName]).do_nothing().to_owned())
+                    .exec_without_returning(&db).await;
+            }
+            if album_artists.len() >= 100 || (overdue && !album_artists.is_empty()) {
+                let _ = album_artist::Entity::insert_many(album_artists.drain(..))
+                    .on_conflict(sea_orm::sea_query::OnConflict::columns([album_artist::Column::AlbumId, album_artist::Column::ArtistId]).do_nothing().to_owned())
+                    .exec_without_returning(&db).await;
+            }
+            if album_genres.len() >= 100 || (overdue && !album_genres.is_empty()) {
+                let _ = album_genre::Entity::insert_many(album_genres.drain(..))
+                    .on_conflict(sea_orm::sea_query::OnConflict::columns([album_genre::Column::AlbumId, album_genre::Column::GenreName]).do_nothing().to_owned())
+                    .exec_without_returning(&db).await;
+            }
+            if lyrics_vec.len() >= 50 || (overdue && !lyrics_vec.is_empty()) {
+                let _ = lyrics::Entity::insert_many(lyrics_vec.drain(..))
+                    .on_conflict(sea_orm::sea_query::OnConflict::column(lyrics::Column::SongId).update_column(lyrics::Column::Content).to_owned())
+                    .exec_without_returning(&db).await;
+            }
+            if seen_ids.len() >= 500 || (overdue && !seen_ids.is_empty()) {
+                use sea_orm::{Statement, TransactionTrait};
+                let ids = seen_ids.drain(..).collect::<Vec<_>>();
+                let txn = db.begin().await.unwrap();
+                for id in ids {
+                    let _ = txn.execute(Statement::from_sql_and_values(
+                        db.get_database_backend(),
+                        "INSERT OR IGNORE INTO _scanner_seen (id) VALUES (?)",
+                        [sea_orm::Value::from(id)],
+                    )).await;
+                }
+                let _ = txn.commit().await;
+            }
+
+            if overdue {
+                last_flush = std::time::Instant::now();
+            }
+
+            if is_none && rx.is_closed() {
+                break;
+            }
         }
     }
 
@@ -47,7 +203,8 @@ impl Scanner {
     }
 
     pub fn last_scan_time(&self) -> i64 {
-        self.last_scan_time.load(std::sync::atomic::Ordering::SeqCst)
+        self.last_scan_time
+            .load(std::sync::atomic::Ordering::SeqCst)
     }
 
     pub fn scan_count(&self) -> i64 {
@@ -60,100 +217,73 @@ impl Scanner {
 
     pub async fn update_total_count(&self) {
         let count = child::Entity::count_songs(&self.db).await;
-        self.total_count.store(count, std::sync::atomic::Ordering::SeqCst);
+        self.total_count
+            .store(count, std::sync::atomic::Ordering::SeqCst);
     }
 
-    async fn process_batch(
+    async fn process_task(
         &self,
-        tasks: &[WalkTask],
+        task: WalkTask,
         incremental: bool,
         cache_dir: &Path,
-        seen_artists: &mut HashSet<String>,
-        seen_albums: &mut HashSet<String>,
-        seen_genres: &mut HashSet<String>,
     ) -> Result<(), anyhow::Error> {
-        let mut ids = Vec::new();
-        let mut task_map = HashMap::new();
+        let id = utils::generate_id(&task.path, task.folder.id, &task.folder.path);
+        
+        let parent_id = utils::get_parent_id(&task.path, task.folder.id, &task.folder.path)
+            .filter(|s| !s.is_empty());
 
-        for task in tasks {
-            let id = utils::generate_id(&task.path, task.folder.id, &task.folder.path);
-            ids.push(id.clone());
-            task_map.insert(id, task);
+        let _ = self.upsert_tx.send(UpsertMessage::Seen(id.clone())).await;
+
+        if task.is_dir {
+            let active_child: child::ActiveModel = child::ActiveModel {
+                id: Set(id.clone()),
+                parent: Set(parent_id),
+                is_dir: Set(true),
+                title: Set(task.name.clone()),
+                path: Set(task.path.clone()),
+                music_folder_id: Set(task.folder.id),
+                content_type: Set(None),
+                suffix: Set(None),
+                transcoded_content_type: Set(None),
+                transcoded_suffix: Set(None),
+                album_id: Set(None),
+                r#type: Set("directory".to_string()),
+                track: Set(0),
+                year: Set(0),
+                disc_number: Set(0),
+                duration: Set(0),
+                bit_rate: Set(0),
+                size: Set(0),
+                is_video: Set(false),
+                user_rating: Set(0),
+                average_rating: Set(0.0),
+                play_count: Set(0),
+                ..Default::default()
+            };
+            let _ = self.upsert_tx.send(UpsertMessage::Song(active_child)).await;
+            return Ok(());
         }
 
-        let mut existing_info = HashMap::new();
         if incremental {
-            let existing: Vec<(String, Option<chrono::DateTime<chrono::Utc>>)> = child::Entity::find()
-                .filter(child::Column::Id.is_in(ids.clone()))
+            let existing: Option<chrono::DateTime<chrono::Utc>> = child::Entity::find_by_id(id.clone())
                 .select_only()
-                .column(child::Column::Id)
                 .column(child::Column::Created)
                 .into_tuple()
-                .all(&self.db)
+                .one(&self.db)
                 .await?;
-            for (id, created) in existing {
-                if let Some(c) = created {
-                    existing_info.insert(id, c);
+            
+            if let Some(created) = existing {
+                if task.mod_time <= created {
+                    return Ok(());
                 }
             }
         }
+        // file must be end with a valid audio suffix, that is ensured by the walker
+        let content_type = format!("audio/{}", task.ext.to_lowercase());
 
-        let mut seen_ids_to_flush = Vec::new();
-
-        for id in &ids {
-            let task = task_map.get(id).unwrap();
-            let parent_id = utils::get_parent_id(&task.path, task.folder.id, &task.folder.path)
-                .filter(|s| !s.is_empty());
-            
-            seen_ids_to_flush.push(id.clone());
-
-            if task.is_dir {
-                let active_child: child::ActiveModel = child::ActiveModel {
-                    id: Set(id.clone()),
-                    parent: Set(parent_id),
-                    is_dir: Set(true),
-                    title: Set(task.name.clone()),
-                    path: Set(task.path.clone()),
-                    music_folder_id: Set(task.folder.id),
-                    content_type: Set(None),
-                    suffix: Set(None),
-                    transcoded_content_type: Set(None),
-                    transcoded_suffix: Set(None),
-                    album_id: Set(None),
-                    r#type: Set("directory".to_string()),
-                    track: Set(0),
-                    year: Set(0),
-                    disc_number: Set(0),
-                    duration: Set(0),
-                    bit_rate: Set(0),
-                    size: Set(0),
-                    is_video: Set(false),
-                    user_rating: Set(0),
-                    average_rating: Set(0.0),
-                    play_count: Set(0),
-                    ..Default::default()
-                };
-                child::Entity::insert(active_child).on_conflict(
-                    sea_orm::sea_query::OnConflict::column(child::Column::Id)
-                        .update_columns([child::Column::Title, child::Column::Parent, child::Column::Path])
-                        .to_owned()
-                ).exec_without_returning(&self.db).await?;
-                continue;
-            }
-
-            if incremental {
-                if let Some(last_mod) = existing_info.get(id) {
-                    if task.mod_time <= *last_mod {
-                        continue;
-                    }
-                }
-            }
-
-            let content_type = utils::get_content_type(Path::new(&task.path));
-            let suffix = Path::new(&task.path).extension().and_then(|s| s.to_str()).unwrap_or_default().to_string();
-
-            let path_for_tags = Path::new(&task.path).to_path_buf();
-            let tag_data = match tokio::task::spawn_blocking(move || tags::read(&path_for_tags)).await? {
+        let path_for_tags = Path::new(&task.path).to_path_buf();
+        let tag_data =
+            match tokio::task::spawn_blocking(move || tags::read(&path_for_tags)).await? {
                 Ok(t) => Some(t),
                 Err(e) => {
                     log::warn!("Failed to read tags for '{}': {}", &task.path, e);
@@ -161,283 +291,180 @@ impl Scanner {
                 }
             };
 
-            let mut many_to_many_artists = Vec::new();
-            let mut many_to_many_genres = Vec::new();
-            let mut song_lyrics = None;
+        let mut many_to_many_artists = Vec::new();
+        let mut many_to_many_genres = Vec::new();
+        let mut song_lyrics = None;
 
-            let mut active_child = child::ActiveModel {
-                id: Set(id.clone()),
-                parent: Set(parent_id),
-                is_dir: Set(false),
-                title: Set(tag_data
-                    .as_ref()
-                    .filter(|t| !t.title.trim().is_empty())
-                    .map(|t| t.title.clone())
-                    .unwrap_or_else(|| {
-                        Path::new(&task.name)
-                            .file_stem()
-                            .and_then(|s| s.to_str())
-                            .map(|s| s.to_string())
-                            .unwrap_or_else(|| task.name.clone())
-                    })),
-                path: Set(task.path.clone()),
-                size: Set(task.size as i64),
-                suffix: Set(Some(suffix)),
-                content_type: Set(Some(content_type)),
-                created: Set(Some(task.mod_time)),
-                music_folder_id: Set(task.folder.id),
-                transcoded_content_type: Set(None),
-                transcoded_suffix: Set(None),
-                album_id: Set(None),
-                r#type: Set("music".to_string()),
-                track: Set(0),
-                year: Set(0),
-                disc_number: Set(0),
-                duration: Set(0),
-                bit_rate: Set(0),
-                is_video: Set(false),
-                user_rating: Set(0),
-                average_rating: Set(0.0),
-                play_count: Set(0),
-                ..Default::default()
-            };
+        let mut active_child = child::ActiveModel {
+            id: Set(id.clone()),
+            parent: Set(parent_id),
+            is_dir: Set(false),
+            title: Set(tag_data
+                .as_ref()
+                .filter(|t| !t.title.trim().is_empty())
+                .map(|t| t.title.clone())
+                .unwrap_or_else(|| task.name.clone())),
+            path: Set(task.path.clone()),
+            size: Set(task.size as i64),
+            suffix: Set(Some(task.ext.clone())),
+            content_type: Set(Some(content_type)),
+            created: Set(Some(task.mod_time)),
+            music_folder_id: Set(task.folder.id),
+            transcoded_content_type: Set(None),
+            transcoded_suffix: Set(None),
+            album_id: Set(None),
+            r#type: Set("music".to_string()),
+            track: Set(0),
+            year: Set(0),
+            disc_number: Set(0),
+            duration: Set(0),
+            bit_rate: Set(0),
+            is_video: Set(false),
+            user_rating: Set(0),
+            average_rating: Set(0.0),
+            play_count: Set(0),
+            ..Default::default()
+        };
 
-            if let Some(t) = tag_data {
-                active_child.track = Set(t.track.unwrap_or(0));
-                active_child.disc_number = Set(t.disc.unwrap_or(0));
-                active_child.year = Set(t.year.unwrap_or(0));
-                song_lyrics = (!t.lyrics.trim().is_empty()).then(|| t.lyrics.clone());
-                active_child.duration = Set(t.duration);
-                active_child.bit_rate = Set(t.bitrate);
+        if let Some(t) = tag_data {
+            active_child.track = Set(t.track.unwrap_or(0));
+            active_child.disc_number = Set(t.disc.unwrap_or(0));
+            active_child.year = Set(t.year.unwrap_or(0));
+            song_lyrics = (!t.lyrics.trim().is_empty()).then(|| t.lyrics.clone());
+            active_child.duration = Set(t.duration);
+            active_child.bit_rate = Set(t.bitrate);
 
-                let mut new_artists = Vec::new();
-                let filtered_artists: Vec<&str> = t.artists.iter()
-                    .map(|a| a.trim())
-                    .filter(|a| !a.is_empty())
-                    .collect();
+            let filtered_artists: Vec<&str> = t
+                .artists
+                .iter()
+                .map(|a| a.trim())
+                .filter(|a| !a.is_empty())
+                .collect();
 
-                for a_name in &filtered_artists {
-                    let a_id = utils::generate_artist_id(a_name);
-                    many_to_many_artists.push(a_id.clone());
-                    if !seen_artists.contains(&a_id) {
-                        new_artists.push(artist::ActiveModel {
-                            id: Set(a_id.clone()),
-                            name: Set(a_name.to_string()),
-                            artist_image_url: Set(None),
-                            user_rating: Set(0),
-                            average_rating: Set(0.0),
-                            ..Default::default()
-                        });
-                        seen_artists.insert(a_id);
-                    }
-                }
+            for a_name in &filtered_artists {
+                let a_id = self.ensure_artist(a_name).await;
+                many_to_many_artists.push(a_id);
+            }
+            let mut album_artists_list: Vec<&str> = t
+                .album_artists
+                .iter()
+                .map(|a| a.trim())
+                .filter(|a| !a.is_empty())
+                .collect();
+            if album_artists_list.is_empty() {
+                album_artists_list.push("Unknown Artist");
+            }
 
-                if !new_artists.is_empty() {
-                    artist::Entity::insert_many(new_artists)
-                        .on_conflict(
-                            sea_orm::sea_query::OnConflict::column(artist::Column::Id)
-                                .do_nothing()
-                                .to_owned(),
-                        )
-                        .exec_without_returning(&self.db)
-                        .await?;
-                }
+            if !t.album.trim().is_empty() {
+                let album_id = self
+                    .ensure_album(
+                        t.album.clone(),
+                        album_artists_list,
+                        t.year.unwrap_or(0),
+                        t.genres.iter().map(|g| g.as_str()).collect(),
+                        task.mod_time,
+                    )
+                    .await?;
+                active_child.album_id = Set(Some(album_id.clone()));
+            }
 
-                if !t.album.trim().is_empty() {
-                    let mut album_artists: Vec<&str> = t.album_artists.iter()
-                            .map(|a| a.trim())
-                            .filter(|a| !a.is_empty())
-                            .collect();
-                    if album_artists.is_empty() {
-                        album_artists = filtered_artists;
-                    }
-                    if album_artists.is_empty() {
-                        album_artists.push("Unknown Artist");
-                    }
+            let filtered_genres: Vec<String> = t
+                .genres
+                .iter()
+                .map(|g| g.trim())
+                .filter(|g| !g.is_empty())
+                .map(|g| g.to_string())
+                .collect();
 
-                    let album_id = self
-                        .ensure_album(
-                            t.album.clone(),
-                            album_artists,
-                            t.year.unwrap_or(0),
-                            t.genres.iter().map(|g| g.as_str()).collect(),
-                            task.mod_time,
-                            seen_artists,
-                            seen_albums,
-                            seen_genres,
-                        )
-                        .await?;
-                    active_child.album_id = Set(Some(album_id.clone()));
-                }
+            for g_name in &filtered_genres {
+                let g_name = self.ensure_genre(&g_name).await;
+                many_to_many_genres.push(g_name);
+            }
 
-                let filtered_genres: Vec<String> = t.genres.iter()
-                    .map(|g| g.trim())
-                    .filter(|g| !g.is_empty())
-                    .map(|g| g.to_string())
-                    .collect();
-
-                for g_name in &filtered_genres {
-                    if let Ok(g_name) = self.ensure_genre(g_name, seen_genres).await {
-                        many_to_many_genres.push(g_name);
-                    }
-                }
-
-                if t.has_image {
-                    let cover_art_id = if let Some(aid) = active_child.album_id.as_ref().as_ref() {
-                        format!("al-{}", aid)
-                    } else {
-                        id.clone()
-                    };
-                    let cover_path = cache_dir.join(&cover_art_id);
-                    if !cover_path.exists() {
-                        let path_for_img = Path::new(&task.path).to_path_buf();
-                        if let Ok(Ok(img_data)) = tokio::task::spawn_blocking(move || tags::read_image(&path_for_img)).await {
-                            tokio::fs::write(cover_path, img_data).await?;
-                        }
+            if t.has_image {
+                let cover_art_id = if let Some(aid) = active_child.album_id.as_ref().as_ref() {
+                    format!("al-{}", aid)
+                } else {
+                    id.clone()
+                };
+                let cover_path = cache_dir.join(&cover_art_id);
+                if !cover_path.exists() {
+                    let path_for_img = Path::new(&task.path).to_path_buf();
+                    if let Ok(Ok(img_data)) =
+                        tokio::task::spawn_blocking(move || tags::read_image(&path_for_img))
+                            .await
+                    {
+                        tokio::fs::write(cover_path, img_data).await?;
                     }
                 }
             }
-
-            child::Entity::insert(active_child).on_conflict(
-                sea_orm::sea_query::OnConflict::column(child::Column::Id)
-                    .update_columns([
-                        child::Column::Parent,
-                        child::Column::Title,
-                        child::Column::Path,
-                        child::Column::Size,
-                        child::Column::Suffix,
-                        child::Column::ContentType,
-                        child::Column::Track,
-                        child::Column::DiscNumber,
-                        child::Column::Year,
-                        child::Column::Duration,
-                        child::Column::BitRate,
-                        child::Column::AlbumId,
-                    ])
-                    .to_owned()
-            ).exec_without_returning(&self.db).await?;
-
-            // Clear existing many-to-many before re-inserting
-            song_artist::Entity::delete_many()
-                .filter(song_artist::Column::SongId.eq(id.clone()))
-                .exec(&self.db)
-                .await?;
-            song_genre::Entity::delete_many()
-                .filter(song_genre::Column::SongId.eq(id.clone()))
-                .exec(&self.db)
-                .await?;
-
-            // Handle lyrics
-            lyrics::Entity::delete_many()
-                .filter(lyrics::Column::SongId.eq(id.clone()))
-                .exec(&self.db)
-                .await?;
-            if let Some(content) = song_lyrics {
-                lyrics::Entity::insert(lyrics::ActiveModel {
-                    song_id: Set(id.clone()),
-                    content: Set(content),
-                }).exec_without_returning(&self.db).await?;
-            }
-
-            if !many_to_many_artists.is_empty() {
-                song_artist::Entity::insert_many(many_to_many_artists.into_iter().map(|a_id| {
-                    song_artist::ActiveModel {
-                        song_id: Set(id.clone()),
-                        artist_id: Set(a_id),
-                    }
-                }))
-                .on_conflict(
-                    sea_orm::sea_query::OnConflict::columns([
-                        song_artist::Column::SongId,
-                        song_artist::Column::ArtistId,
-                    ])
-                    .do_nothing()
-                    .to_owned(),
-                )
-                .exec_without_returning(&self.db)
-                .await?;
-            }
-
-            if !many_to_many_genres.is_empty() {
-                song_genre::Entity::insert_many(many_to_many_genres.into_iter().map(|g_name| {
-                    song_genre::ActiveModel {
-                        song_id: Set(id.clone()),
-                        genre_name: Set(g_name),
-                    }
-                }))
-                .on_conflict(
-                    sea_orm::sea_query::OnConflict::columns([
-                        song_genre::Column::SongId,
-                        song_genre::Column::GenreName,
-                    ])
-                    .do_nothing()
-                    .to_owned(),
-                )
-                .exec_without_returning(&self.db)
-                .await?;
-            }
-
-            self.scan_count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         }
 
-        self.flush_seen_ids(&seen_ids_to_flush).await?;
+        let _ = self.upsert_tx.send(UpsertMessage::Song(active_child)).await;
 
-        Ok(())
-    }
-
-    async fn flush_seen_ids(&self, ids: &[String]) -> Result<(), anyhow::Error> {
-        if ids.is_empty() {
-            return Ok(());
-        }
-        use sea_orm::{Statement, TransactionTrait};
-        let txn = self.db.begin().await?;
-        for id in ids {
-            txn.execute(Statement::from_sql_and_values(
-                self.db.get_database_backend(),
-                "INSERT OR IGNORE INTO _scanner_seen (id) VALUES (?)",
-                [sea_orm::Value::from(id.clone())],
-            ))
+        // Clear existing many-to-many before re-inserting
+        song_artist::Entity::delete_many()
+            .filter(song_artist::Column::SongId.eq(id.clone()))
+            .exec(&self.db)
             .await?;
+        song_genre::Entity::delete_many()
+            .filter(song_genre::Column::SongId.eq(id.clone()))
+            .exec(&self.db)
+            .await?;
+
+        // Handle lyrics
+        lyrics::Entity::delete_many()
+            .filter(lyrics::Column::SongId.eq(id.clone()))
+            .exec(&self.db)
+            .await?;
+        if let Some(content) = song_lyrics {
+            let _ = self.upsert_tx.send(UpsertMessage::Lyrics(lyrics::ActiveModel {
+                song_id: Set(id.clone()),
+                content: Set(content),
+            })).await;
         }
-        txn.commit().await?;
+
+        for a_id in many_to_many_artists {
+            let _ = self.upsert_tx.send(UpsertMessage::SongArtist(song_artist::ActiveModel {
+                song_id: Set(id.clone()),
+                artist_id: Set(a_id),
+            })).await;
+        }
+
+        for g_name in many_to_many_genres {
+            let _ = self.upsert_tx.send(UpsertMessage::SongGenre(song_genre::ActiveModel {
+                song_id: Set(id.clone()),
+                genre_name: Set(g_name),
+            })).await;
+        }
+
+        self.scan_count
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+
         Ok(())
     }
 
-    async fn ensure_artist(&self, name: &str, seen: &mut HashSet<String>) -> Result<String, anyhow::Error> {
+    async fn ensure_artist(&self, name: &str) -> String {
         let id = utils::generate_artist_id(name);
-        if !seen.contains(&id) {
-            let obj = artist::ActiveModel {
-                id: Set(id.clone()),
-                name: Set(name.to_string()),
-                artist_image_url: Set(None),
-                user_rating: Set(0),
-                average_rating: Set(0.0),
-                ..Default::default()
-            };
-            artist::Entity::insert(obj).on_conflict(
-                sea_orm::sea_query::OnConflict::column(artist::Column::Id)
-                    .do_nothing()
-                    .to_owned()
-            ).exec_without_returning(&self.db).await?;
-            seen.insert(id.clone());
-        }
-        Ok(id)
+        let obj = artist::ActiveModel {
+            id: Set(id.clone()),
+            name: Set(name.to_string()),
+            artist_image_url: Set(None),
+            user_rating: Set(0),
+            average_rating: Set(0.0),
+            ..Default::default()
+        };
+        let _ = self.upsert_tx.send(UpsertMessage::Artist(obj)).await;
+        id
     }
 
-    async fn ensure_genre(&self, name: &str, seen: &mut HashSet<String>) -> Result<String, anyhow::Error> {
+    async fn ensure_genre(&self, name: &str) -> String {
         let name = name.trim();
-        if !seen.contains(name) {
-            let obj = genre::ActiveModel {
-                name: Set(name.to_string()),
-            };
-            genre::Entity::insert(obj).on_conflict(
-                sea_orm::sea_query::OnConflict::column(genre::Column::Name)
-                    .do_nothing()
-                    .to_owned()
-            ).exec_without_returning(&self.db).await?;
-            seen.insert(name.to_string());
-        }
-        Ok(name.to_string())
+        let obj = genre::ActiveModel {
+            name: Set(name.to_string()),
+        };
+        let _ = self.upsert_tx.send(UpsertMessage::Genre(obj)).await;
+        name.to_string()
     }
 
     async fn ensure_album(
@@ -447,156 +474,116 @@ impl Scanner {
         year: i32,
         genres: Vec<&str>,
         created: chrono::DateTime<chrono::Utc>,
-        seen_artists: &mut HashSet<String>,
-        seen_albums: &mut HashSet<String>,
-        seen_genres: &mut HashSet<String>,
     ) -> Result<String, anyhow::Error> {
         let artist_name = artist_names.join("; ");
         let id = utils::generate_album_id(&artist_name, &name);
 
-        if !seen_albums.contains(&id) {
-            let obj = album::ActiveModel {
-                id: Set(id.clone()),
-                name: Set(name),
-                created: Set(created),
-                year: Set(year),
-                user_rating: Set(0),
-                average_rating: Set(0.0),
-                ..Default::default()
-            };
-            album::Entity::insert(obj)
-                .on_conflict(
-                    sea_orm::sea_query::OnConflict::column(album::Column::Id)
-                        .update_columns([album::Column::Year])
-                        .to_owned(),
-                )
-                .exec_without_returning(&self.db)
-                .await?;
+        let obj = album::ActiveModel {
+            id: Set(id.clone()),
+            name: Set(name),
+            created: Set(created),
+            year: Set(year),
+            user_rating: Set(0),
+            average_rating: Set(0.0),
+            ..Default::default()
+        };
+        let _ = self.upsert_tx.send(UpsertMessage::Album(obj)).await;
 
-            // Clear existing junctions when we first encounter the album in this scan
-            album_artist::Entity::delete_many()
-                .filter(album_artist::Column::AlbumId.eq(id.clone()))
-                .exec(&self.db)
-                .await?;
-            album_genre::Entity::delete_many()
-                .filter(album_genre::Column::AlbumId.eq(id.clone()))
-                .exec(&self.db)
-                .await?;
-
-            seen_albums.insert(id.clone());
-        }
-
-        let mut album_artist_models = Vec::new();
         for a_name in &artist_names {
-            if let Ok(a_id) = self.ensure_artist(a_name, seen_artists).await {
-                album_artist_models.push(album_artist::ActiveModel {
-                    album_id: Set(id.clone()),
-                    artist_id: Set(a_id),
-                });
-            }
+            let a_id = self.ensure_artist(a_name).await;
+            let _ = self.upsert_tx.send(UpsertMessage::AlbumArtist(album_artist::ActiveModel {
+                album_id: Set(id.clone()),
+                artist_id: Set(a_id),
+            })).await;
         }
 
-        if !album_artist_models.is_empty() {
-            album_artist::Entity::insert_many(album_artist_models)
-                .on_conflict(
-                    sea_orm::sea_query::OnConflict::columns([
-                        album_artist::Column::AlbumId,
-                        album_artist::Column::ArtistId,
-                    ])
-                    .do_nothing()
-                    .to_owned(),
-                )
-                .exec_without_returning(&self.db)
-                .await?;
-        }
-
-        let mut album_genre_models = Vec::new();
         for g_name in &genres {
             let g_name = g_name.trim();
-            if g_name.is_empty() { continue; }
-
-            if let Ok(g_name) = self.ensure_genre(g_name, seen_genres).await {
-                album_genre_models.push(album_genre::ActiveModel {
-                    album_id: Set(id.clone()),
-                    genre_name: Set(g_name),
-                });
+            if g_name.is_empty() {
+                continue;
             }
-        }
 
-        if !album_genre_models.is_empty() {
-            album_genre::Entity::insert_many(album_genre_models)
-                .on_conflict(
-                    sea_orm::sea_query::OnConflict::columns([
-                        album_genre::Column::AlbumId,
-                        album_genre::Column::GenreName,
-                    ])
-                    .do_nothing()
-                    .to_owned(),
-                )
-                .exec_without_returning(&self.db)
-                .await?;
+            let g_name = self.ensure_genre(g_name).await;
+            let _ = self.upsert_tx.send(UpsertMessage::AlbumGenre(album_genre::ActiveModel {
+                album_id: Set(id.clone()),
+                genre_name: Set(g_name),
+            })).await;
         }
 
         Ok(id)
     }
 
     pub async fn scan_all(&self, incremental: bool) -> Result<(), anyhow::Error> {
-        if self.is_scanning.compare_exchange(false, true, std::sync::atomic::Ordering::SeqCst, std::sync::atomic::Ordering::SeqCst).is_err() {
+        if self
+            .is_scanning
+            .compare_exchange(
+                false,
+                true,
+                std::sync::atomic::Ordering::SeqCst,
+                std::sync::atomic::Ordering::SeqCst,
+            )
+            .is_err()
+        {
             return Ok(());
         }
 
-        let _guard = ScanGuard(&self.is_scanning);
-        self.scan_count.store(0, std::sync::atomic::Ordering::SeqCst);
+        let _guard = ScanGuard(self.is_scanning.clone());
+        self.scan_count
+            .store(0, std::sync::atomic::Ordering::SeqCst);
 
         let (tx, mut rx) = mpsc::channel(100);
         let folders = music_folder::Entity::find().all(&self.db).await?;
-        
+
         for folder in folders {
             Walker::walk_path(Path::new(&folder.path).to_path_buf(), folder, tx.clone());
         }
         drop(tx);
 
         log::info!("Starting scan... incremental: {}", incremental);
-        self.scan_count.store(0, std::sync::atomic::Ordering::SeqCst);
+        self.scan_count
+            .store(0, std::sync::atomic::Ordering::SeqCst);
 
-        self.db.execute_unprepared("CREATE TABLE IF NOT EXISTS _scanner_seen (id TEXT PRIMARY KEY)").await?;
-        self.db.execute_unprepared("DELETE FROM _scanner_seen").await?;
+        // create a temporary table to track seen ids
+        self.db
+            .execute_unprepared("CREATE TABLE IF NOT EXISTS _scanner_seen (id TEXT PRIMARY KEY)")
+            .await?;
+        self.db
+            .execute_unprepared("DELETE FROM _scanner_seen")
+            .await?;
 
         let cache_dir = utils::get_cover_cache_dir(&self.cfg);
         if !cache_dir.exists() {
             tokio::fs::create_dir_all(&cache_dir).await?;
         }
 
-        let mut seen_artists = HashSet::new();
-        let mut seen_albums = HashSet::new();
-        let mut seen_genres = HashSet::new();
+        let mut join_set = tokio::task::JoinSet::new();
+        let semaphore = Arc::new(tokio::sync::Semaphore::new(32));
 
-        let mut task_buffer = Vec::with_capacity(100);
         while let Some(task) = rx.recv().await {
-            task_buffer.push(task);
-            if task_buffer.len() >= 100 {
-                self.process_batch(
-                    &task_buffer,
-                    incremental,
-                    &cache_dir,
-                    &mut seen_artists,
-                    &mut seen_albums,
-                    &mut seen_genres,
-                ).await?;
-                task_buffer.clear();
+            let scanner = self.clone();
+            let cache_dir_clone = cache_dir.clone();
+            let permit = semaphore.clone().acquire_owned().await.unwrap();
+            
+            join_set.spawn(async move {
+                let _permit = permit;
+                if let Err(e) = scanner.process_task(task, incremental, &cache_dir_clone).await {
+                    log::error!("Error processing task: {}", e);
+                }
+            });
+
+            // Clean up finished tasks periodically
+            while join_set.try_join_next().is_some() {}
+        }
+
+        while let Some(res) = join_set.join_next().await {
+            if let Err(e) = res {
+                log::error!("Join error: {}", e);
             }
         }
 
-        if !task_buffer.is_empty() {
-            self.process_batch(
-                &task_buffer,
-                incremental,
-                &cache_dir,
-                &mut seen_artists,
-                &mut seen_albums,
-                &mut seen_genres,
-            ).await?;
-        }
+        let _ = self.upsert_tx.send(UpsertMessage::Flush).await;
+        // Give the flusher a moment to finish its work before pruning
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
         log::info!("Scan finished, pruning database...");
         self.prune().await?;
@@ -604,8 +591,12 @@ impl Scanner {
         self.update_total_count().await;
 
         let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs() as i64;
-        self.last_scan_time.store(now, std::sync::atomic::Ordering::SeqCst);
-        log::info!("Scan completed. Total files: {}", self.scan_count.load(std::sync::atomic::Ordering::SeqCst));
+        self.last_scan_time
+            .store(now, std::sync::atomic::Ordering::SeqCst);
+        log::info!(
+            "Scan completed. Total files: {}",
+            self.scan_count.load(std::sync::atomic::Ordering::SeqCst)
+        );
 
         Ok(())
     }
@@ -628,19 +619,21 @@ impl Scanner {
         self.db.execute_unprepared("DELETE FROM album_artists WHERE NOT EXISTS (SELECT 1 FROM children WHERE children.album_id = album_artists.album_id)").await?;
         self.db.execute_unprepared("DELETE FROM album_genres WHERE NOT EXISTS (SELECT 1 FROM children WHERE children.album_id = album_genres.album_id)").await?;
         self.db.execute_unprepared("DELETE FROM albums WHERE NOT EXISTS (SELECT 1 FROM children WHERE children.album_id = albums.id)").await?;
-        
+
         // 4. Prune orphaned artists
         self.db.execute_unprepared("DELETE FROM artists \
             WHERE NOT EXISTS (SELECT 1 FROM song_artists WHERE song_artists.artist_id = artists.id) \
             AND NOT EXISTS (SELECT 1 FROM album_artists WHERE album_artists.artist_id = artists.id)").await?;
-        
+
         // 5. Prune orphaned genres
         self.db.execute_unprepared("DELETE FROM genres \
             WHERE NOT EXISTS (SELECT 1 FROM album_genres WHERE album_genres.genre_name = genres.name) \
             AND NOT EXISTS (SELECT 1 FROM song_genres WHERE song_genres.genre_name = genres.name)").await?;
 
         // Cleanup side table
-        self.db.execute_unprepared("DELETE FROM _scanner_seen").await?;
+        self.db
+            .execute_unprepared("DELETE FROM _scanner_seen")
+            .await?;
 
         Ok(())
     }
