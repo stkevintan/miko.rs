@@ -21,15 +21,15 @@ pub mod seen;
 
 pub struct SongRelations {
     pub song_id: String,
-    pub artists: Vec<song_artist::ActiveModel>,
-    pub genres: Vec<song_genre::ActiveModel>,
-    pub lyrics: Option<lyrics::ActiveModel>,
+    pub artists: Vec<String>,
+    pub genres: Vec<String>,
+    pub lyrics: Option<String>,
 }
 
 pub struct AlbumRelations {
     pub album_id: String,
-    pub artists: Vec<album_artist::ActiveModel>,
-    pub genres: Vec<album_genre::ActiveModel>,
+    pub artists: Vec<String>,
+    pub genres: Vec<String>,
 }
 
 pub enum UpsertMessage {
@@ -179,11 +179,24 @@ impl Scanner {
                 let mut all_genres = Vec::new();
                 let mut all_lyrics = Vec::new();
                 
-                for mut r in relations {
-                    all_artists.append(&mut r.artists);
-                    all_genres.append(&mut r.genres);
-                    if let Some(l) = r.lyrics {
-                        all_lyrics.push(l);
+                for r in relations {
+                    for a_id in r.artists {
+                        all_artists.push(song_artist::ActiveModel {
+                            song_id: Set(r.song_id.clone()),
+                            artist_id: Set(a_id),
+                        });
+                    }
+                    for g_name in r.genres {
+                        all_genres.push(song_genre::ActiveModel {
+                            song_id: Set(r.song_id.clone()),
+                            genre_name: Set(g_name),
+                        });
+                    }
+                    if let Some(content) = r.lyrics {
+                        all_lyrics.push(lyrics::ActiveModel {
+                            song_id: Set(r.song_id.clone()),
+                            content: Set(content),
+                        });
                     }
                 }
 
@@ -191,11 +204,11 @@ impl Scanner {
                     let txn = db.begin().await?;
                     
                     song_artist::Entity::delete_many()
-                        .filter(song_artist::Column::SongId.is_in(song_ids.clone()))
+                        .filter(song_artist::Column::SongId.is_in(&song_ids))
                         .exec(&txn)
                         .await?;
                     song_genre::Entity::delete_many()
-                        .filter(song_genre::Column::SongId.is_in(song_ids.clone()))
+                        .filter(song_genre::Column::SongId.is_in(&song_ids))
                         .exec(&txn)
                         .await?;
                     lyrics::Entity::delete_many()
@@ -235,16 +248,26 @@ impl Scanner {
                 let mut all_artists = Vec::new();
                 let mut all_genres = Vec::new();
                 
-                for mut r in relations {
-                    all_artists.append(&mut r.artists);
-                    all_genres.append(&mut r.genres);
+                for r in relations {
+                    for a_id in r.artists {
+                        all_artists.push(album_artist::ActiveModel {
+                            album_id: Set(r.album_id.clone()),
+                            artist_id: Set(a_id),
+                        });
+                    }
+                    for g_name in r.genres {
+                        all_genres.push(album_genre::ActiveModel {
+                            album_id: Set(r.album_id.clone()),
+                            genre_name: Set(g_name),
+                        });
+                    }
                 }
 
                 let flush_op = async {
                     let txn = db.begin().await?;
                     
                     album_artist::Entity::delete_many()
-                        .filter(album_artist::Column::AlbumId.is_in(album_ids.clone()))
+                        .filter(album_artist::Column::AlbumId.is_in(&album_ids))
                         .exec(&txn)
                         .await?;
                     album_genre::Entity::delete_many()
@@ -385,9 +408,12 @@ impl Scanner {
                 }
             };
 
-        let mut many_to_many_artists = Vec::new();
-        let mut many_to_many_genres = Vec::new();
-        let mut song_lyrics = None;
+        let mut relations = SongRelations {
+            song_id: id.clone(),
+            artists: Vec::new(),
+            genres: Vec::new(),
+            lyrics: None,
+        };
 
         let mut active_child = child::ActiveModel {
             id: Set(id.clone()),
@@ -424,7 +450,7 @@ impl Scanner {
             active_child.track = Set(t.track.unwrap_or(0));
             active_child.disc_number = Set(t.disc.unwrap_or(0));
             active_child.year = Set(t.year.unwrap_or(0));
-            song_lyrics = (!t.lyrics.trim().is_empty()).then(|| t.lyrics.clone());
+            relations.lyrics = (!t.lyrics.trim().is_empty()).then(|| t.lyrics.clone());
             active_child.duration = Set(t.duration);
             active_child.bit_rate = Set(t.bitrate);
 
@@ -437,7 +463,7 @@ impl Scanner {
 
             for a_name in &filtered_artists {
                 let a_id = self.ensure_artist(a_name).await?;
-                many_to_many_artists.push(a_id);
+                relations.artists.push(a_id);
             }
             let mut album_artists_list: Vec<&str> = t
                 .album_artists
@@ -452,10 +478,10 @@ impl Scanner {
             if !t.album.trim().is_empty() {
                 let album_id = self
                     .ensure_album(
-                        t.album.clone(),
-                        album_artists_list,
+                        &t.album,
+                        &album_artists_list,
                         t.year.unwrap_or(0),
-                        t.genres.iter().map(|g| g.as_str()).collect(),
+                        &t.genres.iter().map(|g| g.as_str()).collect::<Vec<&str>>(),
                         task.mod_time,
                     )
                     .await?;
@@ -472,7 +498,7 @@ impl Scanner {
 
             for g_name in &filtered_genres {
                 let g_name = self.ensure_genre(g_name).await?;
-                many_to_many_genres.push(g_name);
+                relations.genres.push(g_name);
             }
 
             if t.has_image {
@@ -495,34 +521,6 @@ impl Scanner {
         }
 
         self.upsert_tx.send(UpsertMessage::Song(Box::new(active_child))).await?;
-
-        let mut relations = SongRelations {
-            song_id: id.clone(),
-            artists: Vec::new(),
-            genres: Vec::new(),
-            lyrics: None,
-        };
-
-        if let Some(content) = song_lyrics {
-            relations.lyrics = Some(lyrics::ActiveModel {
-                song_id: Set(id.clone()),
-                content: Set(content),
-            });
-        }
-
-        for a_id in many_to_many_artists {
-            relations.artists.push(song_artist::ActiveModel {
-                song_id: Set(id.clone()),
-                artist_id: Set(a_id),
-            });
-        }
-
-        for g_name in many_to_many_genres {
-            relations.genres.push(song_genre::ActiveModel {
-                song_id: Set(id.clone()),
-                genre_name: Set(g_name),
-            });
-        }
 
         self.upsert_tx.send(UpsertMessage::SongRelations(Box::new(relations))).await?;
 
@@ -557,18 +555,18 @@ impl Scanner {
 
     async fn ensure_album(
         &self,
-        name: String,
-        artist_names: Vec<&str>,
+        name: &str,
+        artist_names: &[&str],
         year: i32,
-        genres: Vec<&str>,
+        genres: &[&str],
         created: chrono::DateTime<chrono::Utc>,
     ) -> Result<String, anyhow::Error> {
         let artist_name = artist_names.join("; ");
-        let id = utils::generate_album_id(&artist_name, &name);
+        let id = utils::generate_album_id(&artist_name, name);
 
         let obj = album::ActiveModel {
             id: Set(id.clone()),
-            name: Set(name),
+            name: Set(name.to_string()),
             created: Set(created),
             year: Set(year),
             user_rating: Set(0),
@@ -583,25 +581,15 @@ impl Scanner {
             genres: Vec::new(),
         };
 
-        for a_name in &artist_names {
-            let a_id = self.ensure_artist(a_name).await?;
-            relations.artists.push(album_artist::ActiveModel {
-                album_id: Set(id.clone()),
-                artist_id: Set(a_id),
-            });
+        for &a_name in artist_names {
+            relations.artists.push(self.ensure_artist(a_name).await?);
         }
 
-        for g_name in &genres {
+        for &g_name in genres {
             let g_name = g_name.trim();
-            if g_name.is_empty() {
-                continue;
+            if !g_name.is_empty() {
+                relations.genres.push(self.ensure_genre(g_name).await?);
             }
-
-            let g_name = self.ensure_genre(g_name).await?;
-            relations.genres.push(album_genre::ActiveModel {
-                album_id: Set(id.clone()),
-                genre_name: Set(g_name),
-            });
         }
 
         self.upsert_tx.send(UpsertMessage::AlbumRelations(Box::new(relations))).await?;
