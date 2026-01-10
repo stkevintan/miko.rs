@@ -6,6 +6,9 @@ mod models;
 mod scanner;
 mod subsonic;
 
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 use migration::{Migrator, MigratorTrait};
 use crate::browser::Browser;
 use crate::config::Config;
