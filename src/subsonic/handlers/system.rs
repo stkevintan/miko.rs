@@ -32,7 +32,7 @@ pub async fn get_open_subsonic_extensions(params: Query<SubsonicParams>) -> impl
         OpenSubsonicExtensions {
             extension: vec![OpenSubsonicExtension {
                 name: "songLyrics".to_string(),
-                versions: "1".to_string(),
+                versions: vec![1],
             }],
         },
     ));
