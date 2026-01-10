@@ -18,15 +18,15 @@ pub mod utils;
 pub mod walker;
 
 pub enum UpsertMessage {
-    Artist(artist::ActiveModel),
-    Album(album::ActiveModel),
-    Genre(genre::ActiveModel),
-    Song(child::ActiveModel),
-    SongArtist(song_artist::ActiveModel),
-    SongGenre(song_genre::ActiveModel),
-    AlbumArtist(album_artist::ActiveModel),
-    AlbumGenre(album_genre::ActiveModel),
-    Lyrics(lyrics::ActiveModel),
+    Artist(Box<artist::ActiveModel>),
+    Album(Box<album::ActiveModel>),
+    Genre(Box<genre::ActiveModel>),
+    Song(Box<child::ActiveModel>),
+    SongArtist(Box<song_artist::ActiveModel>),
+    SongGenre(Box<song_genre::ActiveModel>),
+    AlbumArtist(Box<album_artist::ActiveModel>),
+    AlbumGenre(Box<album_genre::ActiveModel>),
+    Lyrics(Box<lyrics::ActiveModel>),
     Seen(String),
     Flush,
 }
@@ -57,7 +57,7 @@ impl Clone for Scanner {
 
 struct ScanGuard(Arc<AtomicBool>);
 
-impl<'a> Drop for ScanGuard {
+impl Drop for ScanGuard {
     fn drop(&mut self) {
         self.0.store(false, std::sync::atomic::Ordering::SeqCst);
     }
@@ -65,7 +65,7 @@ impl<'a> Drop for ScanGuard {
 
 impl Scanner {
     pub fn new(db: DatabaseConnection, cfg: Arc<Config>) -> Self {
-        let (tx, rx) = mpsc::channel(2000);
+        let (tx, rx) = mpsc::channel(1000);
         let flusher_db = db.clone();
         tokio::spawn(async move {
             Self::run_flusher(flusher_db, rx).await;
@@ -108,15 +108,15 @@ impl Scanner {
 
             if let Some(m) = msg {
                 match m {
-                    UpsertMessage::Artist(v) => artists.push(v),
-                    UpsertMessage::Album(v) => albums.push(v),
-                    UpsertMessage::Genre(v) => genres.push(v),
-                    UpsertMessage::Song(v) => songs.push(v),
-                    UpsertMessage::SongArtist(v) => song_artists.push(v),
-                    UpsertMessage::SongGenre(v) => song_genres.push(v),
-                    UpsertMessage::AlbumArtist(v) => album_artists.push(v),
-                    UpsertMessage::AlbumGenre(v) => album_genres.push(v),
-                    UpsertMessage::Lyrics(v) => lyrics_vec.push(v),
+                    UpsertMessage::Artist(v) => artists.push(*v),
+                    UpsertMessage::Album(v) => albums.push(*v),
+                    UpsertMessage::Genre(v) => genres.push(*v),
+                    UpsertMessage::Song(v) => songs.push(*v),
+                    UpsertMessage::SongArtist(v) => song_artists.push(*v),
+                    UpsertMessage::SongGenre(v) => song_genres.push(*v),
+                    UpsertMessage::AlbumArtist(v) => album_artists.push(*v),
+                    UpsertMessage::AlbumGenre(v) => album_genres.push(*v),
+                    UpsertMessage::Lyrics(v) => lyrics_vec.push(*v),
                     UpsertMessage::Seen(v) => seen_ids.push(v),
                     UpsertMessage::Flush => force_flush = true,
                 }
@@ -176,7 +176,7 @@ impl Scanner {
             }
             if seen_ids.len() >= 500 || (overdue && !seen_ids.is_empty()) {
                 use sea_orm::{Statement, TransactionTrait};
-                let ids = seen_ids.drain(..).collect::<Vec<_>>();
+                let ids = std::mem::take(&mut seen_ids);
                 let txn = db.begin().await.unwrap();
                 for id in ids {
                     let _ = txn.execute(Statement::from_sql_and_values(
@@ -260,7 +260,7 @@ impl Scanner {
                 play_count: Set(0),
                 ..Default::default()
             };
-            let _ = self.upsert_tx.send(UpsertMessage::Song(active_child)).await;
+            let _ = self.upsert_tx.send(UpsertMessage::Song(Box::new(active_child))).await;
             return Ok(());
         }
 
@@ -377,7 +377,7 @@ impl Scanner {
                 .collect();
 
             for g_name in &filtered_genres {
-                let g_name = self.ensure_genre(&g_name).await;
+                let g_name = self.ensure_genre(g_name).await;
                 many_to_many_genres.push(g_name);
             }
 
@@ -400,7 +400,7 @@ impl Scanner {
             }
         }
 
-        let _ = self.upsert_tx.send(UpsertMessage::Song(active_child)).await;
+        let _ = self.upsert_tx.send(UpsertMessage::Song(Box::new(active_child))).await;
 
         // Clear existing many-to-many before re-inserting
         song_artist::Entity::delete_many()
@@ -418,24 +418,24 @@ impl Scanner {
             .exec(&self.db)
             .await?;
         if let Some(content) = song_lyrics {
-            let _ = self.upsert_tx.send(UpsertMessage::Lyrics(lyrics::ActiveModel {
+            let _ = self.upsert_tx.send(UpsertMessage::Lyrics(Box::new(lyrics::ActiveModel {
                 song_id: Set(id.clone()),
                 content: Set(content),
-            })).await;
+            }))).await;
         }
 
         for a_id in many_to_many_artists {
-            let _ = self.upsert_tx.send(UpsertMessage::SongArtist(song_artist::ActiveModel {
+            let _ = self.upsert_tx.send(UpsertMessage::SongArtist(Box::new(song_artist::ActiveModel {
                 song_id: Set(id.clone()),
                 artist_id: Set(a_id),
-            })).await;
+            }))).await;
         }
 
         for g_name in many_to_many_genres {
-            let _ = self.upsert_tx.send(UpsertMessage::SongGenre(song_genre::ActiveModel {
+            let _ = self.upsert_tx.send(UpsertMessage::SongGenre(Box::new(song_genre::ActiveModel {
                 song_id: Set(id.clone()),
                 genre_name: Set(g_name),
-            })).await;
+            }))).await;
         }
 
         self.scan_count
@@ -454,7 +454,7 @@ impl Scanner {
             average_rating: Set(0.0),
             ..Default::default()
         };
-        let _ = self.upsert_tx.send(UpsertMessage::Artist(obj)).await;
+        let _ = self.upsert_tx.send(UpsertMessage::Artist(Box::new(obj))).await;
         id
     }
 
@@ -463,7 +463,7 @@ impl Scanner {
         let obj = genre::ActiveModel {
             name: Set(name.to_string()),
         };
-        let _ = self.upsert_tx.send(UpsertMessage::Genre(obj)).await;
+        let _ = self.upsert_tx.send(UpsertMessage::Genre(Box::new(obj))).await;
         name.to_string()
     }
 
@@ -487,14 +487,14 @@ impl Scanner {
             average_rating: Set(0.0),
             ..Default::default()
         };
-        let _ = self.upsert_tx.send(UpsertMessage::Album(obj)).await;
+        let _ = self.upsert_tx.send(UpsertMessage::Album(Box::new(obj))).await;
 
         for a_name in &artist_names {
             let a_id = self.ensure_artist(a_name).await;
-            let _ = self.upsert_tx.send(UpsertMessage::AlbumArtist(album_artist::ActiveModel {
+            let _ = self.upsert_tx.send(UpsertMessage::AlbumArtist(Box::new(album_artist::ActiveModel {
                 album_id: Set(id.clone()),
                 artist_id: Set(a_id),
-            })).await;
+            }))).await;
         }
 
         for g_name in &genres {
@@ -504,10 +504,10 @@ impl Scanner {
             }
 
             let g_name = self.ensure_genre(g_name).await;
-            let _ = self.upsert_tx.send(UpsertMessage::AlbumGenre(album_genre::ActiveModel {
+            let _ = self.upsert_tx.send(UpsertMessage::AlbumGenre(Box::new(album_genre::ActiveModel {
                 album_id: Set(id.clone()),
                 genre_name: Set(g_name),
-            })).await;
+            }))).await;
         }
 
         Ok(id)
