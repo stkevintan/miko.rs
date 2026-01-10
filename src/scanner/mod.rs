@@ -6,6 +6,7 @@ use crate::models::{
 use crate::scanner::walker::{WalkTask, Walker};
 use sea_orm::{
     ColumnTrait, ConnectionTrait, DatabaseConnection, EntityTrait, QueryFilter, QuerySelect, Set,
+    TransactionTrait,
 };
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, AtomicI64};
@@ -16,19 +17,30 @@ use tokio::sync::mpsc;
 pub mod tags;
 pub mod utils;
 pub mod walker;
+pub mod seen;
+
+pub struct SongRelations {
+    pub song_id: String,
+    pub artists: Vec<song_artist::ActiveModel>,
+    pub genres: Vec<song_genre::ActiveModel>,
+    pub lyrics: Option<lyrics::ActiveModel>,
+}
+
+pub struct AlbumRelations {
+    pub album_id: String,
+    pub artists: Vec<album_artist::ActiveModel>,
+    pub genres: Vec<album_genre::ActiveModel>,
+}
 
 pub enum UpsertMessage {
     Artist(Box<artist::ActiveModel>),
     Album(Box<album::ActiveModel>),
     Genre(Box<genre::ActiveModel>),
     Song(Box<child::ActiveModel>),
-    SongArtist(Box<song_artist::ActiveModel>),
-    SongGenre(Box<song_genre::ActiveModel>),
-    AlbumArtist(Box<album_artist::ActiveModel>),
-    AlbumGenre(Box<album_genre::ActiveModel>),
-    Lyrics(Box<lyrics::ActiveModel>),
+    SongRelations(Box<SongRelations>),
+    AlbumRelations(Box<AlbumRelations>),
     Seen(String),
-    Flush,
+    Flush(tokio::sync::oneshot::Sender<()>),
 }
 
 pub struct Scanner {
@@ -87,12 +99,10 @@ impl Scanner {
         let mut albums = Vec::new();
         let mut genres = Vec::new();
         let mut songs = Vec::new();
-        let mut song_artists = Vec::new();
-        let mut song_genres = Vec::new();
-        let mut album_artists = Vec::new();
-        let mut album_genres = Vec::new();
-        let mut lyrics_vec = Vec::new();
+        let mut song_relations = Vec::new();
+        let mut album_relations = Vec::new();
         let mut seen_ids = Vec::new();
+        let mut flush_ack: Option<tokio::sync::oneshot::Sender<()>> = None;
 
         let flush_interval = std::time::Duration::from_millis(500);
         let mut last_flush = std::time::Instant::now();
@@ -112,84 +122,168 @@ impl Scanner {
                     UpsertMessage::Album(v) => albums.push(*v),
                     UpsertMessage::Genre(v) => genres.push(*v),
                     UpsertMessage::Song(v) => songs.push(*v),
-                    UpsertMessage::SongArtist(v) => song_artists.push(*v),
-                    UpsertMessage::SongGenre(v) => song_genres.push(*v),
-                    UpsertMessage::AlbumArtist(v) => album_artists.push(*v),
-                    UpsertMessage::AlbumGenre(v) => album_genres.push(*v),
-                    UpsertMessage::Lyrics(v) => lyrics_vec.push(*v),
+                    UpsertMessage::SongRelations(v) => song_relations.push(*v),
+                    UpsertMessage::AlbumRelations(v) => album_relations.push(*v),
                     UpsertMessage::Seen(v) => seen_ids.push(v),
-                    UpsertMessage::Flush => force_flush = true,
+                    UpsertMessage::Flush(tx) => {
+                        force_flush = true;
+                        flush_ack = Some(tx);
+                    }
                 }
             }
 
             let overdue = last_flush.elapsed() >= flush_interval || force_flush;
             
             if artists.len() >= 100 || (overdue && !artists.is_empty()) {
-                let _ = artist::Entity::insert_many(artists.drain(..))
+                let items = std::mem::take(&mut artists);
+                if let Err(e) = artist::Entity::insert_many(items)
                     .on_conflict(sea_orm::sea_query::OnConflict::column(artist::Column::Id).do_nothing().to_owned())
-                    .exec_without_returning(&db).await;
+                    .exec_without_returning(&db).await {
+                    log::error!("Failed to flush artists: {}", e);
+                }
             }
             if albums.len() >= 100 || (overdue && !albums.is_empty()) {
-                let _ = album::Entity::insert_many(albums.drain(..))
+                let items = std::mem::take(&mut albums);
+                if let Err(e) = album::Entity::insert_many(items)
                     .on_conflict(sea_orm::sea_query::OnConflict::column(album::Column::Id).update_columns([album::Column::Year]).to_owned())
-                    .exec_without_returning(&db).await;
+                    .exec_without_returning(&db).await {
+                    log::error!("Failed to flush albums: {}", e);
+                }
             }
             if genres.len() >= 50 || (overdue && !genres.is_empty()) {
-                let _ = genre::Entity::insert_many(genres.drain(..))
+                let items = std::mem::take(&mut genres);
+                if let Err(e) = genre::Entity::insert_many(items)
                     .on_conflict(sea_orm::sea_query::OnConflict::column(genre::Column::Name).do_nothing().to_owned())
-                    .exec_without_returning(&db).await;
+                    .exec_without_returning(&db).await {
+                    log::error!("Failed to flush genres: {}", e);
+                }
             }
             if songs.len() >= 100 || (overdue && !songs.is_empty()) {
-                let _ = child::Entity::insert_many(songs.drain(..))
+                let items = std::mem::take(&mut songs);
+                if let Err(e) = child::Entity::insert_many(items)
                     .on_conflict(sea_orm::sea_query::OnConflict::column(child::Column::Id).update_columns([
                         child::Column::Parent, child::Column::Title, child::Column::Path, child::Column::Size, 
                         child::Column::Suffix, child::Column::ContentType, child::Column::Track, 
                         child::Column::DiscNumber, child::Column::Year, child::Column::Duration, 
                         child::Column::BitRate, child::Column::AlbumId
                     ]).to_owned())
-                    .exec_without_returning(&db).await;
-            }
-            if song_artists.len() >= 200 || (overdue && !song_artists.is_empty()) {
-                let _ = song_artist::Entity::insert_many(song_artists.drain(..))
-                    .on_conflict(sea_orm::sea_query::OnConflict::columns([song_artist::Column::SongId, song_artist::Column::ArtistId]).do_nothing().to_owned())
-                    .exec_without_returning(&db).await;
-            }
-            if song_genres.len() >= 200 || (overdue && !song_genres.is_empty()) {
-                let _ = song_genre::Entity::insert_many(song_genres.drain(..))
-                    .on_conflict(sea_orm::sea_query::OnConflict::columns([song_genre::Column::SongId, song_genre::Column::GenreName]).do_nothing().to_owned())
-                    .exec_without_returning(&db).await;
-            }
-            if album_artists.len() >= 100 || (overdue && !album_artists.is_empty()) {
-                let _ = album_artist::Entity::insert_many(album_artists.drain(..))
-                    .on_conflict(sea_orm::sea_query::OnConflict::columns([album_artist::Column::AlbumId, album_artist::Column::ArtistId]).do_nothing().to_owned())
-                    .exec_without_returning(&db).await;
-            }
-            if album_genres.len() >= 100 || (overdue && !album_genres.is_empty()) {
-                let _ = album_genre::Entity::insert_many(album_genres.drain(..))
-                    .on_conflict(sea_orm::sea_query::OnConflict::columns([album_genre::Column::AlbumId, album_genre::Column::GenreName]).do_nothing().to_owned())
-                    .exec_without_returning(&db).await;
-            }
-            if lyrics_vec.len() >= 50 || (overdue && !lyrics_vec.is_empty()) {
-                let _ = lyrics::Entity::insert_many(lyrics_vec.drain(..))
-                    .on_conflict(sea_orm::sea_query::OnConflict::column(lyrics::Column::SongId).update_column(lyrics::Column::Content).to_owned())
-                    .exec_without_returning(&db).await;
-            }
-            if seen_ids.len() >= 500 || (overdue && !seen_ids.is_empty()) {
-                use sea_orm::{Statement, TransactionTrait};
-                let ids = std::mem::take(&mut seen_ids);
-                let txn = db.begin().await.unwrap();
-                for id in ids {
-                    let _ = txn.execute(Statement::from_sql_and_values(
-                        db.get_database_backend(),
-                        "INSERT OR IGNORE INTO _scanner_seen (id) VALUES (?)",
-                        [sea_orm::Value::from(id)],
-                    )).await;
+                    .exec_without_returning(&db).await {
+                    log::error!("Failed to flush songs: {}", e);
                 }
-                let _ = txn.commit().await;
+            }
+            if song_relations.len() >= 100 || (overdue && !song_relations.is_empty()) {
+                let relations = std::mem::take(&mut song_relations);
+                let song_ids: Vec<String> = relations.iter().map(|r| r.song_id.clone()).collect();
+                
+                let mut all_artists = Vec::new();
+                let mut all_genres = Vec::new();
+                let mut all_lyrics = Vec::new();
+                
+                for mut r in relations {
+                    all_artists.append(&mut r.artists);
+                    all_genres.append(&mut r.genres);
+                    if let Some(l) = r.lyrics {
+                        all_lyrics.push(l);
+                    }
+                }
+
+                let flush_op = async {
+                    let txn = db.begin().await?;
+                    
+                    song_artist::Entity::delete_many()
+                        .filter(song_artist::Column::SongId.is_in(song_ids.clone()))
+                        .exec(&txn)
+                        .await?;
+                    song_genre::Entity::delete_many()
+                        .filter(song_genre::Column::SongId.is_in(song_ids.clone()))
+                        .exec(&txn)
+                        .await?;
+                    lyrics::Entity::delete_many()
+                        .filter(lyrics::Column::SongId.is_in(song_ids))
+                        .exec(&txn)
+                        .await?;
+
+                    if !all_artists.is_empty() {
+                        song_artist::Entity::insert_many(all_artists)
+                            .on_conflict(sea_orm::sea_query::OnConflict::columns([song_artist::Column::SongId, song_artist::Column::ArtistId]).do_nothing().to_owned())
+                            .exec_without_returning(&txn).await?;
+                    }
+                    if !all_genres.is_empty() {
+                        song_genre::Entity::insert_many(all_genres)
+                            .on_conflict(sea_orm::sea_query::OnConflict::columns([song_genre::Column::SongId, song_genre::Column::GenreName]).do_nothing().to_owned())
+                            .exec_without_returning(&txn).await?;
+                    }
+                    if !all_lyrics.is_empty() {
+                        lyrics::Entity::insert_many(all_lyrics)
+                            .on_conflict(sea_orm::sea_query::OnConflict::column(lyrics::Column::SongId).do_nothing().to_owned())
+                            .exec_without_returning(&txn).await?;
+                    }
+                    
+                    txn.commit().await?;
+                    Ok::<(), sea_orm::DbErr>(())
+                };
+
+                if let Err(e) = flush_op.await {
+                    log::error!("Failed to flush song relations: {}", e);
+                }
+            }
+
+            if album_relations.len() >= 100 || (overdue && !album_relations.is_empty()) {
+                let relations = std::mem::take(&mut album_relations);
+                let album_ids: Vec<String> = relations.iter().map(|r| r.album_id.clone()).collect();
+                
+                let mut all_artists = Vec::new();
+                let mut all_genres = Vec::new();
+                
+                for mut r in relations {
+                    all_artists.append(&mut r.artists);
+                    all_genres.append(&mut r.genres);
+                }
+
+                let flush_op = async {
+                    let txn = db.begin().await?;
+                    
+                    album_artist::Entity::delete_many()
+                        .filter(album_artist::Column::AlbumId.is_in(album_ids.clone()))
+                        .exec(&txn)
+                        .await?;
+                    album_genre::Entity::delete_many()
+                        .filter(album_genre::Column::AlbumId.is_in(album_ids))
+                        .exec(&txn)
+                        .await?;
+
+                    if !all_artists.is_empty() {
+                        album_artist::Entity::insert_many(all_artists)
+                            .on_conflict(sea_orm::sea_query::OnConflict::columns([album_artist::Column::AlbumId, album_artist::Column::ArtistId]).do_nothing().to_owned())
+                            .exec_without_returning(&txn).await?;
+                    }
+                    if !all_genres.is_empty() {
+                        album_genre::Entity::insert_many(all_genres)
+                            .on_conflict(sea_orm::sea_query::OnConflict::columns([album_genre::Column::AlbumId, album_genre::Column::GenreName]).do_nothing().to_owned())
+                            .exec_without_returning(&txn).await?;
+                    }
+                    
+                    txn.commit().await?;
+                    Ok::<(), sea_orm::DbErr>(())
+                };
+
+                if let Err(e) = flush_op.await {
+                    log::error!("Failed to flush album relations: {}", e);
+                }
+            }
+
+            if seen_ids.len() >= 500 || (overdue && !seen_ids.is_empty()) {
+                let ids = std::mem::take(&mut seen_ids);
+                if let Err(e) = seen::SeenTracker::insert_batch(&db, ids).await {
+                    log::error!("Failed to bulk insert seen IDs: {}", e);
+                }
             }
 
             if overdue {
                 last_flush = std::time::Instant::now();
+                if let Some(tx) = flush_ack.take() {
+                    let _ = tx.send(());
+                }
             }
 
             if is_none && rx.is_closed() {
@@ -232,7 +326,7 @@ impl Scanner {
         let parent_id = utils::get_parent_id(&task.path, task.folder.id, &task.folder.path)
             .filter(|s| !s.is_empty());
 
-        let _ = self.upsert_tx.send(UpsertMessage::Seen(id.clone())).await;
+        self.upsert_tx.send(UpsertMessage::Seen(id.clone())).await?;
 
         if task.is_dir {
             let active_child: child::ActiveModel = child::ActiveModel {
@@ -260,7 +354,7 @@ impl Scanner {
                 play_count: Set(0),
                 ..Default::default()
             };
-            let _ = self.upsert_tx.send(UpsertMessage::Song(Box::new(active_child))).await;
+            self.upsert_tx.send(UpsertMessage::Song(Box::new(active_child))).await?;
             return Ok(());
         }
 
@@ -342,7 +436,7 @@ impl Scanner {
                 .collect();
 
             for a_name in &filtered_artists {
-                let a_id = self.ensure_artist(a_name).await;
+                let a_id = self.ensure_artist(a_name).await?;
                 many_to_many_artists.push(a_id);
             }
             let mut album_artists_list: Vec<&str> = t
@@ -377,7 +471,7 @@ impl Scanner {
                 .collect();
 
             for g_name in &filtered_genres {
-                let g_name = self.ensure_genre(g_name).await;
+                let g_name = self.ensure_genre(g_name).await?;
                 many_to_many_genres.push(g_name);
             }
 
@@ -400,43 +494,37 @@ impl Scanner {
             }
         }
 
-        let _ = self.upsert_tx.send(UpsertMessage::Song(Box::new(active_child))).await;
+        self.upsert_tx.send(UpsertMessage::Song(Box::new(active_child))).await?;
 
-        // Clear existing many-to-many before re-inserting
-        song_artist::Entity::delete_many()
-            .filter(song_artist::Column::SongId.eq(id.clone()))
-            .exec(&self.db)
-            .await?;
-        song_genre::Entity::delete_many()
-            .filter(song_genre::Column::SongId.eq(id.clone()))
-            .exec(&self.db)
-            .await?;
+        let mut relations = SongRelations {
+            song_id: id.clone(),
+            artists: Vec::new(),
+            genres: Vec::new(),
+            lyrics: None,
+        };
 
-        // Handle lyrics
-        lyrics::Entity::delete_many()
-            .filter(lyrics::Column::SongId.eq(id.clone()))
-            .exec(&self.db)
-            .await?;
         if let Some(content) = song_lyrics {
-            let _ = self.upsert_tx.send(UpsertMessage::Lyrics(Box::new(lyrics::ActiveModel {
+            relations.lyrics = Some(lyrics::ActiveModel {
                 song_id: Set(id.clone()),
                 content: Set(content),
-            }))).await;
+            });
         }
 
         for a_id in many_to_many_artists {
-            let _ = self.upsert_tx.send(UpsertMessage::SongArtist(Box::new(song_artist::ActiveModel {
+            relations.artists.push(song_artist::ActiveModel {
                 song_id: Set(id.clone()),
                 artist_id: Set(a_id),
-            }))).await;
+            });
         }
 
         for g_name in many_to_many_genres {
-            let _ = self.upsert_tx.send(UpsertMessage::SongGenre(Box::new(song_genre::ActiveModel {
+            relations.genres.push(song_genre::ActiveModel {
                 song_id: Set(id.clone()),
                 genre_name: Set(g_name),
-            }))).await;
+            });
         }
+
+        self.upsert_tx.send(UpsertMessage::SongRelations(Box::new(relations))).await?;
 
         self.scan_count
             .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
@@ -444,7 +532,7 @@ impl Scanner {
         Ok(())
     }
 
-    async fn ensure_artist(&self, name: &str) -> String {
+    async fn ensure_artist(&self, name: &str) -> Result<String, anyhow::Error> {
         let id = utils::generate_artist_id(name);
         let obj = artist::ActiveModel {
             id: Set(id.clone()),
@@ -454,17 +542,17 @@ impl Scanner {
             average_rating: Set(0.0),
             ..Default::default()
         };
-        let _ = self.upsert_tx.send(UpsertMessage::Artist(Box::new(obj))).await;
-        id
+        self.upsert_tx.send(UpsertMessage::Artist(Box::new(obj))).await?;
+        Ok(id)
     }
 
-    async fn ensure_genre(&self, name: &str) -> String {
+    async fn ensure_genre(&self, name: &str) -> Result<String, anyhow::Error> {
         let name = name.trim();
         let obj = genre::ActiveModel {
             name: Set(name.to_string()),
         };
-        let _ = self.upsert_tx.send(UpsertMessage::Genre(Box::new(obj))).await;
-        name.to_string()
+        self.upsert_tx.send(UpsertMessage::Genre(Box::new(obj))).await?;
+        Ok(name.to_string())
     }
 
     async fn ensure_album(
@@ -487,14 +575,20 @@ impl Scanner {
             average_rating: Set(0.0),
             ..Default::default()
         };
-        let _ = self.upsert_tx.send(UpsertMessage::Album(Box::new(obj))).await;
+        self.upsert_tx.send(UpsertMessage::Album(Box::new(obj))).await?;
+
+        let mut relations = AlbumRelations {
+            album_id: id.clone(),
+            artists: Vec::new(),
+            genres: Vec::new(),
+        };
 
         for a_name in &artist_names {
-            let a_id = self.ensure_artist(a_name).await;
-            let _ = self.upsert_tx.send(UpsertMessage::AlbumArtist(Box::new(album_artist::ActiveModel {
+            let a_id = self.ensure_artist(a_name).await?;
+            relations.artists.push(album_artist::ActiveModel {
                 album_id: Set(id.clone()),
                 artist_id: Set(a_id),
-            }))).await;
+            });
         }
 
         for g_name in &genres {
@@ -503,12 +597,14 @@ impl Scanner {
                 continue;
             }
 
-            let g_name = self.ensure_genre(g_name).await;
-            let _ = self.upsert_tx.send(UpsertMessage::AlbumGenre(Box::new(album_genre::ActiveModel {
+            let g_name = self.ensure_genre(g_name).await?;
+            relations.genres.push(album_genre::ActiveModel {
                 album_id: Set(id.clone()),
                 genre_name: Set(g_name),
-            }))).await;
+            });
         }
+
+        self.upsert_tx.send(UpsertMessage::AlbumRelations(Box::new(relations))).await?;
 
         Ok(id)
     }
@@ -544,12 +640,7 @@ impl Scanner {
             .store(0, std::sync::atomic::Ordering::SeqCst);
 
         // create a temporary table to track seen ids
-        self.db
-            .execute_unprepared("CREATE TABLE IF NOT EXISTS _scanner_seen (id TEXT PRIMARY KEY)")
-            .await?;
-        self.db
-            .execute_unprepared("DELETE FROM _scanner_seen")
-            .await?;
+        seen::SeenTracker::prepare(&self.db).await?;
 
         let cache_dir = utils::get_cover_cache_dir(&self.cfg);
         if !cache_dir.exists() {
@@ -581,9 +672,10 @@ impl Scanner {
             }
         }
 
-        let _ = self.upsert_tx.send(UpsertMessage::Flush).await;
-        // Give the flusher a moment to finish its work before pruning
-        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        let (ack_tx, ack_rx) = tokio::sync::oneshot::channel();
+        self.upsert_tx.send(UpsertMessage::Flush(ack_tx)).await?;
+        // Wait for the flusher to finish its work before pruning
+        let _ = ack_rx.await;
 
         log::info!("Scan finished, pruning database...");
         self.prune().await?;
@@ -631,9 +723,7 @@ impl Scanner {
             AND NOT EXISTS (SELECT 1 FROM song_genres WHERE song_genres.genre_name = genres.name)").await?;
 
         // Cleanup side table
-        self.db
-            .execute_unprepared("DELETE FROM _scanner_seen")
-            .await?;
+        seen::SeenTracker::clear(&self.db).await?;
 
         Ok(())
     }
