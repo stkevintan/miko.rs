@@ -21,7 +21,7 @@ pub enum UpsertMessage {
     Artist(artist::ActiveModel),
     Album(album::ActiveModel),
     Genre(genre::ActiveModel),
-    Song(child::ActiveModel),
+    Song(Box<child::ActiveModel>),
     SongArtist(song_artist::ActiveModel),
     SongGenre(song_genre::ActiveModel),
     AlbumArtist(album_artist::ActiveModel),
@@ -57,7 +57,7 @@ impl Clone for Scanner {
 
 struct ScanGuard(Arc<AtomicBool>);
 
-impl<'a> Drop for ScanGuard {
+impl Drop for ScanGuard {
     fn drop(&mut self) {
         self.0.store(false, std::sync::atomic::Ordering::SeqCst);
     }
@@ -111,7 +111,7 @@ impl Scanner {
                     UpsertMessage::Artist(v) => artists.push(v),
                     UpsertMessage::Album(v) => albums.push(v),
                     UpsertMessage::Genre(v) => genres.push(v),
-                    UpsertMessage::Song(v) => songs.push(v),
+                    UpsertMessage::Song(v) => songs.push(*v),
                     UpsertMessage::SongArtist(v) => song_artists.push(v),
                     UpsertMessage::SongGenre(v) => song_genres.push(v),
                     UpsertMessage::AlbumArtist(v) => album_artists.push(v),
@@ -176,7 +176,7 @@ impl Scanner {
             }
             if seen_ids.len() >= 500 || (overdue && !seen_ids.is_empty()) {
                 use sea_orm::{Statement, TransactionTrait};
-                let ids = seen_ids.drain(..).collect::<Vec<_>>();
+                let ids = std::mem::take(&mut seen_ids);
                 let txn = db.begin().await.unwrap();
                 for id in ids {
                     let _ = txn.execute(Statement::from_sql_and_values(
@@ -260,7 +260,7 @@ impl Scanner {
                 play_count: Set(0),
                 ..Default::default()
             };
-            let _ = self.upsert_tx.send(UpsertMessage::Song(active_child)).await;
+            let _ = self.upsert_tx.send(UpsertMessage::Song(Box::new(active_child))).await;
             return Ok(());
         }
 
@@ -377,7 +377,7 @@ impl Scanner {
                 .collect();
 
             for g_name in &filtered_genres {
-                let g_name = self.ensure_genre(&g_name).await;
+                let g_name = self.ensure_genre(g_name).await;
                 many_to_many_genres.push(g_name);
             }
 
@@ -400,7 +400,7 @@ impl Scanner {
             }
         }
 
-        let _ = self.upsert_tx.send(UpsertMessage::Song(active_child)).await;
+        let _ = self.upsert_tx.send(UpsertMessage::Song(Box::new(active_child))).await;
 
         // Clear existing many-to-many before re-inserting
         song_artist::Entity::delete_many()
