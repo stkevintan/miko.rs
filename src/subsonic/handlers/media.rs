@@ -353,7 +353,7 @@ pub async fn get_lyrics(
 }
 
 fn some_artist_name_or_default(artist: &Option<String>) -> Option<String> {
-    Some(artist.clone().unwrap_or_else(|| "Unknown Artist".to_string()))
+    Some(artist.as_deref().unwrap_or("Unknown Artist").to_string())
 }
 
 #[handler]
