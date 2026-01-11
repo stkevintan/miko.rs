@@ -20,6 +20,53 @@ where
     }
 }
 
+pub fn deserialize_bool<'de, D>(deserializer: D) -> Result<bool, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum BoolOrString {
+        Bool(bool),
+        String(String),
+        Number(i64),
+    }
+
+    match BoolOrString::deserialize(deserializer)? {
+        BoolOrString::Bool(b) => Ok(b),
+        BoolOrString::String(s) => match s.to_lowercase().as_str() {
+            "true" | "t" | "yes" | "y" | "1" => Ok(true),
+            "false" | "f" | "no" | "n" | "0" => Ok(false),
+            _ => Ok(false),
+        },
+        BoolOrString::Number(n) => Ok(n != 0),
+    }
+}
+
+pub fn deserialize_optional_bool<'de, D>(deserializer: D) -> Result<Option<bool>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum BoolOrString {
+        Bool(bool),
+        String(String),
+        Number(i64),
+    }
+
+    match Option::<BoolOrString>::deserialize(deserializer)? {
+        Some(BoolOrString::Bool(b)) => Ok(Some(b)),
+        Some(BoolOrString::String(s)) => match s.to_lowercase().as_str() {
+            "true" | "t" | "yes" | "y" | "1" => Ok(Some(true)),
+            "false" | "f" | "no" | "n" | "0" => Ok(Some(false)),
+            _ => Ok(Some(false)),
+        },
+        Some(BoolOrString::Number(n)) => Ok(Some(n != 0)),
+        None => Ok(None),
+    }
+}
+
 #[derive(Deserialize, Debug, Default)]
 pub struct SubsonicParams {
     pub u: Option<String>,
