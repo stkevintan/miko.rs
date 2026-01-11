@@ -1,4 +1,5 @@
-use crate::browser::types::{PlaylistWithSongs, PlaylistWithStats, UpdatePlaylistOptions, ChildWithMetadata};
+use crate::browser::types::{PlaylistWithSongs, PlaylistWithStats, UpdatePlaylistOptions};
+use crate::models::queries::{self, ChildWithMetadata};
 use crate::browser::Browser;
 use crate::models::{child, playlist, playlist_song};
 use sea_orm::{
@@ -223,7 +224,7 @@ impl Browser {
             .await?;
 
         if let Some(playlist) = playlist {
-            let songs = Self::song_with_metadata_query()
+            let songs = queries::song_with_metadata_query()
                 .join_rev(
                     JoinType::InnerJoin,
                     playlist_song::Entity::belongs_to(child::Entity)

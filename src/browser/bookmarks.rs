@@ -1,4 +1,5 @@
-use crate::browser::types::{ChildWithMetadata, BookmarkWithMetadata};
+use crate::browser::types::{BookmarkWithMetadata};
+use crate::models::queries::{self, ChildWithMetadata};
 use crate::browser::Browser;
 use crate::models::{bookmark, child, play_queue, play_queue_song};
 use chrono::Utc;
@@ -8,7 +9,7 @@ use sea_orm::{
 
 impl Browser {
     pub async fn get_bookmarks(&self, username: &str) -> Result<Vec<(bookmark::Model, ChildWithMetadata)>, DbErr> {
-        let results = Self::song_with_metadata_query()
+        let results = queries::song_with_metadata_query()
             .join(JoinType::InnerJoin, child::Relation::Bookmarks.def())
             .filter(bookmark::Column::Username.eq(username))
             .order_by_desc(bookmark::Column::UpdatedAt)
@@ -92,7 +93,7 @@ impl Browser {
 
         if let Some(queue) = queue {
             // play_queue_song::Column::Index represents the order of songs in the list.
-            let songs = Self::song_with_metadata_query()
+            let songs = queries::song_with_metadata_query()
                 .join(JoinType::InnerJoin, child::Relation::PlayQueueSongs.def())
                 .filter(play_queue_song::Column::Username.eq(username))
                 .order_by_asc(play_queue_song::Column::Index)

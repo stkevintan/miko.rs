@@ -1,4 +1,5 @@
-use crate::browser::types::{AlbumListOptions, AlbumWithStats, ArtistWithStats, ChildWithMetadata};
+use crate::browser::types::{AlbumListOptions, ArtistWithStats};
+use crate::models::queries::{self, AlbumWithStats, ChildWithMetadata};
 use crate::browser::Browser;
 use crate::models::{album, album_artist, artist, child, genre, song_artist, album_genre};
 use sea_orm::{
@@ -15,7 +16,7 @@ impl Browser {
         let size = opts.size.unwrap_or(10);
         let offset = opts.offset.unwrap_or(0);
 
-        let mut query = Self::album_with_stats_query();
+        let mut query = queries::album_with_stats_query();
 
         if let Some(folder_id) = opts.music_folder_id {
             query = query.filter(child::Column::MusicFolderId.eq(folder_id));
@@ -117,7 +118,7 @@ impl Browser {
     }
 
     pub async fn get_albums_by_artist(&self, artist_id: &str) -> Result<Vec<AlbumWithStats>, DbErr> {
-        Self::album_with_stats_query()
+        queries::album_with_stats_query()
             .join_rev(
                 JoinType::InnerJoin,
                 album_artist::Entity::belongs_to(album::Entity)
@@ -136,7 +137,7 @@ impl Browser {
     pub async fn get_album(&self, id: &str) -> Result<(AlbumWithStats, Vec<ChildWithMetadata>), DbErr> {
         let album = self.get_album_with_stats(id).await?;
 
-        let songs = Self::song_with_metadata_query()
+        let songs = queries::song_with_metadata_query()
             .filter(child::Column::AlbumId.eq(id))
             .filter(child::Column::IsDir.eq(false))
             .order_by_asc(child::Column::DiscNumber)
@@ -149,7 +150,7 @@ impl Browser {
     }
 
     async fn get_album_with_stats(&self, id: &str) -> Result<AlbumWithStats, DbErr> {
-        Self::album_with_stats_query()
+        queries::album_with_stats_query()
             .filter(album::Column::Id.eq(id))
             .into_model::<AlbumWithStats>()
             .one(&self.db)
@@ -158,7 +159,7 @@ impl Browser {
     }
 
     pub async fn get_song(&self, id: &str) -> Result<ChildWithMetadata, DbErr> {
-        Self::song_with_metadata_query()
+        queries::song_with_metadata_query()
             .filter(child::Column::Id.eq(id))
             .filter(child::Column::IsDir.eq(false))
             .into_model::<ChildWithMetadata>()
@@ -173,7 +174,7 @@ impl Browser {
     ) -> Result<Vec<ChildWithMetadata>, sea_orm::DbErr> {
         let size = opts.size.unwrap_or(10);
 
-        let mut query = Self::song_with_metadata_query()
+        let mut query = queries::song_with_metadata_query()
             .filter(child::Column::IsDir.eq(false));
 
         if let Some(folder_id) = opts.music_folder_id {
@@ -207,7 +208,7 @@ impl Browser {
         offset: u64,
         folder_id: Option<i32>,
     ) -> Result<Vec<ChildWithMetadata>, sea_orm::DbErr> {
-        let mut db_query = Self::song_with_metadata_query()
+        let mut db_query = queries::song_with_metadata_query()
             .filter(child::Column::IsDir.eq(false))
             .filter(genre::Column::Name.eq(genre_name));
 
@@ -231,7 +232,7 @@ impl Browser {
             return Ok(Vec::new());
         }
 
-        Self::song_with_metadata_query()
+        queries::song_with_metadata_query()
             .filter(child::Column::Id.is_in(ids))
             .into_model::<ChildWithMetadata>()
             .all(&self.db)
@@ -288,7 +289,7 @@ impl Browser {
         .await?;
 
         // Songs
-        let mut song_query = Self::song_with_metadata_query()
+        let mut song_query = queries::song_with_metadata_query()
             .filter(child::Column::IsDir.eq(false))
             .filter(child::Column::Starred.is_not_null());
 

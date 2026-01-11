@@ -1,89 +1,12 @@
-use crate::browser::{Browser, ChildWithMetadata, DirectoryWithChildren, GenreWithStats};
-use crate::models::{artist, child, genre, song_genre, album, song_artist, album_artist, album_genre};
+use crate::browser::{Browser, DirectoryWithChildren, GenreWithStats};
+use crate::models::queries::{self, ChildWithMetadata};
+use crate::models::{artist, child, genre, song_genre, album_genre};
 use sea_orm::{
-    ColumnTrait, DbErr, EntityTrait, JoinType, PaginatorTrait, QueryFilter, QueryOrder, QuerySelect, RelationTrait
+    ColumnTrait, DbErr, EntityTrait, JoinType, PaginatorTrait, QueryFilter, QueryOrder, QuerySelect
 };
 use sea_orm::sea_query::Expr;
 
 impl Browser {
-    pub fn song_with_metadata_query() -> sea_orm::Select<child::Entity> {
-        child::Entity::find()
-            .column_as(Expr::cust("GROUP_CONCAT(DISTINCT artists.name)"), "artist")
-            .column_as(Expr::cust("MIN(artists.id)"), "artist_id")
-            .column_as(Expr::cust("GROUP_CONCAT(DISTINCT genres.name)"), "genre")
-            .column_as(album::Column::Name, "album")
-            .join_rev(
-                JoinType::LeftJoin,
-                song_artist::Entity::belongs_to(child::Entity)
-                    .from(song_artist::Column::SongId)
-                    .to(child::Column::Id)
-                    .into(),
-            )
-            .join_rev(
-                JoinType::LeftJoin,
-                artist::Entity::belongs_to(song_artist::Entity)
-                    .from(artist::Column::Id)
-                    .to(song_artist::Column::ArtistId)
-                    .into(),
-            )
-            .join_rev(
-                JoinType::LeftJoin,
-                song_genre::Entity::belongs_to(child::Entity)
-                    .from(song_genre::Column::SongId)
-                    .to(child::Column::Id)
-                    .into(),
-            )
-            .join_rev(
-                JoinType::LeftJoin,
-                genre::Entity::belongs_to(song_genre::Entity)
-                    .from(genre::Column::Name)
-                    .to(song_genre::Column::GenreName)
-                    .into(),
-            )
-            .join(JoinType::LeftJoin, child::Relation::Album.def())
-            .group_by(child::Column::Id)
-    }
-
-    pub fn album_with_stats_query() -> sea_orm::Select<album::Entity> {
-        album::Entity::find()
-            .column_as(child::Column::Id.count(), "song_count")
-            .column_as(Expr::cust("COALESCE(SUM(duration), 0)"), "duration")
-            .column_as(Expr::cust("COALESCE(SUM(play_count), 0)"), "play_count")
-            .column_as(child::Column::LastPlayed.max(), "last_played")
-            .column_as(Expr::cust("GROUP_CONCAT(DISTINCT artists.name)"), "artist")
-            .column_as(Expr::cust("MIN(artists.id)"), "artist_id")
-            .column_as(Expr::cust("GROUP_CONCAT(DISTINCT album_genres.genre_name)"), "genre")
-            .join_rev(
-                JoinType::LeftJoin,
-                child::Entity::belongs_to(album::Entity)
-                    .from(child::Column::AlbumId)
-                    .to(album::Column::Id)
-                    .into(),
-            )
-            .join_rev(
-                JoinType::LeftJoin,
-                album_artist::Entity::belongs_to(album::Entity)
-                    .from(album_artist::Column::AlbumId)
-                    .to(album::Column::Id)
-                    .into(),
-            )
-            .join_rev(
-                JoinType::LeftJoin,
-                artist::Entity::belongs_to(album_artist::Entity)
-                    .from(artist::Column::Id)
-                    .to(album_artist::Column::ArtistId)
-                    .into(),
-            )
-            .join_rev(
-                JoinType::LeftJoin,
-                album_genre::Entity::belongs_to(album::Entity)
-                    .from(album_genre::Column::AlbumId)
-                    .to(album::Column::Id)
-                    .into(),
-            )
-            .group_by(album::Column::Id)
-    }
-
     pub async fn get_indexes(
         &self,
         folder_id: Option<i32>,
@@ -135,7 +58,7 @@ impl Browser {
             .count(&self.db)
             .await?;
 
-        let mut query = Self::song_with_metadata_query()
+        let mut query = queries::song_with_metadata_query()
             .filter(child::Column::Parent.eq(&dir.id))
             .order_by_desc(child::Column::IsDir)
             .order_by_asc(child::Column::Title);
