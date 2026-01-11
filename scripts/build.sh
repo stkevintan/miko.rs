@@ -25,9 +25,8 @@ build_target() {
     fi
 
     local output_name="${APP_NAME}-${os}-${arch}-${VERSION}${suffix}"
-    local output_path="${BIN_DIR}/${output_name}"
 
-    cp "target/${target}/release/${APP_NAME}${suffix}" "$output_path"
+    cp "target/${target}/release/${APP_NAME}${suffix}" "${BIN_DIR}/${output_name}"
 }
 
 # Linux amd64
