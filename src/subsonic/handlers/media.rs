@@ -17,6 +17,7 @@ use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, QuerySe
 use serde::Deserialize;
 use std::path::Path;
 use std::sync::Arc;
+use path_clean::PathClean;
 
 #[derive(Deserialize)]
 pub struct IdQuery {
@@ -69,11 +70,14 @@ async fn get_song_path_or_error(
                 }
             };
 
-            let path = Path::new(&s.path);
-            let root = Path::new(&folder.path);
+            let path = Path::new(&s.path).clean();
+            let root = Path::new(&folder.path).clean();
 
-            if s.path.contains("..") || !path.starts_with(root) {
-                log::error!("Security: Blocked attempt to access file outside root or with traversal. ID: {}, Path: {}, Root: {}", id, s.path, folder.path);
+            if !path.starts_with(&root) {
+                log::error!(
+                    "Security: Blocked attempt to access file outside root or with traversal. ID: {}, Path: {:?}, Root: {:?}",
+                    id, path, root
+                );
                 return Err(send_response(
                     SubsonicResponse::new_error(70, "Access denied".into()),
                     &params.f,
