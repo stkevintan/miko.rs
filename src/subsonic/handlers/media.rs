@@ -58,7 +58,8 @@ async fn get_song_path_or_error(
 ) -> Result<String, poem::Response> {
     let res = child::Entity::find()
         .filter(child::Column::Id.eq(id))
-        .filter(child::Column::IsDir.eq(false))
+        // only audio files
+        .filter(child::Column::ContentType.starts_with("audio/"))
         .select_only()
         .column(child::Column::Path)
         .column(child::Column::MusicFolderId)
