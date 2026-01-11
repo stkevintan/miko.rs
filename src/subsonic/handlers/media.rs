@@ -1,6 +1,6 @@
 use crate::browser::Browser;
 use crate::config::Config;
-use crate::models::{artist, child, lyrics};
+use crate::models::{artist, child, lyrics, music_folder};
 use crate::scanner::utils::get_cover_cache_dir;
 use crate::subsonic::common::{send_response, SubsonicParams};
 use crate::subsonic::models::{
@@ -34,15 +34,21 @@ pub struct UsernameQuery {
 }
 
 #[derive(sea_orm::FromQueryResult)]
-struct SongPath {
-    path: String,
-}
-
-#[derive(sea_orm::FromQueryResult)]
 struct SongLyricsInfo {
     id: String,
     title: String,
     artist: Option<String>,
+}
+
+#[derive(sea_orm::FromQueryResult)]
+struct SongPathInfo {
+    path: String,
+    music_folder_id: i32,
+}
+
+#[derive(sea_orm::FromQueryResult)]
+struct FolderPathInfo {
+    path: String,
 }
 
 async fn get_song_path_or_error(
@@ -52,15 +58,51 @@ async fn get_song_path_or_error(
 ) -> Result<String, poem::Response> {
     let res = child::Entity::find()
         .filter(child::Column::Id.eq(id))
+        .filter(child::Column::IsDir.eq(false))
         .select_only()
         .column(child::Column::Path)
-        .filter(child::Column::IsDir.eq(false))
-        .into_model::<SongPath>()
+        .column(child::Column::MusicFolderId)
+        .into_model::<SongPathInfo>()
         .one(db)
         .await;
 
     match res {
-        Ok(Some(s)) => Ok(s.path),
+        Ok(Some(s)) => {
+            // Get the assigned music folder root to prevent path traversal
+            let folder = match music_folder::Entity::find_by_id(s.music_folder_id)
+                .select_only()
+                .column(music_folder::Column::Path)
+                .into_model::<FolderPathInfo>()
+                .one(db)
+                .await
+            {
+                Ok(Some(f)) => f,
+                _ => {
+                    log::error!(
+                        "Song {} references non-existent music folder id {}",
+                        id,
+                        s.music_folder_id
+                    );
+                    return Err(send_response(
+                        SubsonicResponse::new_error(70, "Invalid library configuration".into()),
+                        &params.f,
+                    ));
+                }
+            };
+
+            let path = Path::new(&s.path);
+            let root = Path::new(&folder.path);
+
+            if s.path.contains("..") || !path.starts_with(root) {
+                log::error!("Security: Blocked attempt to access file outside root or with traversal. ID: {}, Path: {}, Root: {}", id, s.path, folder.path);
+                return Err(send_response(
+                    SubsonicResponse::new_error(70, "Access denied".into()),
+                    &params.f,
+                ));
+            }
+
+            Ok(s.path)
+        }
         Ok(None) => Err(send_response(
             SubsonicResponse::new_error(70, "Audio file not found".into()),
             &params.f,
