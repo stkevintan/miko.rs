@@ -2,9 +2,35 @@ use crate::service::{
     ArtistWithStats, GenreWithStats, PlaylistWithSongs,
     PlaylistWithStats,
 };
-use crate::models::queries::{AlbumWithStats, ChildWithMetadata, ArtistIdName};
+use crate::models::queries::{AlbumWithStats, ChildWithMetadata, ArtistIdName, GenreName};
 use crate::models::{artist, user};
 use serde::{Deserialize, Serialize};
+
+fn join_artist_names(artists: &[ArtistIdName]) -> Option<String> {
+    if artists.is_empty() {
+        None
+    } else {
+        Some(
+            artists
+                .iter()
+                .map(|a| a.name.as_str())
+                .collect::<Vec<_>>()
+                .join(","),
+        )
+    }
+}
+
+fn split_genres(genre: Option<&String>) -> Vec<GenreName> {
+    genre
+        .map(|s| {
+            s.split(',')
+                .map(|g| GenreName {
+                    name: g.to_string(),
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
@@ -333,13 +359,23 @@ pub struct Child {
     #[serde(rename = "@type", skip_serializing_if = "Option::is_none")]
     pub r#type: Option<String>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub artists: Vec<ArtistID3>,
+    pub artists: Vec<ArtistIdName>,
+    #[serde(rename = "genre", skip_serializing_if = "Vec::is_empty")]
+    pub genres: Vec<GenreName>,
+    #[serde(rename = "albumArtist", skip_serializing_if = "Vec::is_empty")]
+    pub album_artists: Vec<ArtistIdName>,
+    #[serde(rename="@displayArtist", skip_serializing_if = "Option::is_none")]
+    pub display_artist: Option<String>,
+    #[serde(rename="@displayAlbumArtist", skip_serializing_if = "Option::is_none")]
+    pub display_album_artist: Option<String>,
     #[serde(rename = "@bookmarkPosition", skip_serializing_if = "Option::is_none")]
     pub bookmark_position: Option<i64>,
 }
 
 impl Child {
     pub fn from_album_stats(a: AlbumWithStats) -> Self {
+        let display_artist = join_artist_names(&a.artists);
+        let genres = split_genres(a.genre.as_ref());
         Self {
             id: a.id.clone(),
             parent: None,
@@ -349,7 +385,7 @@ impl Child {
             artist: a.artists.first().map(|a| a.name.clone()),
             track: None,
             year: Some(a.year),
-            genre: a.genre,
+            genre: a.genre.clone(),
             cover_art: Some(format!("al-{}", a.id)),
             size: None,
             content_type: None,
@@ -370,7 +406,11 @@ impl Child {
             album_id: None,
             artist_id: a.artists.first().map(|a| a.id.clone()),
             r#type: None,
-            artists: a.artists.into_iter().map(ArtistID3::from).collect(),
+            artists: a.artists,
+            genres,
+            display_artist: display_artist,
+            album_artists: vec![],
+            display_album_artist: None,
             bookmark_position: None,
         }
     }
@@ -383,6 +423,8 @@ impl From<ChildWithMetadata> for Child {
         } else {
             Some(c.id.clone())
         };
+        let display_artist = join_artist_names(&c.artists);
+        let display_album_artist = join_artist_names(&c.album_artists);
         Self {
             id: c.id,
             parent: c.parent,
@@ -413,7 +455,11 @@ impl From<ChildWithMetadata> for Child {
             album_id: c.album_id,
             artist_id: c.artists.first().map(|a| a.id.clone()),
             r#type: Some(c.r#type),
-            artists: c.artists.into_iter().map(ArtistID3::from).collect(),
+            artists: c.artists,
+            genres: c.genres,
+            album_artists: c.album_artists,
+            display_artist,
+            display_album_artist,
             bookmark_position: None,
         }
     }
@@ -496,21 +542,6 @@ impl From<ArtistWithStats> for ArtistID3 {
     }
 }
 
-impl From<ArtistIdName> for ArtistID3 {
-    fn from(a: ArtistIdName) -> Self {
-        Self {
-            id: a.id.clone(),
-            name: a.name,
-            cover_art: Some(format!("ar-{}", a.id)),
-            artist_image_url: None,
-            album_count: 0,
-            starred: None,
-            user_rating: None,
-            average_rating: None,
-        }
-    }
-}
-
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ArtistWithAlbumsID3 {
     #[serde(flatten)]
@@ -549,8 +580,6 @@ pub struct AlbumID3 {
     pub year: Option<i32>,
     #[serde(rename = "@genre", skip_serializing_if = "Option::is_none")]
     pub genre: Option<String>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub artists: Vec<ArtistID3>,
 }
 
 impl From<AlbumWithStats> for AlbumID3 {
@@ -570,7 +599,6 @@ impl From<AlbumWithStats> for AlbumID3 {
             average_rating: Some(a.average_rating),
             year: Some(a.year),
             genre: a.genre,
-            artists: a.artists.into_iter().map(ArtistID3::from).collect(),
         }
     }
 }

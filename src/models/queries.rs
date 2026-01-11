@@ -1,15 +1,23 @@
-use crate::models::{artist, child, song_genre, album, song_artist, album_artist, album_genre, lyrics};
+use crate::models::{artist, child, album, song_artist, album_artist, album_genre, lyrics};
 use sea_orm::{FromQueryResult, JoinType, QuerySelect, RelationTrait, ColumnTrait, EntityTrait, QueryFilter};
 use sea_orm::sea_query::Expr;
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ArtistIdName {
+    #[serde(rename = "@id")]
     pub id: String,
+    #[serde(rename = "@name")]
     pub name: String,
 }
 
-fn parse_artists_field(res: &sea_orm::QueryResult, pre: &str) -> Result<Vec<ArtistIdName>, sea_orm::DbErr> {
-    let artists_raw: Option<String> = res.try_get(pre, "artists")?;
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct GenreName {
+    #[serde(rename = "@name")]
+    pub name: String,
+}
+
+fn parse_artists_field(res: &sea_orm::QueryResult, pre: &str, col: &str) -> Result<Vec<ArtistIdName>, sea_orm::DbErr> {
+    let artists_raw: Option<String> = res.try_get(pre, col)?;
     Ok(artists_raw
         .map(|s| {
             s.split(',')
@@ -34,6 +42,7 @@ pub struct ChildWithMetadata {
     pub track: i32,
     pub year: i32,
     pub genre: Option<String>,
+    pub genres: Vec<GenreName>,
     pub size: i64,
     pub content_type: Option<String>,
     pub suffix: Option<String>,
@@ -53,11 +62,21 @@ pub struct ChildWithMetadata {
     pub album_id: Option<String>,
     pub r#type: String,
     pub artists: Vec<ArtistIdName>,
+    pub album_artists: Vec<ArtistIdName>,
+}
+
+fn parse_genres_field(res: &sea_orm::QueryResult, pre: &str, col: &str) -> Result<Vec<GenreName>, sea_orm::DbErr> {
+    let genre_raw: Option<String> = res.try_get(pre, col)?;
+    Ok(genre_raw
+        .map(|s| s.split(',').map(|s| GenreName { name: s.to_string() }).collect())
+        .unwrap_or_default())
 }
 
 impl FromQueryResult for ChildWithMetadata {
     fn from_query_result(res: &sea_orm::QueryResult, pre: &str) -> Result<Self, sea_orm::DbErr> {
-        let artists = parse_artists_field(res, pre)?;
+        let artists = parse_artists_field(res, pre, "artists")?;
+        let album_artists = parse_artists_field(res, pre, "album_artists")?;
+        let genres = parse_genres_field(res, pre, "genre")?;
 
         Ok(Self {
             id: res.try_get(pre, "id")?,
@@ -68,6 +87,7 @@ impl FromQueryResult for ChildWithMetadata {
             track: res.try_get(pre, "track")?,
             year: res.try_get(pre, "year")?,
             genre: res.try_get(pre, "genre")?,
+            genres,
             size: res.try_get(pre, "size")?,
             content_type: res.try_get(pre, "content_type")?,
             suffix: res.try_get(pre, "suffix")?,
@@ -87,6 +107,7 @@ impl FromQueryResult for ChildWithMetadata {
             album_id: res.try_get(pre, "album_id")?,
             r#type: res.try_get(pre, "type")?,
             artists,
+            album_artists,
         })
     }
 }
@@ -109,7 +130,7 @@ pub struct AlbumWithStats {
 
 impl FromQueryResult for AlbumWithStats {
     fn from_query_result(res: &sea_orm::QueryResult, pre: &str) -> Result<Self, sea_orm::DbErr> {
-        let artists = parse_artists_field(res, pre)?;
+        let artists = parse_artists_field(res, pre, "artists")?;
 
         Ok(Self {
             id: res.try_get(pre, "id")?,
@@ -179,32 +200,10 @@ pub fn lyrics_with_metadata_query() -> sea_orm::Select<lyrics::Entity> {
 
 pub fn song_with_metadata_query() -> sea_orm::Select<child::Entity> {
     child::Entity::find()
-        .column_as(Expr::cust("GROUP_CONCAT(DISTINCT artists.id || '[:]' || artists.name)"), "artists")
-        .column_as(Expr::cust("GROUP_CONCAT(DISTINCT song_genres.genre_name)"), "genre")
-        .column_as(album::Column::Name, "album")
-        .join_rev(
-            JoinType::LeftJoin,
-            song_artist::Entity::belongs_to(child::Entity)
-                .from(song_artist::Column::SongId)
-                .to(child::Column::Id)
-                .into(),
-        )
-        .join_rev(
-            JoinType::LeftJoin,
-            artist::Entity::belongs_to(song_artist::Entity)
-                .from(artist::Column::Id)
-                .to(song_artist::Column::ArtistId)
-                .into(),
-        )
-        .join_rev(
-            JoinType::LeftJoin,
-            song_genre::Entity::belongs_to(child::Entity)
-                .from(song_genre::Column::SongId)
-                .to(child::Column::Id)
-                .into(),
-        )
-        .join(JoinType::LeftJoin, child::Relation::Album.def())
-        .group_by(child::Column::Id)
+        .column_as(Expr::cust("(SELECT GROUP_CONCAT(a.id || '[:]' || a.name) FROM song_artists sa JOIN artists a ON sa.artist_id = a.id WHERE sa.song_id = children.id)"), "artists")
+        .column_as(Expr::cust("(SELECT GROUP_CONCAT(a.id || '[:]' || a.name) FROM album_artists aa JOIN artists a ON aa.artist_id = a.id WHERE aa.album_id = children.album_id)"), "album_artists")
+        .column_as(Expr::cust("(SELECT GROUP_CONCAT(genre_name) FROM song_genres WHERE song_id = children.id)"), "genre")
+        .column_as(Expr::cust("(SELECT name FROM albums WHERE id = children.album_id)"), "album")
 }
 
 pub fn artist_with_stats_query() -> sea_orm::Select<artist::Entity> {
