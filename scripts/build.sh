@@ -25,8 +25,17 @@ build_target() {
     fi
 
     local output_name="${APP_NAME}-${os}-${arch}-${VERSION}${suffix}"
+    local output_path="${BIN_DIR}/${output_name}"
 
-    cp "target/${target}/release/${APP_NAME}${suffix}" "${BIN_DIR}/${output_name}"
+    cp "target/${target}/release/${APP_NAME}${suffix}" "$output_path"
+
+    # Use UPX if available
+    if command -v upx >/dev/null 2>&1; then
+        echo "Packing $output_name with UPX..."
+        upx --best --lzma "$output_path" > /dev/null
+    else
+        echo "UPX not found, skipping packing."
+    fi
 }
 
 # Linux amd64
