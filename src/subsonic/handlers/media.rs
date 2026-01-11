@@ -1,6 +1,7 @@
 use crate::models::queries::{self, FolderPathInfo};
+use crate::service::Service;
 use crate::config::Config;
-use crate::models::{artist, child, lyrics, music_folder};
+use crate::models::{artist, child, music_folder};
 use crate::scanner::utils::get_cover_cache_dir;
 use crate::subsonic::common::{send_response, SubsonicParams};
 use crate::subsonic::models::{
@@ -327,11 +328,7 @@ pub async fn get_lyrics_by_song_id(
         }
     };
 
-    let (synced, parsed_lines) = lyrics::Model {
-        song_id: song.song_id,
-        content: song.content,
-    }
-    .parse();
+    let (synced, parsed_lines) = Service::parse_lrc(&song.content);
 
     let lines = parsed_lines
         .into_iter()

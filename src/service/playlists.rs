@@ -1,6 +1,6 @@
-use crate::browser::types::{PlaylistWithSongs, PlaylistWithStats, UpdatePlaylistOptions};
+use crate::service::types::{PlaylistWithSongs, PlaylistWithStats, UpdatePlaylistOptions};
 use crate::models::queries::{self, ChildWithMetadata};
-use crate::browser::Browser;
+use crate::service::Service;
 use crate::models::{child, playlist, playlist_song};
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, DbErr, EntityTrait,
@@ -11,7 +11,7 @@ use sea_orm::sea_query::Expr;
 use std::collections::HashSet;
 use chrono::Utc;
 
-impl Browser {
+impl Service {
     pub async fn create_playlist(
         &self,
         name: String,

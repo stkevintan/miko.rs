@@ -1,13 +1,13 @@
-use crate::browser::types::{BookmarkWithMetadata};
+use crate::service::types::{BookmarkWithMetadata};
 use crate::models::queries::{self, ChildWithMetadata};
-use crate::browser::Browser;
+use crate::service::Service;
 use crate::models::{bookmark, child, play_queue, play_queue_song};
 use chrono::Utc;
 use sea_orm::{
     ColumnTrait, DbErr, EntityTrait, JoinType, QueryFilter, QueryOrder, QuerySelect, RelationTrait, Set, TransactionError, TransactionTrait,
 };
 
-impl Browser {
+impl Service {
     pub async fn get_bookmarks(&self, username: &str) -> Result<Vec<(bookmark::Model, ChildWithMetadata)>, DbErr> {
         let results = queries::song_with_metadata_query()
             .join(JoinType::InnerJoin, child::Relation::Bookmarks.def())

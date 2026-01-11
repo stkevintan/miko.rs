@@ -1,4 +1,4 @@
-use crate::browser::{AlbumListOptions, Browser};
+use crate::service::{AlbumListOptions, Service};
 use crate::subsonic::{
     common::{send_response, SubsonicParams},
     models::{
@@ -39,11 +39,11 @@ fn default_count() -> u64 {
 
 #[handler]
 pub async fn get_album_list2(
-    browser: Data<&Arc<Browser>>,
+    service: Data<&Arc<Service>>,
     params: Query<SubsonicParams>,
     list_params: Query<AlbumListOptions>,
 ) -> impl IntoResponse {
-    let albums = match browser.get_albums(list_params.0).await {
+    let albums = match service.get_albums(list_params.0).await {
         Ok(a) => a,
         Err(e) => {
             log::error!("Database error: {}", e);
@@ -63,11 +63,11 @@ pub async fn get_album_list2(
 
 #[handler]
 pub async fn get_album_list(
-    browser: Data<&Arc<Browser>>,
+    service: Data<&Arc<Service>>,
     params: Query<SubsonicParams>,
     list_params: Query<AlbumListOptions>,
 ) -> impl IntoResponse {
-    let albums = match browser.get_albums(list_params.0).await {
+    let albums = match service.get_albums(list_params.0).await {
         Ok(a) => a,
         Err(e) => {
             log::error!("Database error: {}", e);
@@ -87,11 +87,11 @@ pub async fn get_album_list(
 
 #[handler]
 pub async fn get_random_songs(
-    browser: Data<&Arc<Browser>>,
+    service: Data<&Arc<Service>>,
     params: Query<SubsonicParams>,
     list_params: Query<AlbumListOptions>,
 ) -> impl IntoResponse {
-    let songs = match browser.get_random_songs(list_params.0).await {
+    let songs = match service.get_random_songs(list_params.0).await {
         Ok(s) => s,
         Err(e) => {
             log::error!("Database error: {}", e);
@@ -111,11 +111,11 @@ pub async fn get_random_songs(
 
 #[handler]
 pub async fn get_songs_by_genre(
-    browser: Data<&Arc<Browser>>,
+    service: Data<&Arc<Service>>,
     params: Query<SubsonicParams>,
     query: Query<SongsByGenreQuery>,
 ) -> impl IntoResponse {
-    let songs = match browser
+    let songs = match service
         .get_songs_by_genre(
             &query.genre,
             query.count,
@@ -142,13 +142,13 @@ pub async fn get_songs_by_genre(
 
 #[handler]
 pub async fn get_starred(
-    browser: Data<&Arc<Browser>>,
+    service: Data<&Arc<Service>>,
     params: Query<SubsonicParams>,
     query: Query<MusicFolderQuery>,
 ) -> impl IntoResponse {
     let music_folder_id = query.music_folder_id;
 
-    let (artists, albums, songs) = match browser.get_starred_items(music_folder_id).await {
+    let (artists, albums, songs) = match service.get_starred_items(music_folder_id).await {
         Ok(res) => res,
         Err(e) => {
             log::error!("Database error: {}", e);
@@ -170,13 +170,13 @@ pub async fn get_starred(
 
 #[handler]
 pub async fn get_starred2(
-    browser: Data<&Arc<Browser>>,
+    service: Data<&Arc<Service>>,
     params: Query<SubsonicParams>,
     query: Query<MusicFolderQuery>,
 ) -> impl IntoResponse {
     let music_folder_id = query.music_folder_id;
 
-    let (artists, albums, songs) = match browser.get_starred_items(music_folder_id).await {
+    let (artists, albums, songs) = match service.get_starred_items(music_folder_id).await {
         Ok(res) => res,
         Err(e) => {
             log::error!("Database error: {}", e);
@@ -201,7 +201,7 @@ const NOW_PLAYING_EXPIRATION_MINUTES: i64 = 10;
 #[handler]
 pub async fn get_now_playing(
     db: Data<&DatabaseConnection>,
-    browser: Data<&Arc<Browser>>,
+    service: Data<&Arc<Service>>,
     params: Query<SubsonicParams>,
 ) -> impl IntoResponse {
     use crate::models::now_playing;
@@ -246,7 +246,7 @@ pub async fn get_now_playing(
         .into_iter()
         .collect();
 
-    let songs = match browser.get_songs_by_ids(&song_ids).await {
+    let songs = match service.get_songs_by_ids(&song_ids).await {
         Ok(s) => s,
         Err(e) => {
             log::error!("Failed to get songs for now playing: {}", e);
@@ -257,7 +257,7 @@ pub async fn get_now_playing(
         }
     };
 
-    let song_map: std::collections::HashMap<String, crate::browser::types::ChildWithMetadata> =
+    let song_map: std::collections::HashMap<String, crate::service::types::ChildWithMetadata> =
         songs.into_iter().map(|s| (s.id.clone(), s)).collect();
 
     let now = Utc::now();

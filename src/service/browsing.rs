@@ -1,4 +1,4 @@
-use crate::browser::{Browser, DirectoryWithChildren, GenreWithStats};
+use crate::service::{Service, DirectoryWithChildren, GenreWithStats};
 use crate::models::queries::{self, ChildWithMetadata};
 use crate::models::{artist, child, genre, song_genre, album_genre};
 use sea_orm::{
@@ -6,7 +6,7 @@ use sea_orm::{
 };
 use sea_orm::sea_query::Expr;
 
-impl Browser {
+impl Service {
     pub async fn get_indexes(
         &self,
         folder_id: Option<i32>,
@@ -34,7 +34,7 @@ impl Browser {
             })
             .collect();
 
-        Ok(crate::browser::utils::create_indexed_list(
+        Ok(crate::service::utils::create_indexed_list(
             artists,
             ignored_articles,
             |a| &a.name,

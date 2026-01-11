@@ -1,4 +1,4 @@
-use crate::browser::{Browser, UpdatePlaylistOptions};
+use crate::service::{Service, UpdatePlaylistOptions};
 use crate::models::user;
 use crate::subsonic::common::{send_response, SubsonicParams, deserialize_vec};
 use crate::subsonic::models::{Playlist, Playlists, SubsonicResponse, SubsonicResponseBody};
@@ -14,7 +14,7 @@ pub struct GetPlaylistsParams {
 
 #[handler]
 pub async fn get_playlists(
-    browser: Data<&Arc<Browser>>,
+    service: Data<&Arc<Service>>,
     current_user: Data<&Arc<user::Model>>,
     params: Query<SubsonicParams>,
     query: Query<GetPlaylistsParams>,
@@ -22,7 +22,7 @@ pub async fn get_playlists(
     let username = &current_user.username;
     let target_username = query.username.as_deref().unwrap_or(username);
 
-    match browser.get_playlists(username, target_username).await {
+    match service.get_playlists(username, target_username).await {
         Ok(playlists) => {
             let playlists: Vec<_> = playlists.into_iter().map(Playlist::from).collect();
             let resp = SubsonicResponse::new_ok(SubsonicResponseBody::Playlists(Playlists {
@@ -45,11 +45,11 @@ pub struct GetPlaylistParams {
 
 #[handler]
 pub async fn get_playlist(
-    browser: Data<&Arc<Browser>>,
+    service: Data<&Arc<Service>>,
     params: Query<SubsonicParams>,
     query: Query<GetPlaylistParams>,
 ) -> impl IntoResponse {
-    match browser.get_playlist(query.id).await {
+    match service.get_playlist(query.id).await {
         Ok(Some(playlist)) => {
             let subsonic_playlist = Playlist::from(playlist);
             let resp = SubsonicResponse::new_ok(SubsonicResponseBody::Playlist(subsonic_playlist));
@@ -77,7 +77,7 @@ pub struct CreatePlaylistParams {
 
 #[handler]
 pub async fn create_playlist(
-    browser: Data<&Arc<Browser>>,
+    service: Data<&Arc<Service>>,
     current_user: Data<&Arc<user::Model>>,
     params: Query<SubsonicParams>,
     query: Query<CreatePlaylistParams>,
@@ -86,7 +86,7 @@ pub async fn create_playlist(
     let owner = current_user.username.clone();
     let song_ids = query.song_id.clone();
 
-    match browser.create_playlist(name, owner, song_ids).await {
+    match service.create_playlist(name, owner, song_ids).await {
         Ok(_) => {
             let resp = SubsonicResponse::new_ok(SubsonicResponseBody::None);
             send_response(resp, &params.f)
@@ -114,7 +114,7 @@ pub struct UpdatePlaylistParams {
 
 #[handler]
 pub async fn update_playlist(
-    browser: Data<&Arc<Browser>>,
+    service: Data<&Arc<Service>>,
     current_user: Data<&Arc<user::Model>>,
     params: Query<SubsonicParams>,
     query: Query<UpdatePlaylistParams>,
@@ -128,7 +128,7 @@ pub async fn update_playlist(
         song_indices_to_remove: query.song_index_to_remove.clone(),
     };
 
-    match browser
+    match service
         .update_playlist(query.playlist_id, username, opts)
         .await
     {
@@ -151,13 +151,13 @@ pub struct DeletePlaylistParams {
 
 #[handler]
 pub async fn delete_playlist(
-    browser: Data<&Arc<Browser>>,
+    service: Data<&Arc<Service>>,
     current_user: Data<&Arc<user::Model>>,
     params: Query<SubsonicParams>,
     query: Query<DeletePlaylistParams>,
 ) -> impl IntoResponse {
     let username = &current_user.username;
-    match browser.delete_playlist(query.id, username).await {
+    match service.delete_playlist(query.id, username).await {
         Ok(_) => {
             let resp = SubsonicResponse::new_ok(SubsonicResponseBody::None);
             send_response(resp, &params.f)

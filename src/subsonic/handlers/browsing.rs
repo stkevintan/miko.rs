@@ -1,4 +1,4 @@
-use crate::browser::Browser;
+use crate::service::Service;
 use crate::config::Config;
 use crate::models::music_folder;
 use crate::scanner::Scanner;
@@ -74,7 +74,7 @@ pub async fn get_music_folders(
 
 #[handler]
 pub async fn get_indexes(
-    browser: Data<&Arc<Browser>>,
+    service: Data<&Arc<Service>>,
     config: Data<&Arc<Config>>,
     scanner: Data<&Arc<Scanner>>,
     params: Query<SubsonicParams>,
@@ -82,7 +82,7 @@ pub async fn get_indexes(
 ) -> impl IntoResponse {
     let music_folder_id = query.music_folder_id;
 
-    match browser
+    match service
         .get_indexes(music_folder_id, &config.subsonic.ignored_articles)
         .await
     {
@@ -117,7 +117,7 @@ pub async fn get_indexes(
 
 #[handler]
 pub async fn get_music_directory(
-    browser: Data<&Arc<Browser>>,
+    service: Data<&Arc<Service>>,
     params: Query<SubsonicParams>,
     query: Query<GetMusicDirectoryQuery>,
 ) -> impl IntoResponse {
@@ -125,7 +125,7 @@ pub async fn get_music_directory(
     let offset = query.offset.unwrap_or(0);
     let count = query.count.unwrap_or(0);
 
-    match browser.get_directory(id, offset, count).await {
+    match service.get_directory(id, offset, count).await {
         Ok(data) => {
             let resp = SubsonicResponse::new_ok(SubsonicResponseBody::Directory(Directory {
                 id: data.dir.id,
@@ -153,10 +153,10 @@ pub async fn get_music_directory(
 
 #[handler]
 pub async fn get_genres(
-    browser: Data<&Arc<Browser>>,
+    service: Data<&Arc<Service>>,
     params: Query<SubsonicParams>,
 ) -> impl IntoResponse {
-    let genres = match browser.get_genres().await {
+    let genres = match service.get_genres().await {
         Ok(g) => g,
         Err(e) => {
             log::error!("Failed to query genres: {:?}", e);
@@ -176,11 +176,11 @@ pub async fn get_genres(
 
 #[handler]
 pub async fn get_artists(
-    browser: Data<&Arc<Browser>>,
+    service: Data<&Arc<Service>>,
     config: Data<&Arc<Config>>,
     params: Query<SubsonicParams>,
 ) -> impl IntoResponse {
-    match browser.get_artists(&config.subsonic.ignored_articles).await {
+    match service.get_artists(&config.subsonic.ignored_articles).await {
         Ok(indexes) => {
             let index_vec: Vec<IndexID3> = indexes
                 .into_iter()
@@ -209,13 +209,13 @@ pub async fn get_artists(
 
 #[handler]
 pub async fn get_artist(
-    browser: Data<&Arc<Browser>>,
+    service: Data<&Arc<Service>>,
     params: Query<SubsonicParams>,
     query: Query<IdQuery>,
 ) -> impl IntoResponse {
     let id = &query.id;
 
-    match browser.get_artist(id).await {
+    match service.get_artist(id).await {
         Ok((artist, albums)) => {
             let resp =
                 SubsonicResponse::new_ok(SubsonicResponseBody::Artist(ArtistWithAlbumsID3 {
@@ -237,13 +237,13 @@ pub async fn get_artist(
 
 #[handler]
 pub async fn get_album(
-    browser: Data<&Arc<Browser>>,
+    service: Data<&Arc<Service>>,
     params: Query<SubsonicParams>,
     query: Query<IdQuery>,
 ) -> impl IntoResponse {
     let id = &query.id;
 
-    match browser.get_album(id).await {
+    match service.get_album(id).await {
         Ok((album, songs)) => {
             let resp = SubsonicResponse::new_ok(SubsonicResponseBody::Album(AlbumWithSongsID3 {
                 album: AlbumID3::from(album),
@@ -264,13 +264,13 @@ pub async fn get_album(
 
 #[handler]
 pub async fn get_song(
-    browser: Data<&Arc<Browser>>,
+    service: Data<&Arc<Service>>,
     params: Query<SubsonicParams>,
     query: Query<IdQuery>,
 ) -> impl IntoResponse {
     let id = &query.id;
 
-    match browser.get_song(id).await {
+    match service.get_song(id).await {
         Ok(song) => {
             let resp = SubsonicResponse::new_ok(SubsonicResponseBody::Song(Child::from(song)));
             send_response(resp, &params.f)

@@ -1,13 +1,13 @@
-use crate::browser::types::{AlbumListOptions, ArtistWithStats};
+use crate::service::types::{AlbumListOptions, ArtistWithStats};
 use crate::models::queries::{self, AlbumWithStats, ChildWithMetadata};
-use crate::browser::Browser;
+use crate::service::Service;
 use crate::models::{album, album_artist, artist, child, genre, song_artist, album_genre};
 use sea_orm::{
     ColumnTrait, DbErr, EntityTrait, JoinType, Order, QueryFilter, QueryOrder, QuerySelect,
 };
 use sea_orm::sea_query::{Expr, ExprTrait, Query};
 
-impl Browser {
+impl Service {
     pub async fn get_albums(
         &self,
         opts: AlbumListOptions,
@@ -88,7 +88,7 @@ impl Browser {
             .all(&self.db)
             .await?;
 
-        Ok(crate::browser::utils::create_indexed_list(
+        Ok(crate::service::utils::create_indexed_list(
             artists,
             ignored_articles,
             |a| &a.name,

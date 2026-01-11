@@ -53,7 +53,6 @@ pub struct AlbumWithStats {
 
 #[derive(Debug, FromQueryResult, Clone)]
 pub struct LyricsWithMetadata {
-    pub song_id: String,
     pub title: String,
     pub artist: Option<String>,
     pub content: String,

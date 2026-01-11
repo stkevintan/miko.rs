@@ -1,4 +1,4 @@
-use crate::browser::{
+use crate::service::{
     ArtistWithStats, GenreWithStats, PlaylistWithSongs,
     PlaylistWithStats,
 };

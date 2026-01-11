@@ -1,13 +1,13 @@
-use crate::browser::types::{ArtistWithStats, SearchOptions};
+use crate::service::types::{ArtistWithStats, SearchOptions};
 use crate::models::queries::{self, AlbumWithStats, ChildWithMetadata};
-use crate::browser::Browser;
+use crate::service::Service;
 use crate::models::{album, album_artist, artist, child, song_artist};
 use sea_orm::{
     ColumnTrait, DbErr, EntityTrait, JoinType, PaginatorTrait, QueryFilter, QuerySelect,
 };
 use sea_orm::sea_query::{Expr, Query};
 
-impl Browser {
+impl Service {
     pub async fn search(&self, opts: SearchOptions) -> Result<(Vec<ArtistWithStats>, Vec<AlbumWithStats>, Vec<ChildWithMetadata>), DbErr> {
         let clean_query = opts.query.trim().trim_matches('"');
         let search_query = format!("%{}%", clean_query);
