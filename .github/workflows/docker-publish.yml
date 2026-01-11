@@ -44,6 +44,17 @@ jobs:
         if: startsWith(matrix.os, 'ubuntu')
         run: cargo install cross --git https://github.com/cross-rs/cross.git
 
+      - name: Install UPX
+        shell: bash
+        run: |
+          if [ "${{ startsWith(matrix.os, 'ubuntu') }}" = "true" ]; then
+            sudo apt-get update && sudo apt-get install -y upx-ucl
+          elif [ "${{ startsWith(matrix.os, 'macos') }}" = "true" ]; then
+            brew install upx
+          elif [ "${{ startsWith(matrix.os, 'windows') }}" = "true" ]; then
+            choco install upx
+          fi
+
       - name: Build binary
         run: |
           if [ "${{ startsWith(matrix.os, 'ubuntu') }}" = "true" ]; then
@@ -58,7 +69,9 @@ jobs:
         run: |
           VERSION=$(grep '^version =' Cargo.toml | head -n1 | cut -d '"' -f2)
           mkdir -p output
-          cp target/${{ matrix.target }}/release/miko-rs${{ matrix.suffix }} output/${{ matrix.bin_name }}-${VERSION}${{ matrix.suffix }}
+          BIN_PATH="output/${{ matrix.bin_name }}-${VERSION}${{ matrix.suffix }}"
+          cp target/${{ matrix.target }}/release/miko-rs${{ matrix.suffix }} $BIN_PATH
+          upx --best --lzma "$BIN_PATH" > /dev/null || echo "warning: upx failed to pack '$BIN_PATH'"
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
