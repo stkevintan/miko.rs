@@ -2,20 +2,6 @@ use md5;
 use crate::config::Config;
 use std::path::{Path, PathBuf};
 
-pub fn get_content_type(path: &Path) -> String {
-    mime_guess::from_path(path)
-        .first_raw()
-        .map(|s| s.to_string())
-        .unwrap_or_else(|| {
-            let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
-            if !ext.is_empty() {
-                format!("audio/{}", ext)
-            } else {
-                "application/octet-stream".to_string()
-            }
-        })
-}
-
 pub fn get_cover_cache_dir(cfg: &Config) -> PathBuf {
     Path::new(&cfg.subsonic.data_dir).join("cache").join("covers")
 }
@@ -55,7 +41,6 @@ pub fn get_parent_id(path: &str, folder_id: i32, folder_path: &str) -> Option<St
     Some(generate_id(&parent_str, folder_id, folder_path))
 }
 
-pub fn is_audio_file(path: &Path) -> bool {
-    let ext = path.extension().and_then(|s| s.to_str()).unwrap_or("").to_lowercase();
-    matches!(ext.as_str(), "mp3" | "flac" | "m4a" | "wav" | "ogg" | "opus")
+pub fn is_audio_file(ext: &str) -> bool {
+    matches!(ext, "mp3" | "flac" | "m4a" | "wav" | "ogg" | "opus")
 }

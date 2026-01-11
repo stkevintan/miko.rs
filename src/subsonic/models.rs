@@ -110,8 +110,8 @@ pub enum SubsonicResponseBody {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct OpenSubsonicExtensions {
-    #[serde(rename = "extension")]
     pub extension: Vec<OpenSubsonicExtension>,
 }
 
@@ -119,8 +119,7 @@ pub struct OpenSubsonicExtensions {
 pub struct OpenSubsonicExtension {
     #[serde(rename = "@name")]
     pub name: String,
-    #[serde(rename = "@versions")]
-    pub versions: String,
+    pub versions: Vec<i32>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

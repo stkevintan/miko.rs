@@ -69,6 +69,9 @@ pub fn send_response(resp: SubsonicResponse, format: &Option<String>) -> Respons
 pub fn clean_json_attributes(value: &mut serde_json::Value) {
     match value {
         serde_json::Value::Object(map) => {
+            // Remove xmlns/status from JSON for Subsonic compatibility if needed
+            map.remove("@xmlns");
+
             // If there's a "$value" key, we want to handle it
             if let Some(v) = map.remove("$value") {
                 match v {
