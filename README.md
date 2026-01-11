@@ -22,6 +22,8 @@ This project implements the Subsonic API (version 1.16.1) to support various mus
 - **User Management**: `getUser`, `getUsers`
 
 ### OpenSubsonic Extensions & Enhancements
+- **Multi-Artist Support**: For songs and albums, an `artists` field is included in the response. This field provides a structured list of all artists associated with the item, which is particularly useful for tracks with multiple contributors.
+    - Format: `artists: [{"id": "artist_id", "name": "Artist Name"}, ...]`
 - **Extended Lyrics**: Supports `getLyricsBySongId` for better lyrics compatibility with modern clients.
 - **Incremental Scanning**: `startScan` is incremental by default. It only scans for new or modified files.
     - To trigger a full re-scan, append `fullScan=true` to the request.
