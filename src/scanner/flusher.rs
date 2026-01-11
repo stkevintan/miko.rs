@@ -159,7 +159,7 @@ pub async fn run_flusher(db: DatabaseConnection, mut rx: tokio::sync::mpsc::Rece
                     .exec(&txn)
                     .await?;
                 lyrics::Entity::delete_many()
-                    .filter(lyrics::Column::SongId.is_in(song_ids))
+                    .filter(lyrics::Column::SongId.is_in(&song_ids))
                     .exec(&txn)
                     .await?;
 

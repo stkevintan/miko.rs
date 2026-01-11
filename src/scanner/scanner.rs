@@ -402,8 +402,8 @@ impl Scanner {
 
             join_set.spawn(async move {
                 let _permit = permit;
-                if let Err(es) = scanner
-                    .process_tak(task, incremental, &cache_dir_clone)
+                if let Err(e) = scanner
+                    .process_task(task, incremental, &cache_dir_clone)
                     .await
                 {
                     log::error!("Error processing task: {}", e);
