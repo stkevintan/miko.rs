@@ -1,12 +1,13 @@
-use crate::browser::types::{AlbumWithStats, ArtistWithStats, ChildWithMetadata, SearchOptions};
-use crate::browser::Browser;
+use crate::service::types::{ArtistWithStats, SearchOptions};
+use crate::models::queries::{self, AlbumWithStats, ChildWithMetadata};
+use crate::service::Service;
 use crate::models::{album, album_artist, artist, child, song_artist};
 use sea_orm::{
     ColumnTrait, DbErr, EntityTrait, JoinType, PaginatorTrait, QueryFilter, QuerySelect,
 };
 use sea_orm::sea_query::{Expr, Query};
 
-impl Browser {
+impl Service {
     pub async fn search(&self, opts: SearchOptions) -> Result<(Vec<ArtistWithStats>, Vec<AlbumWithStats>, Vec<ChildWithMetadata>), DbErr> {
         let clean_query = opts.query.trim().trim_matches('"');
         let search_query = format!("%{}%", clean_query);
@@ -25,10 +26,10 @@ impl Browser {
             .group_by(artist::Column::Id);
 
         // Albums
-        let mut album_query = Self::album_with_stats_query()
+        let mut album_query = queries::album_with_stats_query()
             .filter(album::Column::Name.like(&search_query));
 
-        let mut song_query = Self::song_with_metadata_query()
+        let mut song_query = queries::song_with_metadata_query()
             .filter(child::Column::IsDir.eq(false))
             .filter(
                 child::Column::Title.like(&search_query)
@@ -85,7 +86,7 @@ impl Browser {
         let clean_query = query.trim().trim_matches('"');
         let search_query = format!("%{}%", clean_query);
         
-        let q = Self::song_with_metadata_query()
+        let q = queries::song_with_metadata_query()
             .filter(child::Column::IsDir.eq(false))
             .filter(
                 child::Column::Title.like(&search_query)

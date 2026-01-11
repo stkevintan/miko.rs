@@ -16,3 +16,4 @@ pub mod now_playing;
 pub mod bookmark;
 pub mod play_queue;
 pub mod play_queue_song;
+pub mod queries;

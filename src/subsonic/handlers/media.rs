@@ -1,6 +1,7 @@
-use crate::browser::{Browser, ChildWithMetadata};
+use crate::models::queries::{self, FolderPathInfo};
+use crate::service::Service;
 use crate::config::Config;
-use crate::models::{artist, child, lyrics};
+use crate::models::{artist, child, music_folder};
 use crate::scanner::utils::get_cover_cache_dir;
 use crate::subsonic::common::{send_response, SubsonicParams};
 use crate::subsonic::models::{
@@ -12,10 +13,11 @@ use poem::{
     web::{Data, Query, StaticFileRequest},
     IntoResponse,
 };
-use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter};
+use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, QuerySelect};
 use serde::Deserialize;
 use std::path::Path;
 use std::sync::Arc;
+use path_clean::PathClean;
 
 #[derive(Deserialize)]
 pub struct IdQuery {
@@ -33,24 +35,59 @@ pub struct UsernameQuery {
     pub username: String,
 }
 
-async fn get_song_or_error(
+async fn get_song_path_or_error(
     db: &DatabaseConnection,
     id: &str,
     params: &SubsonicParams,
-    audio_only: bool,
-    not_found_msg: &str,
-) -> Result<ChildWithMetadata, poem::Response> {
-    let mut find = Browser::song_with_metadata_query().filter(child::Column::Id.eq(id));
-    if audio_only {
-        find = find
-            .filter(child::Column::IsDir.eq(false))
-            .filter(child::Column::ContentType.starts_with("audio/"));
-    }
+) -> Result<String, poem::Response> {
+    let res = queries::song_path_info_query()
+        .filter(child::Column::Id.eq(id))
+        .into_model::<queries::SongPathInfo>()
+        .one(db)
+        .await;
 
-    match find.into_model::<ChildWithMetadata>().one(db).await {
-        Ok(Some(s)) => Ok(s),
+    match res {
+        Ok(Some(s)) => {
+            // Get the assigned music folder root to prevent path traversal
+            let folder = match music_folder::Entity::find_by_id(s.music_folder_id)
+                .select_only()
+                .column(music_folder::Column::Path)
+                .into_model::<FolderPathInfo>()
+                .one(db)
+                .await
+            {
+                Ok(Some(f)) => f,
+                _ => {
+                    log::error!(
+                        "Song {} references non-existent music folder id {}",
+                        id,
+                        s.music_folder_id
+                    );
+                    return Err(send_response(
+                        SubsonicResponse::new_error(70, "Invalid library configuration".into()),
+                        &params.f,
+                    ));
+                }
+            };
+
+            let path = Path::new(&s.path).clean();
+            let root = Path::new(&folder.path).clean();
+
+            if !path.starts_with(&root) {
+                log::error!(
+                    "Security: Blocked attempt to access file outside root or with traversal. ID: {}, Path: {:?}, Root: {:?}",
+                    id, path, root
+                );
+                return Err(send_response(
+                    SubsonicResponse::new_error(70, "Access denied".into()),
+                    &params.f,
+                ));
+            }
+
+            Ok(s.path)
+        }
         Ok(None) => Err(send_response(
-            SubsonicResponse::new_error(70, not_found_msg.into()),
+            SubsonicResponse::new_error(70, "Audio file not found".into()),
             &params.f,
         )),
         Err(e) => {
@@ -72,12 +109,12 @@ pub async fn stream(
 ) -> impl IntoResponse {
     let id = &query.id;
 
-    let song = match get_song_or_error(*db, id, &params, true, "Audio file not found").await {
-        Ok(s) => s,
+    let path_str = match get_song_path_or_error(*db, id, &params).await {
+        Ok(p) => p,
         Err(r) => return r,
     };
 
-    let path = Path::new(&song.path);
+    let path = Path::new(&path_str);
     if !path.exists() {
         return send_response(
             SubsonicResponse::new_error(70, "File not found on disk".into()),
@@ -103,12 +140,12 @@ pub async fn download(
 ) -> impl IntoResponse {
     let id = &query.id;
 
-    let song = match get_song_or_error(*db, id, &params, true, "Audio file not found").await {
-        Ok(s) => s,
+    let path_str = match get_song_path_or_error(*db, id, &params).await {
+        Ok(p) => p,
         Err(r) => return r,
     };
 
-    let path = Path::new(&song.path);
+    let path = Path::new(&path_str);
     if !path.exists() {
         return send_response(
             SubsonicResponse::new_error(70, "File not found on disk".into()),
@@ -224,16 +261,17 @@ pub async fn get_lyrics(
     params: Query<SubsonicParams>,
     query: Query<LyricsQuery>,
 ) -> impl IntoResponse {
-    let artist = &query.artist;
+    let artist_name = &query.artist;
     let title = &query.title;
 
-    let song = match Browser::song_with_metadata_query()
-        .filter(artist::Column::Name.eq(artist))
+    let res = queries::lyrics_with_metadata_query()
+        .filter(artist::Column::Name.eq(artist_name))
         .filter(child::Column::Title.eq(title))
-        .into_model::<ChildWithMetadata>()
+        .into_model::<queries::LyricsWithMetadata>()
         .one(*db)
-        .await
-    {
+        .await;
+
+    let song = match res {
         Ok(Some(s)) => s,
         Ok(None) => {
             return send_response(
@@ -250,23 +288,17 @@ pub async fn get_lyrics(
         }
     };
 
-    let lyric = match lyrics::Entity::find_by_id(&song.id).one(*db).await {
-        Ok(Some(l)) => l.content,
-        _ => {
-            return send_response(
-                SubsonicResponse::new_error(70, "Lyrics not found".into()),
-                &params.f,
-            )
-        }
-    };
-
     let resp = SubsonicResponse::new_ok(SubsonicResponseBody::Lyrics(Lyrics {
-        artist: song.artist,
+        artist: some_artist_name_or_default(&song.artist),
         title: Some(song.title),
-        value: lyric,
+        value: song.content,
     }));
 
     send_response(resp, &params.f)
+}
+
+fn some_artist_name_or_default(artist: &Option<String>) -> Option<String> {
+    Some(artist.as_deref().unwrap_or("Unknown Artist").to_string())
 }
 
 #[handler]
@@ -277,22 +309,31 @@ pub async fn get_lyrics_by_song_id(
 ) -> impl IntoResponse {
     let id = &query.id;
 
-    let song = match get_song_or_error(*db, id, &params, false, "Lyrics not found").await {
-        Ok(s) => s,
-        Err(r) => return r,
-    };
+    let res = queries::lyrics_with_metadata_query()
+        .filter(child::Column::Id.eq(id))
+        .into_model::<queries::LyricsWithMetadata>()
+        .one(*db)
+        .await;
 
-    let lyric_model = match lyrics::Entity::find_by_id(&song.id).one(*db).await {
-        Ok(Some(l)) => l,
-        _ => {
+    let song = match res {
+        Ok(Some(s)) => s,
+        Ok(None) => {
             return send_response(
                 SubsonicResponse::new_error(70, "Lyrics not found".into()),
                 &params.f,
             )
         }
+        Err(e) => {
+            log::error!("Database error: {}", e);
+            return send_response(
+                SubsonicResponse::new_error(0, "Database error".into()),
+                &params.f,
+            );
+        }
     };
 
-    let (synced, parsed_lines) = lyric_model.parse();
+    let (synced, parsed_lines) = Service::parse_lrc(&song.content);
+
     let lines = parsed_lines
         .into_iter()
         .map(|(start, value)| LyricsLine { start, value })
@@ -302,7 +343,7 @@ pub async fn get_lyrics_by_song_id(
         structured_lyrics: vec![StructuredLyrics {
             synced,
             lang: Some("xxx".to_string()),
-            display_artist: song.artist,
+            display_artist: some_artist_name_or_default(&song.artist),
             display_title: Some(song.title),
             lines,
         }],

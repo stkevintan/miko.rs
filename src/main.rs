@@ -1,13 +1,16 @@
 mod api;
-mod browser;
 mod config;
 mod crypto;
 mod models;
 mod scanner;
+mod service;
 mod subsonic;
 
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 use migration::{Migrator, MigratorTrait};
-use crate::browser::Browser;
+use crate::service::Service;
 use crate::config::Config;
 use crate::models::{music_folder, user};
 use crate::scanner::Scanner;
@@ -139,7 +142,7 @@ async fn main() -> Result<(), anyhow::Error> {
         .expect("Failed to initialize music folders");
 
     let scanner = Arc::new(Scanner::new(db.clone(), config.clone()));
-    let browser = Arc::new(Browser::new(db.clone()));
+    let service = Arc::new(Service::new(db.clone()));
     scanner.update_total_count().await;
     let addr = format!("0.0.0.0:{}", config.server.port);
 
@@ -151,7 +154,7 @@ async fn main() -> Result<(), anyhow::Error> {
         .data(db)
         .data(config)
         .data(scanner)
-        .data(browser)
+        .data(service)
         .with(Tracing)
         .with(
             Cors::new()

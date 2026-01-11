@@ -1,14 +1,15 @@
-use crate::browser::types::{ChildWithMetadata, BookmarkWithMetadata};
-use crate::browser::Browser;
+use crate::service::types::{BookmarkWithMetadata};
+use crate::models::queries::{self, ChildWithMetadata};
+use crate::service::Service;
 use crate::models::{bookmark, child, play_queue, play_queue_song};
 use chrono::Utc;
 use sea_orm::{
     ColumnTrait, DbErr, EntityTrait, JoinType, QueryFilter, QueryOrder, QuerySelect, RelationTrait, Set, TransactionError, TransactionTrait,
 };
 
-impl Browser {
+impl Service {
     pub async fn get_bookmarks(&self, username: &str) -> Result<Vec<(bookmark::Model, ChildWithMetadata)>, DbErr> {
-        let results = Self::song_with_metadata_query()
+        let results = queries::song_with_metadata_query()
             .join(JoinType::InnerJoin, child::Relation::Bookmarks.def())
             .filter(bookmark::Column::Username.eq(username))
             .order_by_desc(bookmark::Column::UpdatedAt)
@@ -24,19 +25,7 @@ impl Browser {
 
         Ok(results
             .into_iter()
-            .map(|r| {
-                (
-                    bookmark::Model {
-                        username: r.b_username,
-                        song_id: r.b_song_id,
-                        position: r.b_position,
-                        comment: r.b_comment,
-                        created_at: r.b_created_at,
-                        updated_at: r.b_updated_at,
-                    },
-                    r.child,
-                )
-            })
+            .map(|r| r.into())
             .collect())
     }
 
@@ -92,7 +81,7 @@ impl Browser {
 
         if let Some(queue) = queue {
             // play_queue_song::Column::Index represents the order of songs in the list.
-            let songs = Self::song_with_metadata_query()
+            let songs = queries::song_with_metadata_query()
                 .join(JoinType::InnerJoin, child::Relation::PlayQueueSongs.def())
                 .filter(play_queue_song::Column::Username.eq(username))
                 .order_by_asc(play_queue_song::Column::Index)

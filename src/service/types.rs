@@ -1,4 +1,5 @@
-use crate::models::{child};
+pub use crate::models::queries::ChildWithMetadata;
+use crate::models::{child, bookmark};
 use serde::Deserialize;
 use sea_orm::FromQueryResult;
 
@@ -12,23 +13,6 @@ pub struct AlbumListOptions {
     pub from_year: Option<i32>,
     pub to_year: Option<i32>,
     pub music_folder_id: Option<i32>,
-}
-
-#[derive(Debug, FromQueryResult)]
-pub struct AlbumWithStats {
-    pub id: String,
-    pub name: String,
-    pub artist: Option<String>,
-    pub artist_id: Option<String>,
-    pub created: chrono::DateTime<chrono::Utc>,
-    pub starred: Option<chrono::DateTime<chrono::Utc>>,
-    pub user_rating: i32,
-    pub average_rating: f64,
-    pub year: i32,
-    pub genre: Option<String>,
-    pub song_count: i64,
-    pub duration: i64,
-    pub play_count: i64,
 }
 
 #[derive(Debug, FromQueryResult)]
@@ -73,38 +57,6 @@ pub struct DirectoryWithChildren {
     pub total_count: i64,
 }
 
-#[derive(Debug, FromQueryResult, Clone)]
-pub struct ChildWithMetadata {
-    pub id: String,
-    pub parent: Option<String>,
-    pub is_dir: bool,
-    pub title: String,
-    pub album: Option<String>,
-    pub artist: Option<String>,
-    pub track: i32,
-    pub year: i32,
-    pub genre: Option<String>,
-    pub size: i64,
-    pub content_type: Option<String>,
-    pub suffix: Option<String>,
-    pub transcoded_content_type: Option<String>,
-    pub transcoded_suffix: Option<String>,
-    pub duration: i32,
-    pub bit_rate: i32,
-    pub path: String,
-    pub is_video: bool,
-    pub user_rating: i32,
-    pub average_rating: f64,
-    pub play_count: i64,
-    pub last_played: Option<chrono::DateTime<chrono::Utc>>,
-    pub disc_number: i32,
-    pub created: Option<chrono::DateTime<chrono::Utc>>,
-    pub starred: Option<chrono::DateTime<chrono::Utc>>,
-    pub album_id: Option<String>,
-    pub artist_id: Option<String>,
-    pub r#type: String,
-}
-
 #[derive(Debug, Clone)]
 pub struct BookmarkWithMetadata {
     pub b_username: String,
@@ -127,6 +79,22 @@ impl FromQueryResult for BookmarkWithMetadata {
             b_updated_at: res.try_get(pre, "b_updated_at")?,
             child: ChildWithMetadata::from_query_result(res, pre)?,
         })
+    }
+}
+
+impl From<BookmarkWithMetadata> for (bookmark::Model, ChildWithMetadata) {
+    fn from(r: BookmarkWithMetadata) -> Self {
+        (
+            bookmark::Model {
+                username: r.b_username,
+                song_id: r.b_song_id,
+                position: r.b_position,
+                comment: r.b_comment,
+                created_at: r.b_created_at,
+                updated_at: r.b_updated_at,
+            },
+            r.child,
+        )
     }
 }
 

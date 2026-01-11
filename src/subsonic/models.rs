@@ -1,7 +1,8 @@
-use crate::browser::{
-    AlbumWithStats, ArtistWithStats, ChildWithMetadata, GenreWithStats, PlaylistWithSongs,
+use crate::service::{
+    ArtistWithStats, GenreWithStats, PlaylistWithSongs,
     PlaylistWithStats,
 };
+use crate::models::queries::{AlbumWithStats, ChildWithMetadata};
 use crate::models::{artist, user};
 use serde::{Deserialize, Serialize};
 

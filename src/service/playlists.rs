@@ -1,5 +1,6 @@
-use crate::browser::types::{PlaylistWithSongs, PlaylistWithStats, UpdatePlaylistOptions, ChildWithMetadata};
-use crate::browser::Browser;
+use crate::service::types::{PlaylistWithSongs, PlaylistWithStats, UpdatePlaylistOptions};
+use crate::models::queries::{self, ChildWithMetadata};
+use crate::service::Service;
 use crate::models::{child, playlist, playlist_song};
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, DbErr, EntityTrait,
@@ -10,7 +11,7 @@ use sea_orm::sea_query::Expr;
 use std::collections::HashSet;
 use chrono::Utc;
 
-impl Browser {
+impl Service {
     pub async fn create_playlist(
         &self,
         name: String,
@@ -223,7 +224,7 @@ impl Browser {
             .await?;
 
         if let Some(playlist) = playlist {
-            let songs = Self::song_with_metadata_query()
+            let songs = queries::song_with_metadata_query()
                 .join_rev(
                     JoinType::InnerJoin,
                     playlist_song::Entity::belongs_to(child::Entity)
