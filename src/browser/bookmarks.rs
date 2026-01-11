@@ -25,19 +25,7 @@ impl Browser {
 
         Ok(results
             .into_iter()
-            .map(|r| {
-                (
-                    bookmark::Model {
-                        username: r.b_username,
-                        song_id: r.b_song_id,
-                        position: r.b_position,
-                        comment: r.b_comment,
-                        created_at: r.b_created_at,
-                        updated_at: r.b_updated_at,
-                    },
-                    r.child,
-                )
-            })
+            .map(|r| r.into())
             .collect())
     }
 

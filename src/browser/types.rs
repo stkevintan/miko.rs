@@ -1,5 +1,5 @@
 pub use crate::models::queries::ChildWithMetadata;
-use crate::models::{child};
+use crate::models::{child, bookmark};
 use serde::Deserialize;
 use sea_orm::FromQueryResult;
 
@@ -79,6 +79,22 @@ impl FromQueryResult for BookmarkWithMetadata {
             b_updated_at: res.try_get(pre, "b_updated_at")?,
             child: ChildWithMetadata::from_query_result(res, pre)?,
         })
+    }
+}
+
+impl From<BookmarkWithMetadata> for (bookmark::Model, ChildWithMetadata) {
+    fn from(r: BookmarkWithMetadata) -> Self {
+        (
+            bookmark::Model {
+                username: r.b_username,
+                song_id: r.b_song_id,
+                position: r.b_position,
+                comment: r.b_comment,
+                created_at: r.b_created_at,
+                updated_at: r.b_updated_at,
+            },
+            r.child,
+        )
     }
 }
 
