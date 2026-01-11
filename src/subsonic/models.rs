@@ -2,7 +2,7 @@ use crate::service::{
     ArtistWithStats, GenreWithStats, PlaylistWithSongs,
     PlaylistWithStats,
 };
-use crate::models::queries::{AlbumWithStats, ChildWithMetadata};
+use crate::models::queries::{AlbumWithStats, ChildWithMetadata, ArtistIdName};
 use crate::models::{artist, user};
 use serde::{Deserialize, Serialize};
 
@@ -332,6 +332,8 @@ pub struct Child {
     pub artist_id: Option<String>,
     #[serde(rename = "@type", skip_serializing_if = "Option::is_none")]
     pub r#type: Option<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub artists: Vec<ArtistID3>,
     #[serde(rename = "@bookmarkPosition", skip_serializing_if = "Option::is_none")]
     pub bookmark_position: Option<i64>,
 }
@@ -344,7 +346,7 @@ impl Child {
             is_dir: true,
             title: a.name,
             album: None,
-            artist: a.artist,
+            artist: a.artists.first().map(|a| a.name.clone()),
             track: None,
             year: Some(a.year),
             genre: a.genre,
@@ -366,8 +368,9 @@ impl Child {
             created: Some(a.created),
             starred: a.starred,
             album_id: None,
-            artist_id: a.artist_id,
+            artist_id: a.artists.first().map(|a| a.id.clone()),
             r#type: None,
+            artists: a.artists.into_iter().map(ArtistID3::from).collect(),
             bookmark_position: None,
         }
     }
@@ -386,7 +389,7 @@ impl From<ChildWithMetadata> for Child {
             is_dir: c.is_dir,
             title: c.title,
             album: c.album,
-            artist: c.artist,
+            artist: c.artists.first().map(|a| a.name.clone()),
             track: Some(c.track),
             year: Some(c.year),
             genre: c.genre,
@@ -408,8 +411,9 @@ impl From<ChildWithMetadata> for Child {
             created: c.created,
             starred: c.starred,
             album_id: c.album_id,
-            artist_id: c.artist_id,
+            artist_id: c.artists.first().map(|a| a.id.clone()),
             r#type: Some(c.r#type),
+            artists: c.artists.into_iter().map(ArtistID3::from).collect(),
             bookmark_position: None,
         }
     }
@@ -456,7 +460,7 @@ pub struct IndexID3 {
     pub artist: Vec<ArtistID3>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct ArtistID3 {
     #[serde(rename = "@id")]
@@ -488,6 +492,21 @@ impl From<ArtistWithStats> for ArtistID3 {
             starred: a.starred,
             user_rating: Some(a.user_rating),
             average_rating: Some(a.average_rating),
+        }
+    }
+}
+
+impl From<ArtistIdName> for ArtistID3 {
+    fn from(a: ArtistIdName) -> Self {
+        Self {
+            id: a.id.clone(),
+            name: a.name,
+            cover_art: Some(format!("ar-{}", a.id)),
+            artist_image_url: None,
+            album_count: 0,
+            starred: None,
+            user_rating: None,
+            average_rating: None,
         }
     }
 }
@@ -530,6 +549,8 @@ pub struct AlbumID3 {
     pub year: Option<i32>,
     #[serde(rename = "@genre", skip_serializing_if = "Option::is_none")]
     pub genre: Option<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub artists: Vec<ArtistID3>,
 }
 
 impl From<AlbumWithStats> for AlbumID3 {
@@ -537,8 +558,8 @@ impl From<AlbumWithStats> for AlbumID3 {
         Self {
             id: a.id.clone(),
             name: a.name,
-            artist: a.artist,
-            artist_id: a.artist_id,
+            artist: a.artists.first().map(|a| a.name.clone()),
+            artist_id: a.artists.first().map(|a| a.id.clone()),
             cover_art: Some(format!("al-{}", a.id)),
             song_count: a.song_count as i32,
             duration: a.duration as i32,
@@ -549,6 +570,7 @@ impl From<AlbumWithStats> for AlbumID3 {
             average_rating: Some(a.average_rating),
             year: Some(a.year),
             genre: a.genre,
+            artists: a.artists.into_iter().map(ArtistID3::from).collect(),
         }
     }
 }

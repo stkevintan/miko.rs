@@ -1,9 +1,9 @@
 use crate::service::types::{AlbumListOptions, ArtistWithStats};
 use crate::models::queries::{self, AlbumWithStats, ChildWithMetadata};
 use crate::service::Service;
-use crate::models::{album, album_artist, artist, child, genre, song_artist, album_genre};
+use crate::models::{album, album_artist, artist, child, song_artist, album_genre, song_genre};
 use sea_orm::{
-    ColumnTrait, DbErr, EntityTrait, JoinType, Order, QueryFilter, QueryOrder, QuerySelect,
+    ColumnTrait, DbErr, JoinType, Order, QueryFilter, QueryOrder, QuerySelect,
 };
 use sea_orm::sea_query::{Expr, ExprTrait, Query};
 
@@ -33,15 +33,7 @@ impl Service {
             }
             "byGenre" => {
                 if let Some(ref genre) = opts.genre {
-                    query = query.filter(
-                        album::Column::Id.in_subquery(
-                            Query::select()
-                                .column(album_genre::Column::AlbumId)
-                                .from(album_genre::Entity)
-                                .and_where(album_genre::Column::GenreName.eq(genre))
-                                .to_owned()
-                        )
-                    );
+                    query = query.filter(album_genre::Column::GenreName.eq(genre));
                 }
             }
             "starred" => {
@@ -74,16 +66,7 @@ impl Service {
     }
 
     pub async fn get_artists(&self, ignored_articles: &str) -> Result<Vec<(String, Vec<ArtistWithStats>)>, DbErr> {
-        let artists = artist::Entity::find()
-            .column_as(album_artist::Column::AlbumId.count(), "album_count")
-            .join_rev(
-                JoinType::LeftJoin,
-                album_artist::Entity::belongs_to(artist::Entity)
-                    .from(album_artist::Column::ArtistId)
-                    .to(artist::Column::Id)
-                    .into(),
-            )
-            .group_by(artist::Column::Id)
+        let artists = queries::artist_with_stats_query()
             .into_model::<ArtistWithStats>()
             .all(&self.db)
             .await?;
@@ -96,17 +79,8 @@ impl Service {
     }
 
     pub async fn get_artist(&self, id: &str) -> Result<(ArtistWithStats, Vec<AlbumWithStats>), DbErr> {
-        let artist = artist::Entity::find()
+        let artist = queries::artist_with_stats_query()
             .filter(artist::Column::Id.eq(id))
-            .column_as(album_artist::Column::AlbumId.count(), "album_count")
-            .join_rev(
-                JoinType::LeftJoin,
-                album_artist::Entity::belongs_to(artist::Entity)
-                    .from(album_artist::Column::ArtistId)
-                    .to(artist::Column::Id)
-                    .into(),
-            )
-            .group_by(artist::Column::Id)
             .into_model::<ArtistWithStats>()
             .one(&self.db)
             .await?
@@ -119,13 +93,6 @@ impl Service {
 
     pub async fn get_albums_by_artist(&self, artist_id: &str) -> Result<Vec<AlbumWithStats>, DbErr> {
         queries::album_with_stats_query()
-            .join_rev(
-                JoinType::InnerJoin,
-                album_artist::Entity::belongs_to(album::Entity)
-                    .from(album_artist::Column::AlbumId)
-                    .to(album::Column::Id)
-                    .into(),
-            )
             .filter(album_artist::Column::ArtistId.eq(artist_id))
             .order_by_desc(album::Column::Year)
             .order_by_asc(album::Column::Name)
@@ -182,7 +149,7 @@ impl Service {
         }
 
         if let Some(ref g_name) = opts.genre {
-            query = query.filter(genre::Column::Name.eq(g_name));
+            query = query.filter(song_genre::Column::GenreName.eq(g_name));
         }
 
         if let Some(from) = opts.from_year {
@@ -210,7 +177,7 @@ impl Service {
     ) -> Result<Vec<ChildWithMetadata>, sea_orm::DbErr> {
         let mut db_query = queries::song_with_metadata_query()
             .filter(child::Column::IsDir.eq(false))
-            .filter(genre::Column::Name.eq(genre_name));
+            .filter(song_genre::Column::GenreName.eq(genre_name));
 
         if let Some(f_id) = folder_id {
             db_query = db_query.filter(child::Column::MusicFolderId.eq(f_id));
@@ -244,17 +211,8 @@ impl Service {
         folder_id: Option<i32>,
     ) -> Result<(Vec<ArtistWithStats>, Vec<AlbumWithStats>, Vec<ChildWithMetadata>), sea_orm::DbErr> {
         // Artists
-        let mut artist_query = artist::Entity::find()
-            .column_as(album_artist::Column::AlbumId.count(), "album_count")
-            .join_rev(
-                JoinType::LeftJoin,
-                album_artist::Entity::belongs_to(artist::Entity)
-                    .from(album_artist::Column::ArtistId)
-                    .to(artist::Column::Id)
-                    .into(),
-            )
+        let mut artist_query = queries::artist_with_stats_query()
             .filter(artist::Column::Starred.is_not_null())
-            .group_by(artist::Column::Id)
             .order_by_desc(artist::Column::Starred);
 
         if let Some(f_id) = folder_id {
