@@ -1,6 +1,6 @@
 use poem::{handler, web::{Data, Query}, IntoResponse};
 use crate::subsonic::models::{SubsonicResponse, SubsonicResponseBody, ScanStatus};
-use crate::subsonic::common::{SubsonicParams, send_response};
+use crate::subsonic::common::{SubsonicParams, send_response, deserialize_optional_bool};
 use crate::scanner::Scanner;
 use serde::Deserialize;
 use std::sync::Arc;
@@ -8,7 +8,7 @@ use std::sync::Arc;
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StartScanQuery {
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_optional_bool")]
     pub full_scan: Option<bool>,
 }
 

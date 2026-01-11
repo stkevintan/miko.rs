@@ -1,6 +1,6 @@
 use crate::service::{Service, UpdatePlaylistOptions};
 use crate::models::user;
-use crate::subsonic::common::{send_response, SubsonicParams, deserialize_vec};
+use crate::subsonic::common::{send_response, SubsonicParams, deserialize_vec, deserialize_optional_bool};
 use crate::subsonic::models::{Playlist, Playlists, SubsonicResponse, SubsonicResponseBody};
 use poem::web::{Data, Query};
 use poem::{handler, IntoResponse};
@@ -105,6 +105,7 @@ pub struct UpdatePlaylistParams {
     pub playlist_id: i32,
     pub name: Option<String>,
     pub comment: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_optional_bool")]
     pub public: Option<bool>,
     #[serde(default, deserialize_with = "deserialize_vec")]
     pub song_id_to_add: Vec<String>,

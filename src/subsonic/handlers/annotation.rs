@@ -1,5 +1,5 @@
 use crate::subsonic::{
-    common::{send_response, SubsonicParams, deserialize_vec},
+    common::{send_response, SubsonicParams, deserialize_vec, deserialize_optional_bool},
     models::{SubsonicResponse, SubsonicResponseBody},
 };
 use poem::{
@@ -33,6 +33,7 @@ pub struct SetRatingQuery {
 #[serde(rename_all = "camelCase")]
 pub struct ScrobbleQuery {
     pub id: String,
+    #[serde(default, deserialize_with = "deserialize_optional_bool")]
     pub submission: Option<bool>,
 }
 
