@@ -580,6 +580,10 @@ pub struct AlbumID3 {
     pub year: Option<i32>,
     #[serde(rename = "@genre", skip_serializing_if = "Option::is_none")]
     pub genre: Option<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub artists: Vec<ArtistIdName>,
+    #[serde(rename = "genre", skip_serializing_if = "Vec::is_empty")]
+    pub genres: Vec<GenreName>,
 }
 
 impl From<AlbumWithStats> for AlbumID3 {
@@ -598,7 +602,9 @@ impl From<AlbumWithStats> for AlbumID3 {
             user_rating: Some(a.user_rating),
             average_rating: Some(a.average_rating),
             year: Some(a.year),
-            genre: a.genre,
+            genre: a.genre.clone(),
+            artists: a.artists,
+            genres: split_genres(a.genre.as_ref()),
         }
     }
 }
