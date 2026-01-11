@@ -93,7 +93,20 @@ impl Service {
 
     pub async fn get_albums_by_artist(&self, artist_id: &str) -> Result<Vec<AlbumWithStats>, DbErr> {
         queries::album_with_stats_query()
-            .filter(album_artist::Column::ArtistId.eq(artist_id))
+            .filter(
+                album_artist::Column::ArtistId.eq(artist_id).or(album::Column::Id.in_subquery(
+                    Query::select()
+                        .column(child::Column::AlbumId)
+                        .from(child::Entity)
+                        .join(
+                            JoinType::InnerJoin,
+                            song_artist::Entity,
+                            Expr::col(song_artist::Column::SongId).eq(Expr::col(child::Column::Id)),
+                        )
+                        .and_where(song_artist::Column::ArtistId.eq(artist_id))
+                        .to_owned(),
+                )),
+            )
             .order_by_desc(album::Column::Year)
             .order_by_asc(album::Column::Name)
             .into_model::<AlbumWithStats>()
@@ -149,7 +162,15 @@ impl Service {
         }
 
         if let Some(ref g_name) = opts.genre {
-            query = query.filter(song_genre::Column::GenreName.eq(g_name));
+            query = query.filter(
+                child::Column::Id.in_subquery(
+                    Query::select()
+                        .column(song_genre::Column::SongId)
+                        .from(song_genre::Entity)
+                        .and_where(song_genre::Column::GenreName.eq(g_name.as_str()))
+                        .to_owned(),
+                ),
+            );
         }
 
         if let Some(from) = opts.from_year {
@@ -177,7 +198,15 @@ impl Service {
     ) -> Result<Vec<ChildWithMetadata>, sea_orm::DbErr> {
         let mut db_query = queries::song_with_metadata_query()
             .filter(child::Column::IsDir.eq(false))
-            .filter(song_genre::Column::GenreName.eq(genre_name));
+            .filter(
+                child::Column::Id.in_subquery(
+                    Query::select()
+                        .column(song_genre::Column::SongId)
+                        .from(song_genre::Entity)
+                        .and_where(song_genre::Column::GenreName.eq(genre_name))
+                        .to_owned(),
+                ),
+            );
 
         if let Some(f_id) = folder_id {
             db_query = db_query.filter(child::Column::MusicFolderId.eq(f_id));

@@ -208,15 +208,7 @@ pub fn song_with_metadata_query() -> sea_orm::Select<child::Entity> {
 
 pub fn artist_with_stats_query() -> sea_orm::Select<artist::Entity> {
     artist::Entity::find()
-        .column_as(album_artist::Column::AlbumId.count(), "album_count")
-        .join_rev(
-            JoinType::LeftJoin,
-            album_artist::Entity::belongs_to(artist::Entity)
-                .from(album_artist::Column::ArtistId)
-                .to(artist::Column::Id)
-                .into(),
-        )
-        .group_by(artist::Column::Id)
+        .column_as(Expr::cust("(SELECT COUNT(DISTINCT album_id) FROM (SELECT album_id FROM children JOIN song_artists ON song_artists.song_id = children.id WHERE song_artists.artist_id = artists.id UNION SELECT album_id FROM album_artists WHERE album_artists.artist_id = artists.id))"), "album_count")
 }
 
 pub fn album_with_stats_query() -> sea_orm::Select<album::Entity> {
