@@ -33,8 +33,8 @@ impl Service {
             .filter(child::Column::IsDir.eq(false))
             .filter(
                 child::Column::Title.like(&search_query)
-                    .or(album::Column::Name.like(&search_query))
-                    .or(artist::Column::Name.like(&search_query))
+                    .or(Expr::cust_with_values("EXISTS (SELECT 1 FROM albums WHERE albums.id = children.album_id AND albums.name LIKE ?)", [search_query.clone()]))
+                    .or(Expr::cust_with_values("EXISTS (SELECT 1 FROM song_artists sa JOIN artists a ON sa.artist_id = a.id WHERE sa.song_id = children.id AND a.name LIKE ?)", [search_query.clone()]))
             );
 
         if let Some(folder_id) = opts.music_folder_id {
@@ -90,8 +90,8 @@ impl Service {
             .filter(child::Column::IsDir.eq(false))
             .filter(
                 child::Column::Title.like(&search_query)
-                    .or(album::Column::Name.like(&search_query))
-                    .or(artist::Column::Name.like(&search_query))
+                    .or(Expr::cust_with_values("EXISTS (SELECT 1 FROM albums WHERE albums.id = children.album_id AND albums.name LIKE ?)", [search_query.clone()]))
+                    .or(Expr::cust_with_values("EXISTS (SELECT 1 FROM song_artists sa JOIN artists a ON sa.artist_id = a.id WHERE sa.song_id = children.id AND a.name LIKE ?)", [search_query.clone()]))
             );
 
         let total = q.clone().count(&self.db).await?;
