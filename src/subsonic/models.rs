@@ -372,8 +372,9 @@ impl Child {
         let display_artist = join_artist_names(&a.artists);
         let genres = genre::split_genres(a.genre.as_ref());
         let name = a.name;
+        let id = a.id;
         Self {
-            id: a.id.clone(),
+            id: id.clone(),
             parent: a.artists.first().map(|a| a.id.clone()),
             is_dir: true,
             title: name.clone(),
@@ -400,9 +401,9 @@ impl Child {
             disc_number: None,
             created: Some(a.created),
             starred: a.starred,
-            album_id: None,
+            album_id: Some(id),
             artist_id: a.artists.first().map(|a| a.id.clone()),
-            r#type: None,
+            r#type: Some("album".to_string()),
             artists: a.artists.clone(),
             genres,
             display_artist: display_artist.clone(),
