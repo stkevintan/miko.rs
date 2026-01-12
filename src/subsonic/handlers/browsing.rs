@@ -39,9 +39,9 @@ pub struct IdQuery {
 }
 
 #[derive(Deserialize)]
-#[allow(dead_code)]
 pub struct ArtistQuery {
     pub artist: String,
+    pub count: Option<u64>,
 }
 
 #[handler]
@@ -341,9 +341,23 @@ pub async fn get_similar_songs2(
 
 #[handler]
 pub async fn get_top_songs(
+    service: Data<&Arc<Service>>,
     params: Query<SubsonicParams>,
-    _query: Query<ArtistQuery>,
+    query: Query<ArtistQuery>,
 ) -> impl IntoResponse {
-    let resp = SubsonicResponse::new_ok(SubsonicResponseBody::TopSongs(TopSongs::default()));
+    let count = query.count.unwrap_or(50);
+    let songs = match service.get_top_songs(&query.artist, count).await {
+        Ok(songs) => songs,
+        Err(_) => {
+            return send_response(
+                SubsonicResponse::new_error(0, "Failed to fetch top songs".into()),
+                &params.f,
+            )
+        }
+    };
+
+    let resp = SubsonicResponse::new_ok(SubsonicResponseBody::TopSongs(TopSongs {
+        song: songs.into_iter().map(Child::from).collect(),
+    }));
     send_response(resp, &params.f)
 }

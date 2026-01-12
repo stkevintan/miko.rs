@@ -1,8 +1,9 @@
-use crate::models::{album_genre, artist, child, genre, queries, song_genre};
+use crate::models::{album_genre, artist, child, genre, queries, song_artist, song_genre};
 use crate::service::Service;
 use sea_orm::sea_query::Expr;
 use sea_orm::{
     ColumnTrait, DbErr, EntityTrait, JoinType, PaginatorTrait, QueryFilter, QueryOrder, QuerySelect,
+    QueryTrait, RelationTrait,
 };
 
 pub struct DirectoryWithChildren {
@@ -113,6 +114,29 @@ impl Service {
             .group_by(genre::Column::Name)
             .order_by_asc(genre::Column::Name)
             .into_model::<genre::GenreWithStats>()
+            .all(&self.db)
+            .await
+    }
+
+    pub async fn get_top_songs(
+        &self,
+        artist_name: &str,
+        count: u64,
+    ) -> Result<Vec<child::ChildWithMetadata>, DbErr> {
+        queries::song_with_metadata_query()
+            .filter(
+                child::Column::Id.in_subquery(
+                    song_artist::Entity::find()
+                        .select_only()
+                        .column(song_artist::Column::SongId)
+                        .join(JoinType::InnerJoin, song_artist::Relation::Artist.def())
+                        .filter(artist::Column::Name.eq(artist_name))
+                        .into_query(),
+                ),
+            )
+            .order_by_desc(child::Column::PlayCount)
+            .limit(count)
+            .into_model::<child::ChildWithMetadata>()
             .all(&self.db)
             .await
     }
