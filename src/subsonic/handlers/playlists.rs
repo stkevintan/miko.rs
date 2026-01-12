@@ -1,6 +1,9 @@
-use crate::service::{Service, UpdatePlaylistOptions};
 use crate::models::user;
-use crate::subsonic::common::{send_response, SubsonicParams, deserialize_vec, deserialize_optional_bool};
+use crate::service::Service;
+use crate::service::playlists::UpdatePlaylistOptions;
+use crate::subsonic::common::{
+    deserialize_optional_bool, deserialize_vec, send_response, SubsonicParams,
+};
 use crate::subsonic::models::{Playlist, Playlists, SubsonicResponse, SubsonicResponseBody};
 use poem::web::{Data, Query};
 use poem::{handler, IntoResponse};

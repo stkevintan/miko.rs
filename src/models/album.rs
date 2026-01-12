@@ -2,7 +2,7 @@ use sea_orm::entity::prelude::*;
 use sea_orm::FromQueryResult;
 use serde::{Deserialize, Serialize};
 
-use super::child::{ArtistIdName, parse_artists_field};
+use super::artist::{ArtistIdName, parse_artists_field};
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Serialize, Deserialize)]
 #[sea_orm(table_name = "albums")]

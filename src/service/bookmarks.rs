@@ -1,5 +1,6 @@
-use crate::service::types::{BookmarkWithMetadata};
-use crate::models::queries::{self, ChildWithMetadata};
+use crate::models::bookmark::{BookmarkWithMetadata};
+use crate::models::child::{ChildWithMetadata};
+use crate::models::queries::{self};
 use crate::service::Service;
 use crate::models::{bookmark, child, play_queue, play_queue_song};
 use chrono::Utc;

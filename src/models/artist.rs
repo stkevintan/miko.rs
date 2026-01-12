@@ -32,6 +32,17 @@ impl Related<super::child::Entity> for Entity {
 
 impl ActiveModelBehavior for ActiveModel {}
 
+#[derive(Debug, sea_orm::FromQueryResult, Clone)]
+pub struct ArtistWithStats {
+    pub id: String,
+    pub name: String,
+    pub artist_image_url: Option<String>,
+    pub starred: Option<DateTimeUtc>,
+    pub user_rating: i32,
+    pub average_rating: f64,
+    pub album_count: i64,
+}
+
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ArtistIdName {
     #[serde(rename = "@id")]

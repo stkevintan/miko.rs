@@ -1,6 +1,10 @@
-use crate::models::queries::{AlbumWithStats, ArtistIdName, ChildWithMetadata, GenreName};
+use crate::models::album::AlbumWithStats;
+use crate::models::artist::{ArtistIdName, ArtistWithStats};
+use crate::models::child::ChildWithMetadata;
+use crate::models::genre::{self, GenreName, GenreWithStats};
+use crate::models::playlist::PlaylistWithStats;
+use crate::models::playlist_song::PlaylistWithSongs;
 use crate::models::{artist, user};
-use crate::service::{ArtistWithStats, GenreWithStats, PlaylistWithSongs, PlaylistWithStats};
 use serde::{Deserialize, Serialize};
 
 fn join_artist_names(artists: &[ArtistIdName]) -> Option<String> {
@@ -15,18 +19,6 @@ fn join_artist_names(artists: &[ArtistIdName]) -> Option<String> {
                 .join(","),
         )
     }
-}
-
-fn split_genres(genre: Option<&String>) -> Vec<GenreName> {
-    genre
-        .map(|s| {
-            s.split(',')
-                .map(|g| GenreName {
-                    name: g.to_string(),
-                })
-                .collect()
-        })
-        .unwrap_or_default()
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
@@ -378,14 +370,15 @@ pub struct Child {
 impl Child {
     pub fn from_album_stats(a: AlbumWithStats) -> Self {
         let display_artist = join_artist_names(&a.artists);
-        let genres = split_genres(a.genre.as_ref());
+        let genres = genre::split_genres(a.genre.as_ref());
+        let name = a.name;
         Self {
             id: a.id.clone(),
             parent: a.artists.first().map(|a| a.id.clone()),
             is_dir: true,
-            title: a.name.clone(),
-            name: a.name.clone(),
-            album: Some(a.name),
+            title: name.clone(),
+            name: name.clone(),
+            album: Some(name),
             artist: a.artists.first().map(|a| a.name.clone()),
             track: None,
             year: Some(a.year),
@@ -429,12 +422,13 @@ impl From<ChildWithMetadata> for Child {
         };
         let display_artist = join_artist_names(&c.artists);
         let display_album_artist = join_artist_names(&c.album_artists);
+        let title = c.title;
         Self {
             id: c.id,
             parent: c.parent,
             is_dir: c.is_dir,
-            title: c.title.clone(),
-            name: c.title,
+            title: title.clone(),
+            name: title,
             album: c.album,
             artist: c.artists.first().map(|a| a.name.clone()),
             track: Some(c.track),
@@ -609,7 +603,7 @@ impl From<AlbumWithStats> for AlbumID3 {
             year: Some(a.year),
             genre: a.genre.clone(),
             artists: a.artists,
-            genres: split_genres(a.genre.as_ref()),
+            genres: genre::split_genres(a.genre.as_ref()),
         }
     }
 }

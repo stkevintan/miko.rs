@@ -38,25 +38,36 @@ impl Related<super::album::Entity> for Entity {
 
 impl ActiveModelBehavior for ActiveModel {}
 
+#[derive(Debug, sea_orm::FromQueryResult)]
+pub struct GenreWithStats {
+    pub value: String,
+    pub song_count: i32,
+    pub album_count: i32,
+}
+
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct GenreName {
     #[serde(rename = "@name")]
     pub name: String,
 }
 
-pub fn parse_genres_field(
-    res: &sea_orm::QueryResult,
-    pre: &str,
-    col: &str,
-) -> Result<Vec<GenreName>, sea_orm::DbErr> {
-    let genre_raw: Option<String> = res.try_get(pre, col)?;
-    Ok(genre_raw
+pub fn split_genres(genre: Option<&String>) -> Vec<GenreName> {
+    genre
         .map(|s| {
             s.split(',')
-                .map(|s| GenreName {
-                    name: s.to_string(),
+                .map(|g| GenreName {
+                    name: g.to_string(),
                 })
                 .collect()
         })
-        .unwrap_or_default())
+        .unwrap_or_default()
+}
+
+pub fn parse_genres_field(
+    res: &sea_orm::QueryResult,
+    pre: &str,
+) -> Result<(Option<String>, Vec<GenreName>), sea_orm::DbErr> {
+    let genre_raw: Option<String> = res.try_get(pre, "genre")?;
+    let genres = split_genres(genre_raw.as_ref());
+    Ok((genre_raw, genres))
 }

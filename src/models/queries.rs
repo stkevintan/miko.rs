@@ -1,6 +1,4 @@
 use crate::models::{artist, child, album, song_artist, album_artist, album_genre, lyrics};
-pub use crate::models::child::{ChildWithMetadata, ArtistIdName, GenreName};
-pub use crate::models::album::AlbumWithStats;
 use sea_orm::{FromQueryResult, JoinType, QuerySelect, RelationTrait, ColumnTrait, EntityTrait, QueryFilter};
 use sea_orm::sea_query::Expr;
 

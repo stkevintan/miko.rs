@@ -2,8 +2,8 @@ use sea_orm::entity::prelude::*;
 use sea_orm::FromQueryResult;
 use serde::{Deserialize, Serialize};
 
-pub use super::artist::{ArtistIdName, parse_artists_field};
-pub use super::genre::{GenreName, parse_genres_field};
+use super::artist::{parse_artists_field, ArtistIdName};
+use super::genre::{parse_genres_field, GenreName};
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Serialize, Deserialize)]
 #[sea_orm(table_name = "children")]
@@ -141,7 +141,7 @@ impl FromQueryResult for ChildWithMetadata {
     fn from_query_result(res: &sea_orm::QueryResult, pre: &str) -> Result<Self, sea_orm::DbErr> {
         let artists = parse_artists_field(res, pre, "artists")?;
         let album_artists = parse_artists_field(res, pre, "album_artists")?;
-        let genres = parse_genres_field(res, pre, "genre")?;
+        let (genre, genres) = parse_genres_field(res, pre)?;
 
         Ok(Self {
             id: res.try_get(pre, "id")?,
@@ -151,7 +151,7 @@ impl FromQueryResult for ChildWithMetadata {
             album: res.try_get(pre, "album")?,
             track: res.try_get(pre, "track")?,
             year: res.try_get(pre, "year")?,
-            genre: res.try_get(pre, "genre")?,
+            genre,
             genres,
             size: res.try_get(pre, "size")?,
             content_type: res.try_get(pre, "content_type")?,
@@ -182,12 +182,14 @@ impl Entity {
         match Entity::find()
             .filter(Column::IsDir.eq(false))
             .count(db)
-            .await {
-                Ok(c) => c as i64,
-                Err(e) => {
-                    log::error!("Failed to count songs: {}", e);
-                    0
-                }
+            .await
+        {
+            Ok(c) => c as i64,
+            Err(e) => {
+                log::error!("Failed to count songs: {}", e);
+                0
             }
+        }
     }
 }
+
