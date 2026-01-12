@@ -6,6 +6,17 @@ use mime_guess::from_path;
 #[folder = "dist/"]
 pub struct Asset;
 
+fn serve_index() -> Response {
+    match Asset::get("index.html") {
+        Some(index) => Response::builder()
+            .header("Content-Type", "text/html")
+            .body(Body::from(index.data.into_owned())),
+        None => Response::builder()
+            .status(StatusCode::NOT_FOUND)
+            .body(Body::empty()),
+    }
+}
+
 #[handler]
 pub async fn static_handler(Path(path): Path<String>) -> impl IntoResponse {
     match Asset::get(&path) {
@@ -15,30 +26,13 @@ pub async fn static_handler(Path(path): Path<String>) -> impl IntoResponse {
                 .header("Content-Type", mime.as_ref())
                 .body(Body::from(content.data.into_owned()))
         }
-        None => {
-            // Fallback to index.html for SPA routing
-            match Asset::get("index.html") {
-                Some(index) => Response::builder()
-                    .header("Content-Type", "text/html")
-                    .body(Body::from(index.data.into_owned())),
-                None => Response::builder()
-                    .status(StatusCode::NOT_FOUND)
-                    .body(Body::empty()),
-            }
-        }
+        None => serve_index(),
     }
 }
 
 #[handler]
 pub async fn index_handler() -> impl IntoResponse {
-    match Asset::get("index.html") {
-        Some(index) => Response::builder()
-            .header("Content-Type", "text/html")
-            .body(Body::from(index.data.into_owned())),
-        None => Response::builder()
-            .status(StatusCode::NOT_FOUND)
-            .body(Body::empty()),
-    }
+    serve_index()
 }
 
 pub fn create_route() -> Route {
