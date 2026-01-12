@@ -1,10 +1,16 @@
-use crate::service::{Service, DirectoryWithChildren, GenreWithStats};
-use crate::models::queries::{self, ChildWithMetadata};
-use crate::models::{artist, child, genre, song_genre, album_genre, song_artist};
-use sea_orm::{
-    ColumnTrait, DbErr, EntityTrait, JoinType, PaginatorTrait, QueryFilter, QueryOrder, QuerySelect, RelationTrait, QueryTrait
-};
+use crate::models::{album_genre, artist, child, genre, queries, song_artist, song_genre};
+use crate::service::Service;
 use sea_orm::sea_query::Expr;
+use sea_orm::{
+    ColumnTrait, DbErr, EntityTrait, JoinType, PaginatorTrait, QueryFilter, QueryOrder, QuerySelect,
+    QueryTrait, RelationTrait,
+};
+
+pub struct DirectoryWithChildren {
+    pub dir: child::Model,
+    pub children: Vec<child::ChildWithMetadata>,
+    pub total_count: i64,
+}
 
 impl Service {
     pub async fn get_indexes(
@@ -67,7 +73,10 @@ impl Service {
             query = query.offset(offset).limit(limit);
         }
 
-        let children = query.into_model::<ChildWithMetadata>().all(&self.db).await?;
+        let children = query
+            .into_model::<child::ChildWithMetadata>()
+            .all(&self.db)
+            .await?;
 
         Ok(DirectoryWithChildren {
             dir,
@@ -76,12 +85,18 @@ impl Service {
         })
     }
 
-    pub async fn get_genres(&self) -> Result<Vec<GenreWithStats>, DbErr> {
+    pub async fn get_genres(&self) -> Result<Vec<genre::GenreWithStats>, DbErr> {
         genre::Entity::find()
             .select_only()
             .column_as(genre::Column::Name, "value")
-            .column_as(Expr::cust("COUNT(DISTINCT song_genres.song_id)"), "song_count")
-            .column_as(Expr::cust("COUNT(DISTINCT album_genres.album_id)"), "album_count")
+            .column_as(
+                Expr::cust("COUNT(DISTINCT song_genres.song_id)"),
+                "song_count",
+            )
+            .column_as(
+                Expr::cust("COUNT(DISTINCT album_genres.album_id)"),
+                "album_count",
+            )
             .join_rev(
                 JoinType::LeftJoin,
                 song_genre::Entity::belongs_to(genre::Entity)
@@ -98,7 +113,7 @@ impl Service {
             )
             .group_by(genre::Column::Name)
             .order_by_asc(genre::Column::Name)
-            .into_model::<GenreWithStats>()
+            .into_model::<genre::GenreWithStats>()
             .all(&self.db)
             .await
     }
@@ -107,7 +122,7 @@ impl Service {
         &self,
         artist_name: &str,
         count: u64,
-    ) -> Result<Vec<ChildWithMetadata>, DbErr> {
+    ) -> Result<Vec<child::ChildWithMetadata>, DbErr> {
         queries::song_with_metadata_query()
             .filter(
                 child::Column::Id.in_subquery(
@@ -121,7 +136,7 @@ impl Service {
             )
             .order_by_desc(child::Column::PlayCount)
             .limit(count)
-            .into_model::<ChildWithMetadata>()
+            .into_model::<child::ChildWithMetadata>()
             .all(&self.db)
             .await
     }

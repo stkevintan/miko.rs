@@ -1,4 +1,5 @@
-use crate::service::{AlbumListOptions, Service};
+use crate::service::Service;
+use crate::service::library::AlbumListOptions;
 use crate::subsonic::{
     common::{send_response, SubsonicParams},
     models::{
@@ -257,7 +258,7 @@ pub async fn get_now_playing(
         }
     };
 
-    let song_map: std::collections::HashMap<String, crate::service::types::ChildWithMetadata> =
+    let song_map: std::collections::HashMap<String, crate::models::child::ChildWithMetadata> =
         songs.into_iter().map(|s| (s.id.clone(), s)).collect();
 
     let now = Utc::now();

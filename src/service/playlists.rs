@@ -1,5 +1,7 @@
-use crate::service::types::{PlaylistWithSongs, PlaylistWithStats, UpdatePlaylistOptions};
-use crate::models::queries::{self, ChildWithMetadata};
+use crate::models::playlist::{PlaylistWithStats};
+use crate::models::playlist_song::{PlaylistWithSongs};
+use crate::models::child::{ChildWithMetadata};
+use crate::models::queries::{self};
 use crate::service::Service;
 use crate::models::{child, playlist, playlist_song};
 use sea_orm::{
@@ -8,8 +10,19 @@ use sea_orm::{
     JoinType, QueryOrder,
 };
 use sea_orm::sea_query::Expr;
+use serde::Deserialize;
 use std::collections::HashSet;
 use chrono::Utc;
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdatePlaylistOptions {
+    pub name: Option<String>,
+    pub comment: Option<String>,
+    pub public: Option<bool>,
+    pub song_ids_to_add: Vec<String>,
+    pub song_indices_to_remove: Vec<i32>,
+}
 
 impl Service {
     pub async fn create_playlist(

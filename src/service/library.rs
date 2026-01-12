@@ -1,11 +1,26 @@
-use crate::service::types::{AlbumListOptions, ArtistWithStats};
-use crate::models::queries::{self, AlbumWithStats, ChildWithMetadata};
+use crate::models::artist::{ArtistWithStats};
+use crate::models::album::{AlbumWithStats};
+use crate::models::child::{ChildWithMetadata};
+use crate::models::queries::{self};
 use crate::service::Service;
 use crate::models::{album, album_artist, artist, child, song_artist, album_genre, song_genre};
 use sea_orm::{
     ColumnTrait, DbErr, JoinType, Order, QueryFilter, QueryOrder, QuerySelect,
 };
 use sea_orm::sea_query::{Expr, ExprTrait, Query};
+use serde::Deserialize;
+
+#[derive(Deserialize, Debug, Default, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct AlbumListOptions {
+    pub r#type: Option<String>,
+    pub size: Option<u64>,
+    pub offset: Option<u64>,
+    pub genre: Option<String>,
+    pub from_year: Option<i32>,
+    pub to_year: Option<i32>,
+    pub music_folder_id: Option<i32>,
+}
 
 impl Service {
     pub async fn get_albums(

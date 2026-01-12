@@ -1,5 +1,7 @@
 use sea_orm::entity::prelude::*;
 use serde::{Deserialize, Serialize};
+use super::playlist::PlaylistWithStats;
+use super::child::ChildWithMetadata;
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Serialize, Deserialize)]
 #[sea_orm(table_name = "playlist_songs")]
@@ -40,3 +42,8 @@ impl Related<super::child::Entity> for Entity {
 }
 
 impl ActiveModelBehavior for ActiveModel {}
+
+pub struct PlaylistWithSongs {
+    pub playlist: PlaylistWithStats,
+    pub entry: Vec<ChildWithMetadata>,
+}

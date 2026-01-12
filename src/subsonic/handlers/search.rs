@@ -1,4 +1,5 @@
-use crate::service::{Service, SearchOptions};
+use crate::service::search::SearchOptions;
+use crate::service::{Service};
 use crate::subsonic::{
     common::{send_response, SubsonicParams},
     models::{

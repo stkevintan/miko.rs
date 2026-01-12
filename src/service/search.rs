@@ -1,17 +1,43 @@
-use crate::service::types::{ArtistWithStats, SearchOptions};
-use crate::models::queries::{self, AlbumWithStats, ChildWithMetadata};
-use crate::service::Service;
+use crate::models::album::AlbumWithStats;
+use crate::models::artist::ArtistWithStats;
+use crate::models::child::ChildWithMetadata;
+use crate::models::queries::{self};
 use crate::models::{album, album_artist, artist, child, song_artist};
+use crate::service::Service;
+use sea_orm::sea_query::{Expr, Query};
 use sea_orm::{
     ColumnTrait, DbErr, EntityTrait, JoinType, PaginatorTrait, QueryFilter, QuerySelect,
 };
-use sea_orm::sea_query::{Expr, Query};
+use serde::Deserialize;
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SearchOptions {
+    pub query: String,
+    pub artist_count: u64,
+    pub artist_offset: u64,
+    pub album_count: u64,
+    pub album_offset: u64,
+    pub song_count: u64,
+    pub song_offset: u64,
+    pub music_folder_id: Option<i32>,
+}
 
 impl Service {
-    pub async fn search(&self, opts: SearchOptions) -> Result<(Vec<ArtistWithStats>, Vec<AlbumWithStats>, Vec<ChildWithMetadata>), DbErr> {
+    pub async fn search(
+        &self,
+        opts: SearchOptions,
+    ) -> Result<
+        (
+            Vec<ArtistWithStats>,
+            Vec<AlbumWithStats>,
+            Vec<ChildWithMetadata>,
+        ),
+        DbErr,
+    > {
         let clean_query = opts.query.trim().trim_matches('"');
         let search_query = format!("%{}%", clean_query);
-        
+
         // Artists
         let mut artist_query = artist::Entity::find()
             .column_as(album_artist::Column::AlbumId.count(), "album_count")
@@ -26,8 +52,8 @@ impl Service {
             .group_by(artist::Column::Id);
 
         // Albums
-        let mut album_query = queries::album_with_stats_query()
-            .filter(album::Column::Name.like(&search_query));
+        let mut album_query =
+            queries::album_with_stats_query().filter(album::Column::Name.like(&search_query));
 
         let mut song_query = queries::song_with_metadata_query()
             .filter(child::Column::IsDir.eq(false))
@@ -64,7 +90,7 @@ impl Service {
             .into_model::<ArtistWithStats>()
             .all(&self.db)
             .await?;
-        
+
         let albums = album_query
             .limit(opts.album_count)
             .offset(opts.album_offset)
@@ -82,10 +108,15 @@ impl Service {
         Ok((artists, albums, songs))
     }
 
-    pub async fn search_songs(&self, query: &str, count: u64, offset: u64) -> Result<(Vec<ChildWithMetadata>, u64), DbErr> {
+    pub async fn search_songs(
+        &self,
+        query: &str,
+        count: u64,
+        offset: u64,
+    ) -> Result<(Vec<ChildWithMetadata>, u64), DbErr> {
         let clean_query = query.trim().trim_matches('"');
         let search_query = format!("%{}%", clean_query);
-        
+
         let q = queries::song_with_metadata_query()
             .filter(child::Column::IsDir.eq(false))
             .filter(
@@ -95,7 +126,12 @@ impl Service {
             );
 
         let total = q.clone().count(&self.db).await?;
-        let songs = q.limit(count).offset(offset).into_model::<ChildWithMetadata>().all(&self.db).await?;
+        let songs = q
+            .limit(count)
+            .offset(offset)
+            .into_model::<ChildWithMetadata>()
+            .all(&self.db)
+            .await?;
 
         Ok((songs, total))
     }

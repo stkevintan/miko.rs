@@ -27,3 +27,16 @@ impl Related<super::playlist_song::Entity> for Entity {
 }
 
 impl ActiveModelBehavior for ActiveModel {}
+
+#[derive(Debug, sea_orm::FromQueryResult, Clone)]
+pub struct PlaylistWithStats {
+    pub id: i32,
+    pub name: String,
+    pub comment: Option<String>,
+    pub owner: String,
+    pub public: bool,
+    pub created_at: DateTimeUtc,
+    pub updated_at: DateTimeUtc,
+    pub song_count: i64,
+    pub duration: i64,
+}
