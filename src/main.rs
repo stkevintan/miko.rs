@@ -151,6 +151,7 @@ async fn main() -> Result<(), anyhow::Error> {
     let app = Route::new()
         .nest("/rest", subsonic::create_route())
         .nest("/api", api::create_route())
+        .nest("/", api::web::create_route())
         .data(db)
         .data(config)
         .data(scanner)

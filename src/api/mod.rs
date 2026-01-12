@@ -1,5 +1,6 @@
 pub mod handlers;
 pub mod models;
+pub mod web;
 
 use poem::{Route, post};
 

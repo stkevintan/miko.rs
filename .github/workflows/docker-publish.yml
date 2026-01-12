@@ -15,19 +15,24 @@ jobs:
         include:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-musl
+            os_name: linux
+            arch: amd64
             suffix: ""
             bin_name: miko-rs-linux-amd64
           - os: ubuntu-latest
             target: aarch64-unknown-linux-musl
-            suffix: ""
+            os_name: linux
+            arch: arm64
             bin_name: miko-rs-linux-arm64
           - os: macos-latest
             target: aarch64-apple-darwin
-            suffix: ""
+            os_name: darwin
+            arch: arm64
             bin_name: miko-rs-darwin-arm64
           - os: windows-latest
             target: x86_64-pc-windows-msvc
-            suffix: ".exe"
+            os_name: windows
+            arch: amd64
             bin_name: miko-rs-windows-amd64
 
     runs-on: ${{ matrix.os }}
@@ -40,31 +45,32 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 10
+
+      - name: Install dependencies
+        run: pnpm install
+
       - name: Install Cross
         if: startsWith(matrix.os, 'ubuntu')
         run: cargo install cross --git https://github.com/cross-rs/cross.git
 
       - name: Build binary
-        run: |
-          if [ "${{ startsWith(matrix.os, 'ubuntu') }}" = "true" ]; then
-            cross build --release --target ${{ matrix.target }}
-          else
-            cargo build --release --target ${{ matrix.target }}
-          fi
+        run: ./scripts/build.sh ${{ matrix.os_name }}/${{ matrix.arch }}
         shell: bash
-
-      - name: Rename and Prepare Binary
-        shell: bash
-        run: |
-          VERSION=$(grep '^version =' Cargo.toml | head -n1 | cut -d '"' -f2)
-          mkdir -p output
-          cp target/${{ matrix.target }}/release/miko-rs${{ matrix.suffix }} output/${{ matrix.bin_name }}-${VERSION}${{ matrix.suffix }}
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.bin_name }}
-          path: output/
+          path: bin/
 
   publish-docker:
     needs: build-binaries

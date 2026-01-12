@@ -384,7 +384,7 @@ impl Child {
             track: None,
             year: Some(a.year),
             genre: a.genre.clone(),
-            cover_art: Some(format!("al-{}", a.id)),
+            cover_art: Some(format!("al-{}", &id)),
             size: None,
             content_type: None,
             suffix: None,
