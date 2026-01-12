@@ -1,9 +1,6 @@
-use crate::service::{
-    ArtistWithStats, GenreWithStats, PlaylistWithSongs,
-    PlaylistWithStats,
-};
-use crate::models::queries::{AlbumWithStats, ChildWithMetadata, ArtistIdName, GenreName};
+use crate::models::queries::{AlbumWithStats, ArtistIdName, ChildWithMetadata, GenreName};
 use crate::models::{artist, user};
+use crate::service::{ArtistWithStats, GenreWithStats, PlaylistWithSongs, PlaylistWithStats};
 use serde::{Deserialize, Serialize};
 
 fn join_artist_names(artists: &[ArtistIdName]) -> Option<String> {
@@ -305,6 +302,9 @@ pub struct Child {
     pub is_dir: bool,
     #[serde(rename = "@title")]
     pub title: String,
+    #[serde(rename = "@name")]
+    // FIX: Feshin starred album list forever loading
+    pub name: String,
     #[serde(rename = "@album", skip_serializing_if = "Option::is_none")]
     pub album: Option<String>,
     #[serde(rename = "@artist", skip_serializing_if = "Option::is_none")]
@@ -360,13 +360,16 @@ pub struct Child {
     pub r#type: Option<String>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub artists: Vec<ArtistIdName>,
-    #[serde(rename = "genre", skip_serializing_if = "Vec::is_empty")]
+    #[serde(rename = "genres", skip_serializing_if = "Vec::is_empty")]
     pub genres: Vec<GenreName>,
-    #[serde(rename = "albumArtist", skip_serializing_if = "Vec::is_empty")]
+    #[serde(rename = "albumArtists", skip_serializing_if = "Vec::is_empty")]
     pub album_artists: Vec<ArtistIdName>,
-    #[serde(rename="@displayArtist", skip_serializing_if = "Option::is_none")]
+    #[serde(rename = "@displayArtist", skip_serializing_if = "Option::is_none")]
     pub display_artist: Option<String>,
-    #[serde(rename="@displayAlbumArtist", skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "@displayAlbumArtist",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub display_album_artist: Option<String>,
     #[serde(rename = "@bookmarkPosition", skip_serializing_if = "Option::is_none")]
     pub bookmark_position: Option<i64>,
@@ -378,10 +381,11 @@ impl Child {
         let genres = split_genres(a.genre.as_ref());
         Self {
             id: a.id.clone(),
-            parent: None,
+            parent: a.artists.first().map(|a| a.id.clone()),
             is_dir: true,
-            title: a.name,
-            album: None,
+            title: a.name.clone(),
+            name: a.name.clone(),
+            album: Some(a.name),
             artist: a.artists.first().map(|a| a.name.clone()),
             track: None,
             year: Some(a.year),
@@ -406,11 +410,11 @@ impl Child {
             album_id: None,
             artist_id: a.artists.first().map(|a| a.id.clone()),
             r#type: None,
-            artists: a.artists,
+            artists: a.artists.clone(),
             genres,
-            display_artist: display_artist,
-            album_artists: vec![],
-            display_album_artist: None,
+            display_artist: display_artist.clone(),
+            album_artists: a.artists,
+            display_album_artist: display_artist,
             bookmark_position: None,
         }
     }
@@ -429,7 +433,8 @@ impl From<ChildWithMetadata> for Child {
             id: c.id,
             parent: c.parent,
             is_dir: c.is_dir,
-            title: c.title,
+            title: c.title.clone(),
+            name: c.title,
             album: c.album,
             artist: c.artists.first().map(|a| a.name.clone()),
             track: Some(c.track),
@@ -582,7 +587,7 @@ pub struct AlbumID3 {
     pub genre: Option<String>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub artists: Vec<ArtistIdName>,
-    #[serde(rename = "genre", skip_serializing_if = "Vec::is_empty")]
+    #[serde(rename = "genres", skip_serializing_if = "Vec::is_empty")]
     pub genres: Vec<GenreName>,
 }
 

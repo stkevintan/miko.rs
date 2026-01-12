@@ -31,3 +31,31 @@ impl Related<super::child::Entity> for Entity {
 }
 
 impl ActiveModelBehavior for ActiveModel {}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ArtistIdName {
+    #[serde(rename = "@id")]
+    pub id: String,
+    #[serde(rename = "@name")]
+    pub name: String,
+}
+
+pub fn parse_artists_field(
+    res: &sea_orm::QueryResult,
+    pre: &str,
+    col: &str,
+) -> Result<Vec<ArtistIdName>, sea_orm::DbErr> {
+    let artists_raw: Option<String> = res.try_get(pre, col)?;
+    Ok(artists_raw
+        .map(|s| {
+            s.split(',')
+                .filter_map(|pair| {
+                    let mut parts = pair.splitn(2, "[:]");
+                    let id = parts.next()?.to_string();
+                    let name = parts.next()?.to_string();
+                    Some(ArtistIdName { id, name })
+                })
+                .collect()
+        })
+        .unwrap_or_default())
+}
