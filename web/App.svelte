@@ -5,10 +5,10 @@
     import Toast from './components/ui/Toast.svelte';
 
     const routes = {
-        '/': Login,
+        '/': Dashboard,
         '/login': Login,
         '/dashboard': Dashboard,
-        '*': Login,
+        '*': Dashboard,
     };
 </script>
 

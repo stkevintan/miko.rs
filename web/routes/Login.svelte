@@ -1,5 +1,6 @@
 <script lang="ts">
     import { push } from 'svelte-spa-router';
+    import { onMount } from 'svelte';
     import api from '../lib/api';
     import ThemeSwitcher from '../components/ui/ThemeSwitcher.svelte';
 
@@ -7,6 +8,12 @@
     let password = $state('');
     let error = $state('');
     let loading = $state(false);
+
+    onMount(() => {
+        if (localStorage.getItem('token')) {
+            push('/dashboard');
+        }
+    });
 
     async function handleLogin() {
         loading = true;
