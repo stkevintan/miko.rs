@@ -3,6 +3,10 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "engines": {
+    "node": ">=20",
+    "pnpm": ">=10"
+  },
   "scripts": {
     "dev": "vite",
     "build": "svelte-check && vite build",
@@ -21,6 +25,8 @@
     "vite": "^6.0.7"
   },
   "dependencies": {
-    "svelte": "^5.46.1"
+    "axios": "^1.13.2",
+    "svelte": "^5.46.1",
+    "svelte-spa-router": "^4.0.1"
   }
 }

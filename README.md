@@ -100,12 +100,67 @@ docker run -d \
 
 ## Development
 
-### Local Build
-To build the project locally, ensure you have the Rust toolchain installed:
+### Prerequisites
+- [Rust](https://www.rust-lang.org/) (latest stable)
+- [Node.js](https://nodejs.org/) (>=20)
+- [pnpm](https://pnpm.io/) (>=10)
+- [Sea-ORM CLI](https://www.sea-ql.org/SeaORM/docs/install-and-config/sea-orm-cli/) (optional, for migrations)
 
-```bash
-cargo build --release
-```
+### Setup
+
+1. **Clone the repository**:
+   ```bash
+   git clone https://github.com/stkevintan/miko-rs
+   cd miko-rs
+   ```
+
+2. **Configure Environment**:
+   Create a `.env` file in the root directory:
+   ```dotenv
+   DATABASE_URL=sqlite://miko.db?mode=rwc
+   PORT=3334
+   PASSWORD_SECRET=your-32-character-secret-here
+   JWT_SECRET=your-32-character-secret-here
+   SUBSONIC_MUSIC_FOLDERS=/path/to/your/music
+   SUBSONIC_DATA_DIR=./data
+   ```
+
+3. **Install Frontend Dependencies**:
+   ```bash
+   pnpm install
+   ```
+
+### Running Locally
+
+To develop with hot-reloading for the frontend and automatic proxying to the backend:
+
+1. **Start the Backend**:
+   ```bash
+   cargo run
+   ```
+   The backend will start on `http://localhost:3334`.
+
+2. **Start the Frontend (Dev Mode)**:
+   ```bash
+   pnpm dev
+   ```
+   The frontend will be available at `http://localhost:8081`. It is configured to proxy `/api` and `/rest` requests to your local backend.
+
+### Production Build
+
+To build the project for production (embedding the frontend into the Rust binary):
+
+1. **Build the Frontend**:
+   ```bash
+   pnpm build
+   ```
+   This generates the static files in the `dist/` directory.
+
+2. **Build the Backend**:
+   ```bash
+   cargo build --release
+   ```
+   The static files from `dist/` are embedded into the resulting binary using `rust-embed`.
 
 ### Multi-Platform Build
 A helper script is provided for cross-platform builds:

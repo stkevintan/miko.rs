@@ -9,6 +9,19 @@ export default defineConfig({
     svelte(),
     tailwindcss(),
   ],
+  server: {
+    port: 8081,
+    proxy: {
+      '/api': {
+        target: 'http://localhost:3334',
+        changeOrigin: true,
+      },
+      '/rest': {
+        target: 'http://localhost:3334',
+        changeOrigin: true,
+      },
+    }
+  },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './web'),

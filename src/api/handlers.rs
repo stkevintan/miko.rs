@@ -6,16 +6,17 @@ use crate::api::models::{LoginRequest, LoginResponse, Claims, ErrorResponse};
 use crate::subsonic::auth::verify_password;
 use crate::config::Config;
 use chrono::Utc;
+use std::sync::Arc;
 
 #[handler]
 pub async fn login(
     db: Data<&DatabaseConnection>,
-    config: Data<&Config>,
+    config: Data<&Arc<Config>>,
     req: Json<LoginRequest>,
 ) -> impl IntoResponse {
     let user = match user::Entity::find()
         .filter(user::Column::Username.eq(&req.username))
-        .one(*db)
+        .one(*db) // *db is &DatabaseConnection
         .await
     {
         Ok(Some(u)) => u,
