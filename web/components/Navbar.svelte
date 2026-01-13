@@ -36,7 +36,7 @@
       
       <div class="flex items-center">
         <!-- Scan Button -->
-        <div class="hidden sm:block mx-1">
+        <div class="mx-1">
           <ScanButton />
         </div>
 
