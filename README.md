@@ -1,7 +1,7 @@
 # miko-rs
 
 A lightweight, high-performance Subsonic-compatible music server written in Rust.
-
+![dashboard](images/dashboard.png)
 ## Features
 
 ### Subsonic API Implementation Status

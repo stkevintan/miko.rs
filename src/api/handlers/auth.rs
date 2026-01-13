@@ -32,7 +32,8 @@ pub async fn login(
             .with_status(StatusCode::UNAUTHORIZED)
             .into_response()
         }
-        Err(_) => {
+        Err(e) => {
+            log::error!("Database error during login for user '{}': {}", req.username, e);
             return Json(ErrorResponse {
                 error: "Database error".into(),
             })
@@ -69,7 +70,8 @@ pub async fn login(
         &EncodingKey::from_secret(config.server.jwt_secret.as_bytes()),
     ) {
         Ok(t) => t,
-        Err(_) => {
+        Err(e) => {
+            log::error!("Failed to generate JWT token for user '{}': {}", claims.sub, e);
             return Json(ErrorResponse {
                 error: "Failed to generate token".into(),
             })
@@ -83,27 +85,9 @@ pub async fn login(
 
 #[handler]
 pub async fn get_me(user: Data<&user::Model>) -> Json<CurrentUserResponse> {
-    let roles = [
-        (user.admin_role, "admin"),
-        (user.settings_role, "settings"),
-        (user.download_role, "download"),
-        (user.upload_role, "upload"),
-        (user.playlist_role, "playlist"),
-        (user.cover_art_role, "coverart"),
-        (user.comment_role, "comment"),
-        (user.podcast_role, "podcast"),
-        (user.stream_role, "stream"),
-        (user.jukebox_role, "jukebox"),
-        (user.share_role, "share"),
-        (user.video_conversion_role, "video"),
-    ]
-    .into_iter()
-    .filter_map(|(has_role, role_name)| has_role.then_some(role_name.to_string()))
-    .collect::<Vec<_>>();
-
     Json(CurrentUserResponse {
         username: user.username.clone(),
         email: user.email.clone(),
-        roles,
+        admin: user.admin_role,
     })
 }

@@ -2,16 +2,33 @@
   import type { Snippet } from 'svelte';
   import Navbar from './Navbar.svelte';
   import Sidebar from './Sidebar.svelte';
+  import { onMount, onDestroy } from 'svelte';
 
   let { children } = $props<{
     children?: Snippet
   }>();
 
-  let isSidebarOpen = $state(true);
+  let isSidebarOpen = $state(window.innerWidth >= 1024);
 
   function toggleSidebar() {
     isSidebarOpen = !isSidebarOpen;
   }
+
+  function handleResize() {
+    if (window.innerWidth < 1024 && isSidebarOpen) {
+      isSidebarOpen = false;
+    } else if (window.innerWidth >= 1024 && !isSidebarOpen) {
+      isSidebarOpen = true;
+    }
+  }
+
+  onMount(() => {
+    window.addEventListener('resize', handleResize);
+  });
+
+  onDestroy(() => {
+    window.removeEventListener('resize', handleResize);
+  });
 </script>
 
 <div class="min-h-screen bg-white dark:bg-gray-900 transition-colors duration-200">
