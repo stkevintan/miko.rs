@@ -26,5 +26,5 @@ pub struct ErrorResponse {
 pub struct CurrentUserResponse {
     pub username: String,
     pub email: Option<String>,
-    pub roles: Vec<String>,
+    pub admin: bool,
 }

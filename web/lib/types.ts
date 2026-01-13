@@ -2,7 +2,6 @@ export interface Stats {
     songs: number;
     albums: number;
     artists: number;
-    playlists: number;
     genres: number;
 }
 
@@ -40,11 +39,10 @@ export interface DashboardData {
     system: SystemInfo;
     folders: FolderInfo[];
     now_playing: NowPlayingInfo[];
-    scan_status: ScanStatus;
 }
 
 export interface UserProfile {
     username: string;
     email?: string;
-    roles: string[];
+    admin: boolean;
 }

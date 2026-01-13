@@ -4,6 +4,7 @@
   import { authStore } from '../lib/auth.svelte';
   import Dropdown from './ui/Dropdown.svelte';
   import ThemeSwitcher from './ui/ThemeSwitcher.svelte';
+  import ScanButton from './ScanButton.svelte';
 
   let { onToggleSidebar } = $props<{
     onToggleSidebar: () => void
@@ -29,11 +30,16 @@
           <Menu size={24} />
         </button>
         <a href="/" class="flex ms-2 md:me-24">
-          <span class="self-center text-xl font-semibold sm:text-2xl whitespace-nowrap dark:text-white">Music</span>
+          <span class="self-center text-xl font-semibold sm:text-2xl whitespace-nowrap dark:text-white">Miko</span>
         </a>
       </div>
       
       <div class="flex items-center">
+        <!-- Scan Button -->
+        <div class="hidden sm:block mx-1">
+          <ScanButton />
+        </div>
+
         <!-- Theme Switcher -->
         <ThemeSwitcher class="mx-1" />
 

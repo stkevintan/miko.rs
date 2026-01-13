@@ -1,6 +1,6 @@
 use poem::{handler, web::{Data, Json}};
 use sea_orm::{DatabaseConnection, EntityTrait, PaginatorTrait, ColumnTrait, QueryFilter, LoaderTrait};
-use crate::models::{child, album, artist, now_playing, playlist, song_artist, genre, music_folder};
+use crate::models::{child, album, artist, now_playing, song_artist, genre, music_folder};
 use serde::Serialize;
 use sysinfo::System;
 use std::sync::Mutex;
@@ -18,7 +18,6 @@ pub struct Stats {
     pub songs: u64,
     pub albums: u64,
     pub artists: u64,
-    pub playlists: u64,
     pub genres: u64,
 }
 
@@ -52,15 +51,14 @@ pub struct NowPlayingInfo {
 pub async fn get_stats(
     db: Data<&DatabaseConnection>,
 ) -> Json<Stats> {
-    let (songs, albums, artists, playlists, genres) = tokio::try_join!(
+    let (songs, albums, artists, genres) = tokio::try_join!(
         child::Entity::find().filter(child::Column::IsDir.eq(false)).count(*db),
         album::Entity::find().count(*db),
         artist::Entity::find().count(*db),
-        playlist::Entity::find().count(*db),
         genre::Entity::find().count(*db),
-    ).unwrap_or((0, 0, 0, 0, 0));
+    ).unwrap_or((0, 0, 0, 0));
 
-    Json(Stats { songs, albums, artists, playlists, genres })
+    Json(Stats { songs, albums, artists, genres })
 }
 
 #[handler]
