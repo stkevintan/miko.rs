@@ -38,3 +38,5 @@ ammonia = "4.0"
 migration = { path = "migration" }
 path-clean = "1.0.1"
 rust-embed = "8.5.0"
+sysinfo = "0.32"
+async-trait = "0.1"

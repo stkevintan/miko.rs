@@ -263,6 +263,13 @@ pub async fn scrobble(
         );
     }
 
+    // submission is true - song finished, remove from now playing
+    let _ = now_playing::Entity::delete_many()
+        .filter(now_playing::Column::Username.eq(&username))
+        .filter(now_playing::Column::PlayerName.eq(&player_name))
+        .exec(db.0)
+        .await;
+
     let now = chrono::Utc::now();
     let res = child::Entity::update_many()
         .filter(child::Column::Id.eq(&song_id))
