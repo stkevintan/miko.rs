@@ -2,7 +2,7 @@ use poem::{handler, web::{Data, Json}, IntoResponse, http::StatusCode};
 use sea_orm::{DatabaseConnection, EntityTrait, QueryFilter, ColumnTrait};
 use jsonwebtoken::{encode, Header, EncodingKey};
 use crate::models::user;
-use crate::api::models::{LoginRequest, LoginResponse, Claims, ErrorResponse};
+use crate::api::models::{LoginRequest, LoginResponse, Claims, ErrorResponse, CurrentUserResponse};
 use crate::subsonic::auth::verify_password;
 use crate::config::Config;
 use chrono::Utc;
@@ -56,4 +56,27 @@ pub async fn login(
     };
 
     Json(LoginResponse { token }).into_response()
+}
+
+#[handler]
+pub async fn get_me(user: Data<&user::Model>) -> Json<CurrentUserResponse> {
+    let mut roles = Vec::new();
+    if user.admin_role { roles.push("admin".into()); }
+    if user.settings_role { roles.push("settings".into()); }
+    if user.download_role { roles.push("download".into()); }
+    if user.upload_role { roles.push("upload".into()); }
+    if user.playlist_role { roles.push("playlist".into()); }
+    if user.cover_art_role { roles.push("coverart".into()); }
+    if user.comment_role { roles.push("comment".into()); }
+    if user.podcast_role { roles.push("podcast".into()); }
+    if user.stream_role { roles.push("stream".into()); }
+    if user.jukebox_role { roles.push("jukebox".into()); }
+    if user.share_role { roles.push("share".into()); }
+    if user.video_conversion_role { roles.push("video".into()); }
+
+    Json(CurrentUserResponse {
+        username: user.username.clone(),
+        email: user.email.clone(),
+        roles,
+    })
 }

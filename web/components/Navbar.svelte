@@ -5,6 +5,7 @@
   import api from '../lib/api';
   import { themeManager } from '../lib/theme.svelte';
   import { toast } from '../lib/toast.svelte';
+  import { authStore } from '../lib/auth.svelte';
   import Dropdown from './ui/Dropdown.svelte';
   import ThemeSwitcher from './ui/ThemeSwitcher.svelte';
 
@@ -16,8 +17,7 @@
   let pollInterval: any;
 
   async function logout() {
-    localStorage.removeItem('token');
-    push('/login');
+    authStore.logout();
   }
 
   async function checkScanStatus() {
@@ -64,6 +64,7 @@
 
   onMount(() => {
     checkScanStatus();
+    authStore.fetchProfile();
   });
 
   onDestroy(() => {
@@ -129,19 +130,25 @@
                 class="flex items-center text-sm bg-gray-800 rounded-full focus:ring-4 focus:ring-gray-300 dark:focus:ring-gray-600 cursor-pointer"
               >
                 <span class="sr-only">Open user menu</span>
-                <div class="w-8 h-8 rounded-full bg-orange-500 flex items-center justify-center text-white">
-                  <User size={20} />
+                <div class="w-8 h-8 rounded-full bg-orange-500 flex items-center justify-center text-white font-medium">
+                  {#if authStore.user}
+                    {authStore.user.username[0].toUpperCase()}
+                  {:else}
+                    <User size={20} />
+                  {/if}
                 </div>
               </button>
             {/snippet}
             {#snippet content()}
               <div class="px-4 py-3 border-b dark:border-gray-600">
-                <p class="text-sm text-gray-900 dark:text-white" role="none">
-                  Admin User
+                <p class="text-sm text-gray-900 dark:text-white truncate" role="none">
+                  {authStore.user?.username || 'Loading...'}
                 </p>
-                <p class="text-sm font-medium text-gray-900 truncate dark:text-gray-300" role="none">
-                  admin@example.com
-                </p>
+                {#if authStore.user?.email}
+                  <p class="text-sm font-medium text-gray-500 truncate dark:text-gray-400" role="none">
+                    {authStore.user.email}
+                  </p>
+                {/if}
               </div>
               <ul class="py-1" role="none">
                 <li>

@@ -84,6 +84,12 @@ impl Related<super::play_queue_song::Entity> for Entity {
     }
 }
 
+impl Related<super::album::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::Album.def()
+    }
+}
+
 impl Related<super::artist::Entity> for Entity {
     fn to() -> RelationDef {
         super::song_artist::Relation::Artist.def()

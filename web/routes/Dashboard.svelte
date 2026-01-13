@@ -2,17 +2,28 @@
     import { push } from 'svelte-spa-router';
     import { onMount, onDestroy } from 'svelte';
     import MainLayout from '../components/MainLayout.svelte';
+    import StatCard from '../components/StatCard.svelte';
+    import { authStore } from '../lib/auth.svelte';
     import api from '../lib/api';
+    import type { DashboardData } from '../lib/types';
     import { Music, Library, User, Cpu, Zap, Play, Disc, List } from 'lucide-svelte';
 
     let token = $state(localStorage.getItem('token'));
-    let data = $state<any>(null);
+    let data = $state<DashboardData | null>(null);
     let pollInterval: any;
 
     async function fetchData() {
         try {
-            const resp = await api.get('/dashboard');
-            data = resp.data;
+            const [stats, system, nowPlaying] = await Promise.all([
+                api.get('/stats'),
+                api.get('/system'),
+                api.get('/now-playing')
+            ]);
+            data = {
+                stats: stats.data,
+                system: system.data,
+                now_playing: nowPlaying.data
+            };
         } catch (e) {
             console.error('Failed to fetch dashboard data', e);
         }
@@ -47,49 +58,14 @@
 
     {#if data}
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-            <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 dark:bg-gray-800 dark:border-gray-700 flex items-center">
-                <div class="p-3 bg-orange-100 dark:bg-orange-900/30 rounded-xl text-orange-600 dark:text-orange-400 mr-4">
-                    <Music size={24} />
-                </div>
-                <div>
-                    <p class="text-sm text-gray-500 dark:text-gray-400">Songs</p>
-                    <p class="text-2xl font-bold text-gray-900 dark:text-white">{data.stats.songs}</p>
-                </div>
-            </div>
-
-            <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 dark:bg-gray-800 dark:border-gray-700 flex items-center">
-                <div class="p-3 bg-blue-100 dark:bg-blue-900/30 rounded-xl text-blue-600 dark:text-blue-400 mr-4">
-                    <Disc size={24} />
-                </div>
-                <div>
-                    <p class="text-sm text-gray-500 dark:text-gray-400">Albums</p>
-                    <p class="text-2xl font-bold text-gray-900 dark:text-white">{data.stats.albums}</p>
-                </div>
-            </div>
-
-            <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 dark:bg-gray-800 dark:border-gray-700 flex items-center">
-                <div class="p-3 bg-green-100 dark:bg-green-900/30 rounded-xl text-green-600 dark:text-green-400 mr-4">
-                    <User size={24} />
-                </div>
-                <div>
-                    <p class="text-sm text-gray-500 dark:text-gray-400">Artists</p>
-                    <p class="text-2xl font-bold text-gray-900 dark:text-white">{data.stats.artists}</p>
-                </div>
-            </div>
-
-            <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 dark:bg-gray-800 dark:border-gray-700 flex items-center">
-                <div class="p-3 bg-purple-100 dark:bg-purple-900/30 rounded-xl text-purple-600 dark:text-purple-400 mr-4">
-                    <List size={24} />
-                </div>
-                <div>
-                    <p class="text-sm text-gray-500 dark:text-gray-400">Playlists</p>
-                    <p class="text-2xl font-bold text-gray-900 dark:text-white">{data.stats.playlists}</p>
-                </div>
-            </div>
+            <StatCard label="Songs" value={data.stats.songs} color="orange" icon={Music} />
+            <StatCard label="Albums" value={data.stats.albums} color="blue" icon={Disc} />
+            <StatCard label="Artists" value={data.stats.artists} color="green" icon={User} />
+            <StatCard label="Playlists" value={data.stats.playlists} color="purple" icon={List} />
         </div>
 
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-        {#if data.user}
+        {#if authStore.user}
             <!-- User Profile section -->
             <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 dark:bg-gray-800 dark:border-gray-700">
                 <h2 class="text-xl font-bold text-gray-900 dark:text-white flex items-center mb-6">
@@ -98,14 +74,14 @@
                 </h2>
                 <div class="flex items-start">
                     <div class="w-16 h-16 rounded-2xl bg-gradient-to-br from-green-400 to-blue-500 flex items-center justify-center text-white text-2xl font-bold mr-4 shrink-0 shadow-lg">
-                        {data.user.username[0].toUpperCase()}
+                        {authStore.user.username[0].toUpperCase()}
                     </div>
                     <div class="flex-1 min-w-0">
-                        <p class="text-lg font-bold text-gray-900 dark:text-white truncate">{data.user.username}</p>
-                        <p class="text-sm text-gray-500 dark:text-gray-400 truncate mb-3">{data.user.email || 'No email provided'}</p>
+                        <p class="text-lg font-bold text-gray-900 dark:text-white truncate">{authStore.user.username}</p>
+                        <p class="text-sm text-gray-500 dark:text-gray-400 truncate mb-3">{authStore.user.email || 'No email provided'}</p>
                         
                         <div class="flex flex-wrap gap-2">
-                            {#each data.user.roles as role}
+                            {#each authStore.user.roles as role}
                                 <span class="px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider bg-gray-100 text-gray-600 rounded-full dark:bg-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-600">
                                     {role}
                                 </span>
@@ -167,7 +143,19 @@
                 {#each data.now_playing as session}
                     <div class="flex items-center p-4 rounded-xl bg-gray-50 dark:bg-gray-700/50 border border-gray-100 dark:border-gray-600 hover:border-orange-300 dark:hover:border-orange-500/50 transition-all group">
                         <div class="w-12 h-12 rounded-lg bg-orange-500 flex items-center justify-center text-white mr-4 shrink-0 shadow-md group-hover:scale-105 transition-transform overflow-hidden relative">
-                             <Music size={24} />
+                            {#if session.cover_art}
+                                <img 
+                                    src="/api/coverart/{session.cover_art}?token={token}" 
+                                    alt={session.song_title}
+                                    class="w-full h-full object-cover"
+                                    onerror={(e) => (e.currentTarget as HTMLImageElement).style.display = 'none'}
+                                />
+                                <div class="absolute inset-0 flex items-center justify-center -z-10 bg-orange-500">
+                                    <Music size={24} />
+                                </div>
+                            {:else}
+                                <Music size={24} />
+                            {/if}
                         </div>
                         <div class="min-w-0 flex-1">
                             <p class="text-sm font-bold text-gray-900 dark:text-white truncate">

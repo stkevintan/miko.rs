@@ -35,29 +35,46 @@ impl<E: Endpoint> Endpoint for AuthEndpoint<E> {
             Error::from_status(StatusCode::INTERNAL_SERVER_ERROR)
         })?;
 
-        let auth_header = req
+        let token = if let Some(auth_header) = req
             .headers()
             .get(header::AUTHORIZATION)
             .and_then(|v| v.to_str().ok())
-            .ok_or_else(|| Error::from_status(StatusCode::UNAUTHORIZED))?;
-
-        if !auth_header.starts_with("Bearer ") {
+        {
+            if !auth_header.starts_with("Bearer ") {
+                return Err(Error::from_status(StatusCode::UNAUTHORIZED));
+            }
+            auth_header[7..].to_string()
+        } else if let Some(token) = req.uri().query().and_then(|q| {
+            q.split('&')
+                .find(|s| s.starts_with("token="))
+                .map(|s| s[6..].to_string())
+        }) {
+            token
+        } else {
             return Err(Error::from_status(StatusCode::UNAUTHORIZED));
-        }
+        };
 
-        let token = &auth_header[7..];
         let token_data = decode::<Claims>(
-            token,
+            &token,
             &DecodingKey::from_secret(config.server.jwt_secret.as_bytes()),
             &Validation::default(),
-        ).map_err(|_| Error::from_status(StatusCode::UNAUTHORIZED))?;
+        ).map_err(|e| {
+            log::debug!("JWT decoding failed: {}", e);
+            Error::from_status(StatusCode::UNAUTHORIZED)
+        })?;
 
         let user = user::Entity::find()
-            .filter(user::Column::Username.eq(token_data.claims.sub))
+            .filter(user::Column::Username.eq(token_data.claims.sub.clone()))
             .one(db)
             .await
-            .map_err(|_| Error::from_status(StatusCode::INTERNAL_SERVER_ERROR))?
-            .ok_or_else(|| Error::from_status(StatusCode::UNAUTHORIZED))?;
+            .map_err(|e| {
+                log::error!("Database error during authentication: {}", e);
+                Error::from_status(StatusCode::INTERNAL_SERVER_ERROR)
+            })?
+            .ok_or_else(|| {
+                log::debug!("User not found for token: {}", &token_data.claims.sub);
+                Error::from_status(StatusCode::UNAUTHORIZED)
+            })?;
 
         // Insert user into request data
         req.set_data(user);

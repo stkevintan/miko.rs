@@ -21,3 +21,10 @@ pub struct Claims {
 pub struct ErrorResponse {
     pub error: String,
 }
+
+#[derive(Debug, Serialize)]
+pub struct CurrentUserResponse {
+    pub username: String,
+    pub email: Option<String>,
+    pub roles: Vec<String>,
+}

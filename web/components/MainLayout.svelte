@@ -1,9 +1,10 @@
 <script lang="ts">
+  import type { Snippet } from 'svelte';
   import Navbar from './Navbar.svelte';
   import Sidebar from './Sidebar.svelte';
 
   let { children } = $props<{
-    children?: any
+    children?: Snippet
   }>();
 
   let isSidebarOpen = $state(true);
