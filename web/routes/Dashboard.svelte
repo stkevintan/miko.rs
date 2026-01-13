@@ -4,9 +4,11 @@
     import MainLayout from '../components/MainLayout.svelte';
     import StatCard from '../components/StatCard.svelte';
     import DashboardCard from '../components/DashboardCard.svelte';
+    import ConnectionItem from '../components/ConnectionItem.svelte';
     import { authStore } from '../lib/auth.svelte';
     import { toast } from '../lib/toast.svelte';
-    import spotifyIcon from '../icons/spotify-48.png';
+    import spotifyIcon from '../icons/spotify.svg';
+    import lastfmIcon from '../icons/lastfm.svg';
     import neteaseIcon from '../icons/netease.svg';
     import qqmusicIcon from '../icons/qqmusic.svg';
 
@@ -20,7 +22,6 @@
         Disc,
         Tag,
         Folder,
-        Radio,
     } from 'lucide-svelte';
 
     let token = $state(localStorage.getItem('token'));
@@ -189,123 +190,35 @@
                             <div
                                 class="grid grid-cols-2 gap-x-6 gap-y-3 shrink-0"
                             >
-                                <!-- Netease Connection -->
-                                <div
-                                    class="flex items-center gap-2.5 group cursor-pointer"
-                                    title="Netease: 白夜繁星"
-                                >
-                                    <div class="relative">
-                                        <div
-                                            class="w-9 h-9 rounded-xl flex items-center justify-center overflow-hidden shadow-sm transition-transform group-hover:scale-110"
-                                        >
-                                            <img
-                                                src={neteaseIcon}
-                                                alt="Netease"
-                                                class="w-full h-full object-contain"
-                                            />
-                                        </div>
-                                        <span
-                                            class="absolute -top-0.5 -right-0.5 block h-2.5 w-2.5 rounded-full bg-green-500 border-2 border-white dark:border-gray-800"
-                                        ></span>
-                                    </div>
-                                    <div class="min-w-0">
-                                        <p
-                                            class="text-[11px] font-bold text-gray-900 dark:text-white leading-tight truncate"
-                                        >
-                                            白夜繁星
-                                        </p>
-                                        <p
-                                            class="text-[9px] text-red-600 font-medium uppercase tracking-tighter leading-none mt-0.5"
-                                        >
-                                            Netease
-                                        </p>
-                                    </div>
-                                </div>
+                                <ConnectionItem
+                                    name="Netease"
+                                    username="小星星OvO"
+                                    iconSrc={neteaseIcon}
+                                    statusColor="text-red-600"
+                                    connected={true}
+                                />
 
-                                <!-- QQ Music Connection -->
-                                <div
-                                    class="flex items-center gap-2.5 group cursor-pointer opacity-40 grayscale hover:opacity-100 hover:grayscale-0 transition-all"
-                                    title="QQ Music: Disconnected"
-                                >
-                                    <div
-                                        class="w-9 h-9 rounded-xl bg-[#FFD000] flex items-center justify-center overflow-hidden shadow-sm transition-transform group-hover:scale-110"
-                                    >
-                                        <img
-                                            src={qqmusicIcon}
-                                            alt="QQ Music"
-                                            class="w-6 h-6 object-contain"
-                                        />
-                                    </div>
-                                    <div class="min-w-0">
-                                        <p
-                                            class="text-[11px] font-bold text-gray-400 dark:text-gray-500 leading-tight truncate"
-                                        >
-                                            Sign in
-                                        </p>
-                                        <p
-                                            class="text-[9px] text-yellow-600 font-medium uppercase tracking-tighter leading-none mt-0.5"
-                                        >
-                                            QQ Music
-                                        </p>
-                                    </div>
-                                </div>
+                                <ConnectionItem
+                                    name="QQ Music"
+                                    iconSrc={qqmusicIcon}
+                                    statusColor="text-yellow-600"
+                                    connected={false}
+                                />
 
-                                <!-- Spotify Connection -->
-                                <div
-                                    class="flex items-center gap-2.5 group cursor-pointer"
-                                    title="Spotify: stkevintan"
-                                >
-                                    <div class="relative">
-                                        <div
-                                            class="w-9 h-9 rounded-xl bg-black flex items-center justify-center overflow-hidden shadow-sm transition-transform group-hover:scale-110"
-                                        >
-                                            <img
-                                                src={spotifyIcon}
-                                                alt="Spotify"
-                                                class="w-6 h-6 object-contain"
-                                            />
-                                        </div>
-                                        <span
-                                            class="absolute -top-0.5 -right-0.5 block h-2.5 w-2.5 rounded-full bg-green-500 border-2 border-white dark:border-gray-800"
-                                        ></span>
-                                    </div>
-                                    <div class="min-w-0">
-                                        <p
-                                            class="text-[11px] font-bold text-gray-900 dark:text-white leading-tight truncate"
-                                        >
-                                            stkevintan
-                                        </p>
-                                        <p
-                                            class="text-[9px] text-green-600 font-medium uppercase tracking-tighter leading-none mt-0.5"
-                                        >
-                                            Spotify
-                                        </p>
-                                    </div>
-                                </div>
+                                <ConnectionItem
+                                    name="Spotify"
+                                    username="stkevintan"
+                                    iconSrc={spotifyIcon}
+                                    statusColor="text-green-600"
+                                    connected={true}
+                                />
 
-                                <!-- Last.fm Connection -->
-                                <div
-                                    class="flex items-center gap-2.5 group cursor-pointer opacity-40 grayscale hover:opacity-100 hover:grayscale-0 transition-all"
-                                    title="Last.fm: Disconnected"
-                                >
-                                    <div
-                                        class="w-9 h-9 rounded-xl bg-red-700 flex items-center justify-center text-white shadow-sm transition-transform group-hover:scale-110"
-                                    >
-                                        <Radio size={18} />
-                                    </div>
-                                    <div class="min-w-0">
-                                        <p
-                                            class="text-[11px] font-bold text-gray-400 dark:text-gray-500 leading-tight truncate"
-                                        >
-                                            Sign in
-                                        </p>
-                                        <p
-                                            class="text-[9px] text-gray-400 font-medium uppercase tracking-tighter leading-none mt-0.5"
-                                        >
-                                            Last.fm
-                                        </p>
-                                    </div>
-                                </div>
+                                <ConnectionItem
+                                    name="Last.fm"
+                                    iconSrc={lastfmIcon}
+                                    statusColor="text-gray-400"
+                                    connected={false}
+                                />
                             </div>
                         </div>
                     </DashboardCard>
