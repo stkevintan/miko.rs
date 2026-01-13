@@ -62,9 +62,18 @@
             {/snippet}
             {#snippet content()}
               <div class="px-4 py-3 border-b dark:border-gray-600">
-                <p class="text-sm text-gray-900 dark:text-white truncate" role="none">
-                  {authStore.user?.username || 'Loading...'}
-                </p>
+                <div class="flex items-center gap-2">
+                  <p class="text-sm text-gray-900 dark:text-white truncate" role="none">
+                    {authStore.user?.username || 'Loading...'}
+                  </p>
+                  {#if authStore.user?.admin}
+                    <span
+                      class="px-1 py-0.5 rounded bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400 text-[9px] font-bold uppercase tracking-tight"
+                    >
+                      Admin
+                    </span>
+                  {/if}
+                </div>
                 {#if authStore.user?.email}
                   <p class="text-sm font-medium text-gray-500 truncate dark:text-gray-400" role="none">
                     {authStore.user.email}

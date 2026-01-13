@@ -142,11 +142,20 @@
                                     {authStore.user.username[0].toUpperCase()}
                                 </div>
                                 <div class="min-w-0">
-                                    <p
-                                        class="text-xl font-bold text-gray-900 dark:text-white truncate"
-                                    >
-                                        {authStore.user.username}
-                                    </p>
+                                    <div class="flex items-center gap-2">
+                                        <p
+                                            class="text-xl font-bold text-gray-900 dark:text-white truncate"
+                                        >
+                                            {authStore.user.username}
+                                        </p>
+                                        {#if authStore.user.admin}
+                                            <span
+                                                class="px-1.5 py-0.5 rounded-md bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 text-[10px] font-bold uppercase tracking-wider"
+                                            >
+                                                Admin
+                                            </span>
+                                        {/if}
+                                    </div>
                                     <p
                                         class="text-sm text-gray-500 dark:text-gray-400 truncate mt-1"
                                     >
