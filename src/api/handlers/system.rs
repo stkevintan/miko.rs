@@ -1,6 +1,6 @@
 use poem::{handler, web::{Data, Json}};
 use sea_orm::{DatabaseConnection, EntityTrait, PaginatorTrait, ColumnTrait, QueryFilter, LoaderTrait};
-use crate::models::{child, album, artist, now_playing, playlist, song_artist};
+use crate::models::{child, album, artist, now_playing, playlist, song_artist, genre, music_folder};
 use serde::Serialize;
 use sysinfo::System;
 use std::sync::Mutex;
@@ -19,6 +19,7 @@ pub struct Stats {
     pub albums: u64,
     pub artists: u64,
     pub playlists: u64,
+    pub genres: u64,
 }
 
 #[derive(Serialize)]
@@ -26,6 +27,13 @@ pub struct SystemInfo {
     pub cpu_usage: f32,
     pub memory_usage: u64,
     pub memory_total: u64,
+}
+
+#[derive(Serialize)]
+pub struct FolderInfo {
+    pub label: String,
+    pub path: String,
+    pub song_count: u64,
 }
 
 #[derive(Serialize)]
@@ -44,14 +52,15 @@ pub struct NowPlayingInfo {
 pub async fn get_stats(
     db: Data<&DatabaseConnection>,
 ) -> Json<Stats> {
-    let (songs, albums, artists, playlists) = tokio::try_join!(
+    let (songs, albums, artists, playlists, genres) = tokio::try_join!(
         child::Entity::find().filter(child::Column::IsDir.eq(false)).count(*db),
         album::Entity::find().count(*db),
         artist::Entity::find().count(*db),
         playlist::Entity::find().count(*db),
-    ).unwrap_or((0, 0, 0, 0));
+        genre::Entity::find().count(*db),
+    ).unwrap_or((0, 0, 0, 0, 0));
 
-    Json(Stats { songs, albums, artists, playlists })
+    Json(Stats { songs, albums, artists, playlists, genres })
 }
 
 #[handler]
@@ -124,28 +133,66 @@ pub async fn get_now_playing(
 }
 
 #[handler]
-pub fn get_system_info() -> Result<Json<SystemInfo>, poem::Error> {
-    let mut sys = SYS.lock().map_err(|e| {
-        log::error!("System mutex poisoned: {}", e);
-        poem::Error::from_status(poem::http::StatusCode::INTERNAL_SERVER_ERROR)
-    })?;
+pub async fn get_system_info() -> Result<Json<SystemInfo>, poem::Error> {
+    let (cpu_usage, memory_usage, memory_total) = {
+        let mut sys = SYS.lock().map_err(|e| {
+            log::error!("System mutex poisoned: {}", e);
+            poem::Error::from_status(poem::http::StatusCode::INTERNAL_SERVER_ERROR)
+        })?;
 
-    let pid = sysinfo::get_current_pid().map_err(|e| {
-        log::error!("Failed to get current PID: {}", e);
-        poem::Error::from_status(poem::http::StatusCode::INTERNAL_SERVER_ERROR)
-    })?;
+        let pid = sysinfo::get_current_pid().map_err(|e| {
+            log::error!("Failed to get current PID: {}", e);
+            poem::Error::from_status(poem::http::StatusCode::INTERNAL_SERVER_ERROR)
+        })?;
 
-    sys.refresh_processes(sysinfo::ProcessesToUpdate::Some(&[pid]), true);
-    
-    let (cpu_usage, memory_usage) = if let Some(proc) = sys.process(pid) {
-        (proc.cpu_usage(), proc.memory())
-    } else {
-        (0.0, 0)
+        sys.refresh_processes(sysinfo::ProcessesToUpdate::Some(&[pid]), true);
+        
+        let (cpu, mem) = if let Some(proc) = sys.process(pid) {
+            (proc.cpu_usage(), proc.memory())
+        } else {
+            (0.0, 0)
+        };
+        
+        (cpu, mem, sys.total_memory())
     };
     
     Ok(Json(SystemInfo {
         cpu_usage,
         memory_usage,
-        memory_total: sys.total_memory(),
+        memory_total,
     }))
+}
+
+#[handler]
+pub async fn get_folders(
+    db: Data<&DatabaseConnection>,
+) -> Result<Json<Vec<FolderInfo>>, poem::Error> {
+    let folders = music_folder::Entity::find()
+        .all(*db)
+        .await
+        .map_err(|e| {
+            log::error!("Failed to fetch music folders: {}", e);
+            poem::Error::from_status(poem::http::StatusCode::INTERNAL_SERVER_ERROR)
+        })?;
+
+    let mut folder_infos = Vec::new();
+    for folder in folders {
+        let count = child::Entity::find()
+            .filter(child::Column::MusicFolderId.eq(folder.id))
+            .filter(child::Column::IsDir.eq(false))
+            .count(*db)
+            .await
+            .map_err(|e| {
+                log::error!("Failed to count songs for folder {}: {}", folder.id, e);
+                poem::Error::from_status(poem::http::StatusCode::INTERNAL_SERVER_ERROR)
+            })?;
+
+        folder_infos.push(FolderInfo {
+            label: folder.name.clone().unwrap_or_else(|| folder.path.clone()),
+            path: folder.path,
+            song_count: count,
+        });
+    }
+    
+    Ok(Json(folder_infos))
 }

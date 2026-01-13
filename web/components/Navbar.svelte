@@ -1,8 +1,6 @@
 <script lang="ts">
-  import { Menu, User, RefreshCw } from 'lucide-svelte';
-  import { onMount, onDestroy } from 'svelte';
-  import api from '../lib/api';
-  import { toast } from '../lib/toast.svelte';
+  import { Menu, User } from 'lucide-svelte';
+  import { onMount } from 'svelte';
   import { authStore } from '../lib/auth.svelte';
   import Dropdown from './ui/Dropdown.svelte';
   import ThemeSwitcher from './ui/ThemeSwitcher.svelte';
@@ -11,62 +9,12 @@
     onToggleSidebar: () => void
   }>();
 
-  let isScanning = $state(false);
-  let pollInterval: number | null = null;
-
   async function logout() {
     authStore.logout();
   }
 
-  async function checkScanStatus() {
-    try {
-      const resp = await api.get('/scan');
-      const newScanning = resp.data.scanning;
-      
-      if (isScanning && !newScanning) {
-        toast.success('Library scan completed');
-      }
-      
-      isScanning = newScanning;
-      
-      if (!isScanning && pollInterval) {
-        clearInterval(pollInterval);
-        pollInterval = null;
-      } else if (isScanning && !pollInterval) {
-        startPolling();
-      }
-    } catch (e) {
-      console.error('Failed to get scan status', e);
-    }
-  }
-
-  function startPolling() {
-    if (pollInterval) return;
-    pollInterval = setInterval(checkScanStatus, 2000);
-  }
-
-  async function triggerScan(full = false) {
-    if (isScanning) return;
-    
-    isScanning = true;
-    toast.add(full ? 'Full scan started' : 'Quick scan started', 'info');
-    try {
-      await api.post(`/scan?full=${full}`);
-      startPolling();
-    } catch (e) {
-      console.error('Scan failed', e);
-      isScanning = false;
-      toast.error('Failed to start library scan');
-    }
-  }
-
   onMount(() => {
-    checkScanStatus();
     authStore.fetchProfile();
-  });
-
-  onDestroy(() => {
-    if (pollInterval) clearInterval(pollInterval);
   });
 </script>
 
@@ -88,37 +36,6 @@
       <div class="flex items-center">
         <!-- Theme Switcher -->
         <ThemeSwitcher class="mx-1" />
-
-        <!-- Scan Button Dropdown -->
-        <div class="mx-3">
-          <Dropdown align="auto" triggerMode="hover">
-            {#snippet trigger()}
-              <button 
-                type="button" 
-                class="p-2 text-gray-500 rounded-lg hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700 {isScanning ? 'animate-spin' : ''} cursor-pointer"
-                aria-label="Scan Library"
-              >
-                <RefreshCw size={20} />
-              </button>
-            {/snippet}
-            {#snippet content()}
-              <div class="py-1">
-                <button 
-                  onclick={() => triggerScan(false)}
-                  class="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-orange-50 hover:text-orange-600 dark:text-gray-300 dark:hover:bg-gray-600 transition cursor-pointer"
-                >
-                  Quick Scan
-                </button>
-                <button 
-                  onclick={() => triggerScan(true)}
-                  class="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-orange-50 hover:text-orange-600 dark:text-gray-300 dark:hover:bg-gray-600 transition cursor-pointer"
-                >
-                  Full Scan
-                </button>
-              </div>
-            {/snippet}
-          </Dropdown>
-        </div>
 
         <div class="ms-3">
           <Dropdown align="auto">

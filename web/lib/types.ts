@@ -3,12 +3,19 @@ export interface Stats {
     albums: number;
     artists: number;
     playlists: number;
+    genres: number;
 }
 
 export interface SystemInfo {
     cpu_usage: number;
     memory_usage: number;
     memory_total: number;
+}
+
+export interface FolderInfo {
+    label: string;
+    path: string;
+    song_count: number;
 }
 
 export interface NowPlayingInfo {
@@ -22,10 +29,18 @@ export interface NowPlayingInfo {
     updated_at: string;
 }
 
+export interface ScanStatus {
+    scanning: boolean;
+    count: number;
+    total: number;
+}
+
 export interface DashboardData {
     stats: Stats;
     system: SystemInfo;
+    folders: FolderInfo[];
     now_playing: NowPlayingInfo[];
+    scan_status: ScanStatus;
 }
 
 export interface UserProfile {

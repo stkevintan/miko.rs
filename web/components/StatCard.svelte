@@ -11,21 +11,28 @@
         label, 
         value, 
         color = 'blue', 
-        icon: Icon 
+        icon: Icon,
+        children
     } = $props<{
         label: string;
         value: string | number;
         color?: keyof typeof colorClasses;
         icon: any;
+        children?: import('svelte').Snippet;
     }>();
 </script>
 
-<div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 dark:bg-gray-800 dark:border-gray-700 flex items-center">
+<div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 dark:bg-gray-800 dark:border-gray-700 flex items-center relative">
     <div class="p-3 rounded-xl mr-4 {colorClasses[color as keyof typeof colorClasses]}">
         <Icon size={24} />
     </div>
-    <div>
+    <div class="flex-1 min-w-0">
         <p class="text-sm text-gray-500 dark:text-gray-400">{label}</p>
         <p class="text-2xl font-bold text-gray-900 dark:text-white">{value}</p>
     </div>
+    {#if children}
+        <div class="absolute top-3 right-3">
+            {@render children()}
+        </div>
+    {/if}
 </div>
