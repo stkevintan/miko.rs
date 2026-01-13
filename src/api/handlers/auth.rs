@@ -1,11 +1,16 @@
-use poem::{handler, web::{Data, Json}, IntoResponse, http::StatusCode};
-use sea_orm::{DatabaseConnection, EntityTrait, QueryFilter, ColumnTrait};
-use jsonwebtoken::{encode, Header, EncodingKey};
-use crate::models::user;
-use crate::api::models::{LoginRequest, LoginResponse, Claims, ErrorResponse, CurrentUserResponse};
-use crate::subsonic::auth::verify_password;
+use crate::api::models::{Claims, CurrentUserResponse, ErrorResponse, LoginRequest, LoginResponse};
 use crate::config::Config;
+use crate::models::user;
+use crate::subsonic::auth::verify_password;
 use chrono::Utc;
+use jsonwebtoken::{encode, EncodingKey, Header};
+use poem::{
+    handler,
+    http::StatusCode,
+    web::{Data, Json},
+    IntoResponse,
+};
+use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter};
 use std::sync::Arc;
 
 #[handler]
@@ -20,18 +25,32 @@ pub async fn login(
         .await
     {
         Ok(Some(u)) => u,
-        Ok(None) => return Json(ErrorResponse { error: "Invalid username or password".into() })
+        Ok(None) => {
+            return Json(ErrorResponse {
+                error: "Invalid username or password".into(),
+            })
             .with_status(StatusCode::UNAUTHORIZED)
-            .into_response(),
-        Err(_) => return Json(ErrorResponse { error: "Database error".into() })
+            .into_response()
+        }
+        Err(_) => {
+            return Json(ErrorResponse {
+                error: "Database error".into(),
+            })
             .with_status(StatusCode::INTERNAL_SERVER_ERROR)
-            .into_response(),
+            .into_response()
+        }
     };
 
-    if !verify_password(&user.password, &req.password, config.server.password_secret.as_bytes()) {
-        return Json(ErrorResponse { error: "Invalid username or password".into() })
-            .with_status(StatusCode::UNAUTHORIZED)
-            .into_response();
+    if !verify_password(
+        &user.password,
+        &req.password,
+        config.server.password_secret.as_bytes(),
+    ) {
+        return Json(ErrorResponse {
+            error: "Invalid username or password".into(),
+        })
+        .with_status(StatusCode::UNAUTHORIZED)
+        .into_response();
     }
 
     let expiration = Utc::now()
@@ -50,9 +69,13 @@ pub async fn login(
         &EncodingKey::from_secret(config.server.jwt_secret.as_bytes()),
     ) {
         Ok(t) => t,
-        Err(_) => return Json(ErrorResponse { error: "Failed to generate token".into() })
+        Err(_) => {
+            return Json(ErrorResponse {
+                error: "Failed to generate token".into(),
+            })
             .with_status(StatusCode::INTERNAL_SERVER_ERROR)
-            .into_response(),
+            .into_response()
+        }
     };
 
     Json(LoginResponse { token }).into_response()
@@ -60,19 +83,23 @@ pub async fn login(
 
 #[handler]
 pub async fn get_me(user: Data<&user::Model>) -> Json<CurrentUserResponse> {
-    let mut roles = Vec::new();
-    if user.admin_role { roles.push("admin".into()); }
-    if user.settings_role { roles.push("settings".into()); }
-    if user.download_role { roles.push("download".into()); }
-    if user.upload_role { roles.push("upload".into()); }
-    if user.playlist_role { roles.push("playlist".into()); }
-    if user.cover_art_role { roles.push("coverart".into()); }
-    if user.comment_role { roles.push("comment".into()); }
-    if user.podcast_role { roles.push("podcast".into()); }
-    if user.stream_role { roles.push("stream".into()); }
-    if user.jukebox_role { roles.push("jukebox".into()); }
-    if user.share_role { roles.push("share".into()); }
-    if user.video_conversion_role { roles.push("video".into()); }
+    let roles = [
+        (user.admin_role, "admin"),
+        (user.settings_role, "settings"),
+        (user.download_role, "download"),
+        (user.upload_role, "upload"),
+        (user.playlist_role, "playlist"),
+        (user.cover_art_role, "coverart"),
+        (user.comment_role, "comment"),
+        (user.podcast_role, "podcast"),
+        (user.stream_role, "stream"),
+        (user.jukebox_role, "jukebox"),
+        (user.share_role, "share"),
+        (user.video_conversion_role, "video"),
+    ]
+    .into_iter()
+    .filter_map(|(has_role, role_name)| has_role.then_some(role_name.to_string()))
+    .collect::<Vec<_>>();
 
     Json(CurrentUserResponse {
         username: user.username.clone(),

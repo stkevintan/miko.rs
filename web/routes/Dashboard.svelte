@@ -6,11 +6,11 @@
     import { authStore } from '../lib/auth.svelte';
     import api from '../lib/api';
     import type { DashboardData } from '../lib/types';
-    import { Music, Library, User, Cpu, Zap, Play, Disc, List } from 'lucide-svelte';
+    import { Music, User, Cpu, Play, Disc, List } from 'lucide-svelte';
 
     let token = $state(localStorage.getItem('token'));
     let data = $state<DashboardData | null>(null);
-    let pollInterval: any;
+    let pollInterval: number | null = null;
 
     async function fetchData() {
         try {
@@ -143,18 +143,14 @@
                 {#each data.now_playing as session}
                     <div class="flex items-center p-4 rounded-xl bg-gray-50 dark:bg-gray-700/50 border border-gray-100 dark:border-gray-600 hover:border-orange-300 dark:hover:border-orange-500/50 transition-all group">
                         <div class="w-12 h-12 rounded-lg bg-orange-500 flex items-center justify-center text-white mr-4 shrink-0 shadow-md group-hover:scale-105 transition-transform overflow-hidden relative">
+                            <Music size={24} />
                             {#if session.cover_art}
                                 <img 
                                     src="/api/coverart/{session.cover_art}?token={token}" 
                                     alt={session.song_title}
-                                    class="w-full h-full object-cover"
+                                    class="absolute inset-0 w-full h-full object-cover"
                                     onerror={(e) => (e.currentTarget as HTMLImageElement).style.display = 'none'}
                                 />
-                                <div class="absolute inset-0 flex items-center justify-center -z-10 bg-orange-500">
-                                    <Music size={24} />
-                                </div>
-                            {:else}
-                                <Music size={24} />
                             {/if}
                         </div>
                         <div class="min-w-0 flex-1">

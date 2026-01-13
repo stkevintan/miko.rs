@@ -8,6 +8,7 @@ use crate::api::models::Claims;
 use crate::models::user;
 use crate::config::Config;
 use sea_orm::{DatabaseConnection, EntityTrait, ColumnTrait, QueryFilter};
+use std::collections::HashMap;
 use std::sync::Arc;
 
 pub struct AuthMiddleware;
@@ -45,9 +46,9 @@ impl<E: Endpoint> Endpoint for AuthEndpoint<E> {
             }
             auth_header[7..].to_string()
         } else if let Some(token) = req.uri().query().and_then(|q| {
-            q.split('&')
-                .find(|s| s.starts_with("token="))
-                .map(|s| s[6..].to_string())
+            serde_urlencoded::from_str::<HashMap<String, String>>(q)
+                .ok()
+                .and_then(|params| params.get("token").cloned())
         }) {
             token
         } else {

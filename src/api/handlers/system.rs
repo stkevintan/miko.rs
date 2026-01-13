@@ -99,7 +99,12 @@ pub async fn get_now_playing(
             username: np.username,
             player_name: np.player_name,
             song_title: entry.as_ref().map(|(s, _, _)| s.title.clone()),
-            artist_name: entry.as_ref().and_then(|(_, _, artists)| artists.first().map(|a| a.name.clone())),
+            artist_name: entry.as_ref().map(|(_, _, artists)| {
+                artists.iter()
+                    .map(|a| a.name.clone())
+                    .collect::<Vec<String>>()
+                    .join(", ")
+            }).filter(|s| !s.is_empty()),
             album_name: entry.as_ref().and_then(|(_, album, _)| album.as_ref().map(|a| a.name.clone())),
             album_id: entry.as_ref().and_then(|(s, _, _)| s.album_id.clone()),
             cover_art: entry.as_ref().map(|(s, _, _)| {
@@ -119,24 +124,28 @@ pub async fn get_now_playing(
 }
 
 #[handler]
-pub fn get_system_info() -> Json<SystemInfo> {
-    let system_info = {
-        let mut sys = SYS.lock().unwrap();
-        let pid = sysinfo::get_current_pid().unwrap();
-        sys.refresh_all();
-        
-        let (cpu_usage, memory_usage) = if let Some(proc) = sys.process(pid) {
-            (proc.cpu_usage(), proc.memory())
-        } else {
-            (0.0, 0)
-        };
-        
-        SystemInfo {
-            cpu_usage,
-            memory_usage,
-            memory_total: sys.total_memory(),
-        }
-    };
+pub fn get_system_info() -> Result<Json<SystemInfo>, poem::Error> {
+    let mut sys = SYS.lock().map_err(|e| {
+        log::error!("System mutex poisoned: {}", e);
+        poem::Error::from_status(poem::http::StatusCode::INTERNAL_SERVER_ERROR)
+    })?;
 
-    Json(system_info)
+    let pid = sysinfo::get_current_pid().map_err(|e| {
+        log::error!("Failed to get current PID: {}", e);
+        poem::Error::from_status(poem::http::StatusCode::INTERNAL_SERVER_ERROR)
+    })?;
+
+    sys.refresh_processes(sysinfo::ProcessesToUpdate::Some(&[pid]), true);
+    
+    let (cpu_usage, memory_usage) = if let Some(proc) = sys.process(pid) {
+        (proc.cpu_usage(), proc.memory())
+    } else {
+        (0.0, 0)
+    };
+    
+    Ok(Json(SystemInfo {
+        cpu_usage,
+        memory_usage,
+        memory_total: sys.total_memory(),
+    }))
 }

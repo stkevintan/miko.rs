@@ -1,9 +1,7 @@
 <script lang="ts">
-  import { Menu, User, RefreshCw, Sun, Moon } from 'lucide-svelte';
-  import { push } from 'svelte-spa-router';
+  import { Menu, User, RefreshCw } from 'lucide-svelte';
   import { onMount, onDestroy } from 'svelte';
   import api from '../lib/api';
-  import { themeManager } from '../lib/theme.svelte';
   import { toast } from '../lib/toast.svelte';
   import { authStore } from '../lib/auth.svelte';
   import Dropdown from './ui/Dropdown.svelte';
@@ -14,7 +12,7 @@
   }>();
 
   let isScanning = $state(false);
-  let pollInterval: any;
+  let pollInterval: number | null = null;
 
   async function logout() {
     authStore.logout();
