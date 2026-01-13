@@ -32,7 +32,8 @@ pub async fn login(
             .with_status(StatusCode::UNAUTHORIZED)
             .into_response()
         }
-        Err(_) => {
+        Err(e) => {
+            log::error!("Database error during login for user '{}': {}", req.username, e);
             return Json(ErrorResponse {
                 error: "Database error".into(),
             })
@@ -69,7 +70,8 @@ pub async fn login(
         &EncodingKey::from_secret(config.server.jwt_secret.as_bytes()),
     ) {
         Ok(t) => t,
-        Err(_) => {
+        Err(e) => {
+            log::error!("Failed to generate JWT token for user '{}': {}", claims.sub, e);
             return Json(ErrorResponse {
                 error: "Failed to generate token".into(),
             })

@@ -5,6 +5,7 @@
     import StatCard from '../components/StatCard.svelte';
     import DashboardCard from '../components/DashboardCard.svelte';
     import { authStore } from '../lib/auth.svelte';
+    import { toast } from '../lib/toast.svelte';
     import spotifyIcon from '../icons/spotify-48.png';
     import neteaseIcon from '../icons/netease.svg';
     import qqmusicIcon from '../icons/qqmusic.svg';
@@ -27,22 +28,40 @@
     let pollInterval: number | null = null;
 
     async function fetchData() {
-        try {
-            const [stats, system, folders, nowPlaying] = await Promise.all([
-                api.get('/stats'),
-                api.get('/system'),
-                api.get('/folders'),
-                api.get('/now-playing'),
-            ]);
-            data = {
-                stats: stats.data,
-                system: system.data,
-                folders: folders.data,
-                now_playing: nowPlaying.data,
-            };
-        } catch (e) {
-            console.error('Failed to fetch dashboard data', e);
-        }
+        const [stats, system, folders, nowPlaying] = await Promise.all([
+            api.get('/stats').catch((err) => {
+                console.error('Failed to fetch stats', err);
+                toast.error('Failed to fetch library statistics');
+                return { data: { songs: 0, albums: 0, artists: 0, genres: 0 } };
+            }),
+            api.get('/system').catch((err) => {
+                console.error('Failed to fetch system info', err);
+                toast.error('Failed to fetch system information');
+                return {
+                    data: {
+                        cpu_usage: 0,
+                        memory_usage: 0,
+                        memory_total: 0,
+                    },
+                };
+            }),
+            api.get('/folders').catch((err) => {
+                console.error('Failed to fetch folders', err);
+                toast.error('Failed to fetch music folders');
+                return { data: [] };
+            }),
+            api.get('/now-playing').catch((err) => {
+                console.error('Failed to fetch now playing', err);
+                toast.error('Failed to fetch now playing sessions');
+                return { data: [] };
+            }),
+        ]);
+        data = {
+            stats: stats.data,
+            system: system.data,
+            folders: folders.data,
+            now_playing: nowPlaying.data,
+        };
     }
 
     onMount(() => {
@@ -134,7 +153,9 @@
                         iconClass="text-green-600"
                         class="h-full flex flex-col"
                     >
-                        <div class="flex-1 flex items-center justify-between w-full">
+                        <div
+                            class="flex-1 flex items-center justify-between w-full"
+                        >
                             <div class="flex items-center min-w-0">
                                 <div
                                     class="w-20 h-20 rounded-3xl bg-gradient-to-br from-green-400 to-blue-500 flex items-center justify-center text-white text-3xl font-bold mr-5 shrink-0 shadow-lg"
@@ -165,7 +186,9 @@
                                 </div>
                             </div>
 
-                            <div class="grid grid-cols-2 gap-x-6 gap-y-3 shrink-0">
+                            <div
+                                class="grid grid-cols-2 gap-x-6 gap-y-3 shrink-0"
+                            >
                                 <!-- Netease Connection -->
                                 <div
                                     class="flex items-center gap-2.5 group cursor-pointer"

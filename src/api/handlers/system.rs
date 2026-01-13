@@ -1,5 +1,5 @@
 use poem::{handler, web::{Data, Json}};
-use sea_orm::{DatabaseConnection, EntityTrait, PaginatorTrait, ColumnTrait, QueryFilter, LoaderTrait};
+use sea_orm::{DatabaseConnection, EntityTrait, PaginatorTrait, ColumnTrait, QueryFilter, LoaderTrait, QuerySelect};
 use crate::models::{child, album, artist, now_playing, song_artist, genre, music_folder};
 use serde::Serialize;
 use sysinfo::System;
@@ -50,25 +50,31 @@ pub struct NowPlayingInfo {
 #[handler]
 pub async fn get_stats(
     db: Data<&DatabaseConnection>,
-) -> Json<Stats> {
+) -> Result<Json<Stats>, poem::Error> {
     let (songs, albums, artists, genres) = tokio::try_join!(
         child::Entity::find().filter(child::Column::IsDir.eq(false)).count(*db),
         album::Entity::find().count(*db),
         artist::Entity::find().count(*db),
         genre::Entity::find().count(*db),
-    ).unwrap_or((0, 0, 0, 0));
+    ).map_err(|e| {
+        log::error!("Failed to fetch stats: {}", e);
+        poem::Error::from_status(poem::http::StatusCode::INTERNAL_SERVER_ERROR)
+    })?;
 
-    Json(Stats { songs, albums, artists, genres })
+    Ok(Json(Stats { songs, albums, artists, genres }))
 }
 
 #[handler]
 pub async fn get_now_playing(
     db: Data<&DatabaseConnection>,
-) -> Json<Vec<NowPlayingInfo>> {
+) -> Result<Json<Vec<NowPlayingInfo>>, poem::Error> {
     let now_playing_list = now_playing::Entity::find()
         .all(*db)
         .await
-        .unwrap_or_default();
+        .map_err(|e| {
+            log::error!("Failed to fetch now playing list: {}", e);
+            poem::Error::from_status(poem::http::StatusCode::INTERNAL_SERVER_ERROR)
+        })?;
 
     let song_ids: Vec<String> = now_playing_list.iter().map(|np| np.song_id.clone()).collect();
     
@@ -78,7 +84,10 @@ pub async fn get_now_playing(
             .find_also_related(album::Entity)
             .all(*db)
             .await
-            .unwrap_or_default()
+            .map_err(|e| {
+                log::error!("Failed to fetch songs with albums for now playing: {}", e);
+                poem::Error::from_status(poem::http::StatusCode::INTERNAL_SERVER_ERROR)
+            })?
     } else {
         Vec::new()
     };
@@ -87,7 +96,10 @@ pub async fn get_now_playing(
     let artists_per_song = if !song_models.is_empty() {
         song_models.load_many_to_many(artist::Entity, song_artist::Entity, *db)
             .await
-            .unwrap_or_default()
+            .map_err(|e| {
+                log::error!("Failed to load artists for now playing songs: {}", e);
+                poem::Error::from_status(poem::http::StatusCode::INTERNAL_SERVER_ERROR)
+            })?
     } else {
         Vec::new()
     };
@@ -127,7 +139,7 @@ pub async fn get_now_playing(
         now_playing_info.push(info);
     }
 
-    Json(now_playing_info)
+    Ok(Json(now_playing_info))
 }
 
 #[handler]
@@ -173,24 +185,34 @@ pub async fn get_folders(
             poem::Error::from_status(poem::http::StatusCode::INTERNAL_SERVER_ERROR)
         })?;
 
-    let mut folder_infos = Vec::new();
-    for folder in folders {
-        let count = child::Entity::find()
-            .filter(child::Column::MusicFolderId.eq(folder.id))
-            .filter(child::Column::IsDir.eq(false))
-            .count(*db)
-            .await
-            .map_err(|e| {
-                log::error!("Failed to count songs for folder {}: {}", folder.id, e);
-                poem::Error::from_status(poem::http::StatusCode::INTERNAL_SERVER_ERROR)
-            })?;
+    // Optimization: Fetch all song counts in a single query to avoid N+1 problem
+    let counts = child::Entity::find()
+        .select_only()
+        .column(child::Column::MusicFolderId)
+        .column_as(child::Column::Id.count(), "song_count")
+        .filter(child::Column::IsDir.eq(false))
+        .group_by(child::Column::MusicFolderId)
+        .into_tuple::<(i32, i64)>()
+        .all(*db)
+        .await
+        .map_err(|e| {
+            log::error!("Failed to fetch folder song counts: {}", e);
+            poem::Error::from_status(poem::http::StatusCode::INTERNAL_SERVER_ERROR)
+        })?;
 
-        folder_infos.push(FolderInfo {
-            label: folder.name.clone().unwrap_or_else(|| folder.path.clone()),
-            path: folder.path,
-            song_count: count,
-        });
-    }
+    let count_map: HashMap<i32, i64> = counts.into_iter().collect();
+
+    let folder_infos = folders
+        .into_iter()
+        .map(|folder| {
+            let song_count = count_map.get(&folder.id).cloned().unwrap_or(0);
+            FolderInfo {
+                label: folder.name.clone().unwrap_or_else(|| folder.path.clone()),
+                path: folder.path,
+                song_count: song_count as u64,
+            }
+        })
+        .collect();
     
     Ok(Json(folder_infos))
 }
