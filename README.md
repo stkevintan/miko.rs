@@ -1,6 +1,16 @@
 # miko-rs
+[![Build and Publish Docker Image](https://github.com/stkevintan/miko.rs/actions/workflows/docker-publish.yml/badge.svg?branch=main)](https://github.com/stkevintan/miko.rs/actions/workflows/docker-publish.yml)
+![Subsonic API](https://img.shields.io/badge/Subsonic_API-1.16.1-orange?logo=myspace&logoColor=white)
+![Rust](https://img.shields.io/badge/Rust-2021-000000?logo=rust&logoColor=white)
+![Svelte](https://img.shields.io/badge/Svelte-5-ff3e00?logo=svelte&logoColor=white)
+![GitHub repo size](https://img.shields.io/github/repo-size/stkevintan/miko.rs)
+![GitHub stars](https://img.shields.io/github/stars/stkevintan/miko.rs?style=social)
+![GitHub contributors](https://img.shields.io/github/contributors/stkevintan/miko.rs)
+
 
 A lightweight, high-performance Subsonic-compatible music server written in Rust.
+
+
 ![dashboard](images/dashboard.png)
 ## Features
 
