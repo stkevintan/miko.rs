@@ -1,5 +1,11 @@
 #!/bin/bash
 
+## Example usage:
+#   ./scripts/build.sh
+#   ./scripts/build.sh --skip-frontend
+#   ./scripts/build.sh linux/amd64
+#   ./scripts/build.sh x86_64-unknown-linux-musl linux amd64 ""
+
 set -e
 
 APP_NAME="miko-rs"
