@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { link, location } from 'svelte-spa-router';
   import { Home, Library, Music, Settings, User, X } from 'lucide-svelte';
+  import { isActive2 } from '../router';
 
   let { isOpen = true, onToggle } = $props<{
     isOpen?: boolean,
@@ -44,11 +44,10 @@
       {#each navItems as item}
         <a 
           href={item.path}
-          use:link
           class="flex items-center p-2 text-gray-900 rounded-lg dark:text-white hover:bg-gray-100 dark:hover:bg-gray-700 group
-          {$location === item.path ? 'bg-orange-50 text-orange-600 dark:bg-gray-700' : ''}"
+          {isActive2(item.path) ? 'bg-orange-50 text-orange-600 dark:bg-gray-700' : ''}"
         >
-          <item.icon size={20} class={$location === item.path ? 'text-orange-600' : 'text-gray-500'} />
+          <item.icon size={20} class={isActive2(item.path) ? 'text-orange-600' : 'text-gray-500'} />
           <span class="ms-3 transition-opacity duration-300 {isOpen ? 'opacity-100' : 'opacity-0 lg:hidden'}">{item.name}</span>
         </a>
       {/each}

@@ -1,4 +1,4 @@
-import { push } from 'svelte-spa-router';
+import { navigate } from '../router';
 import { subsonic } from './api';
 import type { UserProfile } from './types';
 
@@ -33,7 +33,7 @@ class AuthStore {
     logout() {
         this.user = null;
         localStorage.removeItem('token');
-        push('/login');
+        navigate('/login');
     }
 }
 

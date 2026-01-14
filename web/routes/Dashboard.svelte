@@ -1,7 +1,6 @@
 <script lang="ts">
-    import { push } from 'svelte-spa-router';
+    import { navigate } from '../router';
     import { onMount, onDestroy } from 'svelte';
-    import MainLayout from '../components/MainLayout.svelte';
     import StatCard from '../components/StatCard.svelte';
     import DashboardCard from '../components/DashboardCard.svelte';
     import ConnectionItem from '../components/ConnectionItem.svelte';
@@ -54,7 +53,7 @@
 
     onMount(() => {
         if (!token) {
-            push('/login');
+            navigate('/login');
             return;
         }
         authStore.fetchProfile();
@@ -75,12 +74,11 @@
     }
 </script>
 
-<MainLayout>
-    <div class="flex items-center justify-between mb-8">
-        <h1 class="text-3xl font-bold text-gray-900 dark:text-white">
-            Dashboard
-        </h1>
-    </div>
+<div class="flex items-center justify-between mb-8">
+    <h1 class="text-3xl font-bold text-gray-900 dark:text-white">
+        Dashboard
+    </h1>
+</div>
 
     {#if data}
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
@@ -337,4 +335,3 @@
             ></div>
         </div>
     {/if}
-</MainLayout>
