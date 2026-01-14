@@ -1,4 +1,4 @@
-use crate::api::models::{Claims, CurrentUserResponse, ErrorResponse, LoginRequest, LoginResponse};
+use crate::api::models::{Claims, ErrorResponse, LoginRequest, LoginResponse};
 use crate::config::Config;
 use crate::models::user;
 use crate::subsonic::auth::verify_password;

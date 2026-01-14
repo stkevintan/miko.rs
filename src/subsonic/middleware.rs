@@ -37,8 +37,8 @@ impl<E: Endpoint> Endpoint for SubsonicAuthEndpoint<E> {
             authenticated_user = Some(user);
         } else {
             // 2. Fallback to Subsonic Auth (u/p or u/t/s)
-            let db = req.data::<DatabaseConnection>().unwrap();
-            let config = req.data::<Arc<Config>>().unwrap();
+            let db = req.data::<DatabaseConnection>().ok_or_else(|| poem::Error::from_status(poem::http::StatusCode::INTERNAL_SERVER_ERROR))?;
+            let config = req.data::<Arc<Config>>().ok_or_else(|| poem::Error::from_status(poem::http::StatusCode::INTERNAL_SERVER_ERROR))?;
             let username = match &query.u {
                 Some(u) => u,
                 None => {

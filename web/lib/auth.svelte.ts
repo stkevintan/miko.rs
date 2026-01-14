@@ -19,7 +19,6 @@ class AuthStore {
             const resp = await subsonic.get<{ user: UserProfile }>('/getUser', {
                 params: { username },
             });
-            console.log('Fetched user profile', resp.data.user);
             this.user = resp.data.user;
         } catch (e) {
             console.error('Failed to fetch user profile', e);
