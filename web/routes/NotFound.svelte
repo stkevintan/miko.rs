@@ -30,6 +30,3 @@
   </button>
 </div>
 
-<style lang="postcss">
-  @reference "../style.css";
-</style>
