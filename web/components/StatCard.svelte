@@ -15,7 +15,7 @@
         children
     } = $props<{
         label: string;
-        value: string | number;
+        value: string | number | undefined;
         color?: keyof typeof colorClasses;
         icon: any;
         children?: import('svelte').Snippet;
@@ -28,7 +28,7 @@
     </div>
     <div class="flex-1 min-w-0">
         <p class="text-sm text-gray-500 dark:text-gray-400">{label}</p>
-        <p class="text-2xl font-bold text-gray-900 dark:text-white">{value}</p>
+        <p class="text-2xl font-bold text-gray-900 dark:text-white">{value || 0}</p>
     </div>
     {#if children}
         <div class="absolute top-3 right-3">

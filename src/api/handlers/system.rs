@@ -1,7 +1,7 @@
-use poem::{handler, web::{Data, Json}};
+use poem::{handler, web::{Data, Json, Query}};
 use sea_orm::{DatabaseConnection, EntityTrait, PaginatorTrait, ColumnTrait, QueryFilter, QuerySelect};
 use crate::models::{child, album, artist, genre, music_folder};
-use serde::Serialize;
+use serde::{Serialize, Deserialize};
 use sysinfo::System;
 use std::{collections::HashMap, sync::Mutex};
 use once_cell::sync::Lazy;
@@ -12,12 +12,21 @@ static SYS: Lazy<Mutex<System>> = Lazy::new(|| {
     Mutex::new(sys)
 });
 
-#[derive(Serialize)]
+#[derive(Deserialize)]
+pub struct StatsQuery {
+    pub fields: Option<String>,
+}
+
+#[derive(Serialize, Default)]
 pub struct Stats {
-    pub songs: u64,
-    pub albums: u64,
-    pub artists: u64,
-    pub genres: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub songs: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub albums: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub artists: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub genres: Option<u64>,
 }
 
 #[derive(Serialize)]
@@ -37,18 +46,61 @@ pub struct FolderInfo {
 #[handler]
 pub async fn get_stats(
     db: Data<&DatabaseConnection>,
+    query: Query<StatsQuery>,
 ) -> Result<Json<Stats>, poem::Error> {
+    let fields = query.fields.as_deref().unwrap_or("");
+    let field_list: Vec<&str> = if fields.is_empty() {
+        vec![]
+    } else {
+        fields.split(',').collect()
+    };
+    let fetch_all = fields.is_empty();
+
     let (songs, albums, artists, genres) = tokio::try_join!(
-        child::Entity::find().filter(child::Column::IsDir.eq(false)).count(*db),
-        album::Entity::find().count(*db),
-        artist::Entity::find().count(*db),
-        genre::Entity::find().count(*db),
-    ).map_err(|e| {
+        async {
+            if fetch_all || field_list.contains(&"songs") {
+                child::Entity::find()
+                    .filter(child::Column::IsDir.eq(false))
+                    .count(*db)
+                    .await
+                    .map(Some)
+            } else {
+                Ok(None)
+            }
+        },
+        async {
+            if fetch_all || field_list.contains(&"albums") {
+                album::Entity::find().count(*db).await.map(Some)
+            } else {
+                Ok(None)
+            }
+        },
+        async {
+            if fetch_all || field_list.contains(&"artists") {
+                artist::Entity::find().count(*db).await.map(Some)
+            } else {
+                Ok(None)
+            }
+        },
+        async {
+            if fetch_all || field_list.contains(&"genres") {
+                genre::Entity::find().count(*db).await.map(Some)
+            } else {
+                Ok(None)
+            }
+        },
+    )
+    .map_err(|e: sea_orm::DbErr| {
         log::error!("Failed to fetch stats: {}", e);
         poem::Error::from_status(poem::http::StatusCode::INTERNAL_SERVER_ERROR)
     })?;
 
-    Ok(Json(Stats { songs, albums, artists, genres }))
+    Ok(Json(Stats {
+        songs,
+        albums,
+        artists,
+        genres,
+    }))
 }
 
 #[handler]
