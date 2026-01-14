@@ -3,7 +3,7 @@ use sea_orm::{DatabaseConnection, EntityTrait, PaginatorTrait, ColumnTrait, Quer
 use crate::models::{child, album, artist, genre, music_folder};
 use serde::{Serialize, Deserialize};
 use sysinfo::System;
-use std::{collections::HashMap, sync::Mutex};
+use std::{collections::{HashMap, HashSet}, sync::Mutex};
 use once_cell::sync::Lazy;
 
 static SYS: Lazy<Mutex<System>> = Lazy::new(|| {
@@ -48,17 +48,14 @@ pub async fn get_stats(
     db: Data<&DatabaseConnection>,
     query: Query<StatsQuery>,
 ) -> Result<Json<Stats>, poem::Error> {
-    let fields = query.fields.as_deref().unwrap_or("");
-    let field_list: Vec<&str> = if fields.is_empty() {
-        vec![]
-    } else {
-        fields.split(',').collect()
-    };
-    let fetch_all = fields.is_empty();
+    let field_set: HashSet<&str> = query.fields.as_deref()
+        .map(|f| f.split(',').collect())
+        .unwrap_or_default();
+    let fetch_all = field_set.is_empty();
 
     let (songs, albums, artists, genres) = tokio::try_join!(
         async {
-            if fetch_all || field_list.contains(&"songs") {
+            if fetch_all || field_set.contains("songs") {
                 child::Entity::find()
                     .filter(child::Column::IsDir.eq(false))
                     .count(*db)
@@ -69,21 +66,21 @@ pub async fn get_stats(
             }
         },
         async {
-            if fetch_all || field_list.contains(&"albums") {
+            if fetch_all || field_set.contains("albums") {
                 album::Entity::find().count(*db).await.map(Some)
             } else {
                 Ok(None)
             }
         },
         async {
-            if fetch_all || field_list.contains(&"artists") {
+            if fetch_all || field_set.contains("artists") {
                 artist::Entity::find().count(*db).await.map(Some)
             } else {
                 Ok(None)
             }
         },
         async {
-            if fetch_all || field_list.contains(&"genres") {
+            if fetch_all || field_set.contains("genres") {
                 genre::Entity::find().count(*db).await.map(Some)
             } else {
                 Ok(None)

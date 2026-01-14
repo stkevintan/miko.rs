@@ -59,10 +59,28 @@ export interface Song {
     type?: string;
 }
 
+export interface ArtistReference {
+    id: string;
+    name: string;
+}
+
+export interface AlbumReference {
+    id: string;
+    name: string;
+    artist?: string;
+    artistId?: string;
+    coverArt?: string;
+    songCount: number;
+    duration: number;
+    playCount?: number;
+    created: string;
+    starred?: string;
+    year?: number;
+}
 export interface SearchResult3 {
     song?: Song[];
-    album?: any[];
-    artist?: any[];
+    album?: AlbumReference[];
+    artist?: ArtistReference[];
 }
 
 export interface SubsonicResponse {
