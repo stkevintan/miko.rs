@@ -66,7 +66,7 @@
                   <p class="text-sm text-gray-900 dark:text-white truncate" role="none">
                     {authStore.user?.username || 'Loading...'}
                   </p>
-                  {#if authStore.user?.admin}
+                  {#if authStore.user?.adminRole}
                     <span
                       class="px-1 py-0.5 rounded bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400 text-[9px] font-bold uppercase tracking-tight"
                     >

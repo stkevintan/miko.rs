@@ -721,6 +721,8 @@ pub struct ScanStatus {
     pub scanning: bool,
     #[serde(rename = "@count", skip_serializing_if = "Option::is_none")]
     pub count: Option<i64>,
+    #[serde(rename = "@total", skip_serializing_if = "Option::is_none")]
+    pub total: Option<i64>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

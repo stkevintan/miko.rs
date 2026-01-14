@@ -82,12 +82,3 @@ pub async fn login(
 
     Json(LoginResponse { token }).into_response()
 }
-
-#[handler]
-pub async fn get_me(user: Data<&user::Model>) -> Json<CurrentUserResponse> {
-    Json(CurrentUserResponse {
-        username: user.username.clone(),
-        email: user.email.clone(),
-        admin: user.admin_role,
-    })
-}
