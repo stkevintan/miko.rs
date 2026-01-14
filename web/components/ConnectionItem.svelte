@@ -46,7 +46,7 @@
             ></span>
         {/if}
     </div>
-    <div class="min-w-0">
+    <div class="min-w-0 hidden @[500px]:block">
         <p
             class="text-[11px] font-bold leading-tight truncate {connected ? 'text-gray-900 dark:text-white' : 'text-gray-400 dark:text-gray-500'}"
         >
