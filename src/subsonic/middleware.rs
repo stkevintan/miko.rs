@@ -1,3 +1,4 @@
+use crate::api::auth::verify_jwt;
 use crate::config::Config;
 use crate::models::user;
 use crate::subsonic::auth::{verify_password, verify_token};
@@ -24,58 +25,65 @@ pub struct SubsonicAuthEndpoint<E> {
 impl<E: Endpoint> Endpoint for SubsonicAuthEndpoint<E> {
     type Output = Response;
 
-    async fn call(&self, req: Request) -> Result<Self::Output> {
+    async fn call(&self, mut req: Request) -> Result<Self::Output> {
+        let mut authenticated_user = None;
+
         let query =
             serde_urlencoded::from_str::<SubsonicParams>(req.uri().query().unwrap_or_default())
                 .unwrap_or_default();
 
-        let username = match &query.u {
+        // 1. Try JWT Auth first (easy for Web UI)
+        if let Ok(user) = verify_jwt(&req).await {
+            authenticated_user = Some(user);
+        } else {
+            // 2. Fallback to Subsonic Auth (u/p or u/t/s)
+            let db = req.data::<DatabaseConnection>().ok_or_else(|| poem::Error::from_status(poem::http::StatusCode::INTERNAL_SERVER_ERROR))?;
+            let config = req.data::<Arc<Config>>().ok_or_else(|| poem::Error::from_status(poem::http::StatusCode::INTERNAL_SERVER_ERROR))?;
+            let username = match &query.u {
+                Some(u) => u,
+                None => {
+                    let resp = SubsonicResponse::new_error(10, "User not found".to_string());
+                    return Ok(send_response(resp, &query.f));
+                }
+            };
+
+            let user = user::Entity::find()
+                .filter(user::Column::Username.eq(username))
+                .one(db)
+                .await
+                .map_err(poem::error::InternalServerError)?;
+
+            if let Some(user) = user {
+                let secret_bytes = config.server.password_secret.as_bytes();
+                if let Some(password) = &query.p {
+                    if verify_password(&user.password, password, secret_bytes) {
+                        authenticated_user = Some(user);
+                    }
+                } else if let (Some(token), Some(salt)) = (&query.t, &query.s) {
+                    if verify_token(&user.password, token, salt, secret_bytes) {
+                        authenticated_user = Some(user);
+                    }
+                }
+            }
+        }
+
+        let user = match authenticated_user {
             Some(u) => u,
             None => {
-                let resp = SubsonicResponse::new_error(10, "User not found".to_string());
+                let resp =
+                    SubsonicResponse::new_error(40, "Wrong username or password".to_string());
                 return Ok(send_response(resp, &query.f));
             }
         };
 
-        let db = req.data::<DatabaseConnection>().unwrap();
-        let user = user::Entity::find()
-            .filter(user::Column::Username.eq(username))
-            .one(db)
-            .await
-            .map_err(poem::error::InternalServerError)?;
-
-        let user = match user {
-            Some(u) => u,
-            None => {
-                let resp = SubsonicResponse::new_error(10, "User not found".to_string());
-                return Ok(send_response(resp, &query.f));
-            }
-        };
-
-        // Get secret from config
-        let config = req.data::<Arc<Config>>().unwrap();
-        let secret_bytes = config.server.password_secret.as_bytes();
-
-        let mut authenticated = false;
-        if let Some(password) = &query.p {
-            if verify_password(&user.password, password, secret_bytes) {
-                authenticated = true;
-            }
-        } else if let (Some(token), Some(salt)) = (&query.t, &query.s) {
-            if verify_token(&user.password, token, salt, secret_bytes) {
-                authenticated = true;
-            }
-        }
-
-        if !authenticated {
-            let resp = SubsonicResponse::new_error(40, "Wrong username or password".to_string());
-            return Ok(send_response(resp, &query.f));
-        }
-
+        let username = user.username.clone();
         let client = &query.c.as_deref().unwrap_or("unknown");
-        log::debug!("User '{}' authenticated successfully from client '{}'", username, client);
+        log::debug!(
+            "User '{}' authenticated successfully from client '{}'",
+            username,
+            client
+        );
 
-        let mut req = req;
         req.set_data(Arc::new(user));
 
         self.ep.call(req).await.map(IntoResponse::into_response)

@@ -1,4 +1,4 @@
-use crate::api::models::{Claims, CurrentUserResponse, ErrorResponse, LoginRequest, LoginResponse};
+use crate::api::models::{Claims, ErrorResponse, LoginRequest, LoginResponse};
 use crate::config::Config;
 use crate::models::user;
 use crate::subsonic::auth::verify_password;
@@ -81,13 +81,4 @@ pub async fn login(
     };
 
     Json(LoginResponse { token }).into_response()
-}
-
-#[handler]
-pub async fn get_me(user: Data<&user::Model>) -> Json<CurrentUserResponse> {
-    Json(CurrentUserResponse {
-        username: user.username.clone(),
-        email: user.email.clone(),
-        admin: user.admin_role,
-    })
 }

@@ -24,6 +24,7 @@
                 password,
             });
             localStorage.setItem('token', response.data.token);
+            localStorage.setItem('username', username);
             push('/dashboard');
         } catch (e: any) {
             error = e.response?.data?.error || 'Login failed';
@@ -39,7 +40,9 @@
     <div class="fixed top-4 right-4">
         <ThemeSwitcher />
     </div>
-    <div class="bg-white dark:bg-gray-800 p-8 rounded-2xl shadow-xl max-w-md w-full">
+    <div
+        class="bg-white dark:bg-gray-800 p-8 rounded-2xl shadow-xl max-w-md w-full"
+    >
         <h1 class="text-3xl font-bold text-orange-600 mb-6 text-center">
             Miko Login
         </h1>

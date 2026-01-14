@@ -1,12 +1,16 @@
 type Theme = 'light' | 'dark' | 'system';
 
 class ThemeManager {
-    #theme = $state<Theme>((localStorage.getItem('theme') as Theme) || 'system');
+    #theme = $state<Theme>(
+        (localStorage.getItem('theme') as Theme) || 'system',
+    );
     #mediaQuery: MediaQueryList | null = null;
 
     constructor() {
         if (typeof window !== 'undefined') {
-            this.#mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+            this.#mediaQuery = window.matchMedia(
+                '(prefers-color-scheme: dark)',
+            );
             this.#mediaQuery.addEventListener('change', () => {
                 if (this.#theme === 'system') {
                     this.applyTheme();
@@ -35,9 +39,11 @@ class ThemeManager {
 
     private applyTheme() {
         if (typeof document !== 'undefined') {
-            const isDark = this.#theme === 'dark' || 
-                (this.#theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
-            
+            const isDark =
+                this.#theme === 'dark' ||
+                (this.#theme === 'system' &&
+                    window.matchMedia('(prefers-color-scheme: dark)').matches);
+
             if (isDark) {
                 document.documentElement.classList.add('dark');
             } else {

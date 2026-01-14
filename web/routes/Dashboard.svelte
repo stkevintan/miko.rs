@@ -5,6 +5,7 @@
     import StatCard from '../components/StatCard.svelte';
     import DashboardCard from '../components/DashboardCard.svelte';
     import ConnectionItem from '../components/ConnectionItem.svelte';
+    import NowPlaying from '../components/NowPlaying.svelte';
     import { authStore } from '../lib/auth.svelte';
     import { toast } from '../lib/toast.svelte';
     import spotifyIcon from '../icons/spotify.svg';
@@ -14,22 +15,14 @@
 
     import api from '../lib/api';
     import type { DashboardData } from '../lib/types';
-    import {
-        Music,
-        User,
-        Cpu,
-        Play,
-        Disc,
-        Tag,
-        Folder,
-    } from 'lucide-svelte';
+    import { Music, User, Cpu, Disc, Tag, Folder } from 'lucide-svelte';
 
     let token = $state(localStorage.getItem('token'));
     let data = $state<DashboardData | null>(null);
     let pollInterval: number | null = null;
 
     async function fetchData() {
-        const [stats, system, folders, nowPlaying] = await Promise.all([
+        const [stats, system, folders] = await Promise.all([
             api.get('/stats').catch((err) => {
                 console.error('Failed to fetch stats', err);
                 toast.error('Failed to fetch library statistics');
@@ -51,17 +44,11 @@
                 toast.error('Failed to fetch music folders');
                 return { data: [] };
             }),
-            api.get('/now-playing').catch((err) => {
-                console.error('Failed to fetch now playing', err);
-                toast.error('Failed to fetch now playing sessions');
-                return { data: [] };
-            }),
         ]);
         data = {
             stats: stats.data,
             system: system.data,
             folders: folders.data,
-            now_playing: nowPlaying.data,
         };
     }
 
@@ -154,8 +141,12 @@
                         iconClass="text-green-600"
                         class="h-full flex flex-col"
                     >
-                        <div class="flex-1 flex flex-row flex-wrap items-center justify-start w-full gap-8">
-                            <div class="flex items-center min-w-[280px] overflow-hidden">
+                        <div
+                            class="flex-1 flex flex-row flex-wrap items-center justify-start w-full gap-8"
+                        >
+                            <div
+                                class="flex items-center min-w-[280px] overflow-hidden"
+                            >
                                 <div
                                     class="w-20 h-20 rounded-3xl bg-gradient-to-br from-green-400 to-blue-500 flex items-center justify-center text-white text-3xl font-bold mr-5 shrink-0 shadow-lg"
                                 >
@@ -168,7 +159,7 @@
                                         >
                                             {authStore.user.username}
                                         </p>
-                                        {#if authStore.user.admin}
+                                        {#if authStore.user.adminRole}
                                             <span
                                                 class="px-1.5 py-0.5 rounded-md bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 text-[10px] font-bold uppercase tracking-wider"
                                             >
@@ -249,7 +240,7 @@
                                     class="bg-blue-600 h-2.5 rounded-full transition-all duration-500"
                                     style="width: {Math.min(
                                         data.system.cpu_usage,
-                                        100
+                                        100,
                                     )}%"
                                 ></div>
                             </div>
@@ -280,8 +271,8 @@
                             <p
                                 class="text-[10px] text-gray-400 mt-1 text-right"
                             >
-                                of {formatBytes(data.system.memory_total)} total
-                                system RAM
+                                of {formatBytes(data.system.memory_total)} total system
+                                RAM
                             </p>
                         </div>
                     </div>
@@ -290,90 +281,7 @@
 
             <!-- Bottom Row: Now Playing (6) + Music Folders (6) -->
             <div class="lg:col-span-6">
-                <DashboardCard
-                    title="Now Playing"
-                    icon={Play}
-                    class="h-full max-h-[600px] flex flex-col"
-                >
-                    {#snippet headerExtra()}
-                        <span
-                            class="px-2 py-1 text-xs font-medium bg-orange-100 text-orange-600 rounded-full dark:bg-orange-900/30 dark:text-orange-400"
-                        >
-                            {data?.now_playing.length} Active
-                        </span>
-                    {/snippet}
-
-                    <div
-                        class="flex-1 overflow-y-auto pr-1 -mr-1 custom-scrollbar"
-                    >
-                        {#if data.now_playing.length > 0}
-                            <div class="space-y-4">
-                                {#each data.now_playing as session}
-                                    <div
-                                        class="flex items-center p-4 rounded-xl bg-gray-50 dark:bg-gray-700/50 border border-gray-100 dark:border-gray-600 hover:border-orange-300 dark:hover:border-orange-500/50 transition-all group"
-                                    >
-                                        <div
-                                            class="w-12 h-12 rounded-lg bg-orange-500 flex items-center justify-center text-white mr-4 shrink-0 shadow-md group-hover:scale-105 transition-transform overflow-hidden relative"
-                                        >
-                                            <Music size={24} />
-                                            {#if session.cover_art}
-                                                {#key session.cover_art}
-                                                    <img
-                                                        src="/api/coverart/{session.cover_art}?token={token}"
-                                                        alt={session.song_title}
-                                                        class="absolute inset-0 w-full h-full object-cover"
-                                                        onload={(e) =>
-                                                            ((
-                                                                e.currentTarget as HTMLImageElement
-                                                            ).style.display =
-                                                                'block')}
-                                                        onerror={(e) =>
-                                                            ((
-                                                                e.currentTarget as HTMLImageElement
-                                                            ).style.display =
-                                                                'none')}
-                                                    />
-                                                {/key}
-                                            {/if}
-                                        </div>
-                                        <div class="min-w-0 flex-1">
-                                            <p
-                                                class="text-sm font-bold text-gray-900 dark:text-white truncate"
-                                            >
-                                                {session.song_title ||
-                                                    'Unknown Song'}
-                                            </p>
-                                            <p
-                                                class="text-xs text-gray-500 dark:text-gray-400 truncate"
-                                            >
-                                                {session.artist_name ||
-                                                    'Unknown Artist'}
-                                            </p>
-                                            <div
-                                                class="flex items-center mt-1.5 text-[10px] text-gray-400 dark:text-gray-500"
-                                            >
-                                                <span
-                                                    class="bg-gray-200 dark:bg-gray-700 px-1.5 py-0.5 rounded text-gray-600 dark:text-gray-300 mr-2 uppercase font-medium"
-                                                >
-                                                    {session.username}
-                                                </span>
-                                                <span class="truncate"
-                                                    >via {session.player_name}</span
-                                                >
-                                            </div>
-                                        </div>
-                                    </div>
-                                {/each}
-                            </div>
-                        {:else}
-                            <div
-                                class="text-center py-10 text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-700/30 rounded-xl border border-dashed border-gray-200 dark:border-gray-600"
-                            >
-                                No active playback sessions
-                            </div>
-                        {/if}
-                    </div>
-                </DashboardCard>
+                <NowPlaying />
             </div>
 
             <div class="lg:col-span-6">

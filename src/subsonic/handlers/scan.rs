@@ -18,15 +18,13 @@ pub async fn get_scan_status(
     params: Query<SubsonicParams>,
 ) -> impl IntoResponse {
     let scanning = scanner.is_scanning();
-    let count = if scanning {
-        scanner.scan_count()
-    } else {
-        scanner.total_count()
-    };
+    let count = scanner.scan_count();
+    let total = scanner.total_count();
 
     let resp = SubsonicResponse::new_ok(SubsonicResponseBody::ScanStatus(ScanStatus {
         scanning,
         count: Some(count),
+        total: Some(total),
     }));
 
     send_response(resp, &params.f)
@@ -47,11 +45,13 @@ pub async fn start_scan(
         }
     });
 
-    let count = scanner.total_count();
+    let count = scanner.scan_count();
+    let total = scanner.total_count();
 
     let resp = SubsonicResponse::new_ok(SubsonicResponseBody::ScanStatus(ScanStatus {
         scanning: true,
         count: Some(count),
+        total: Some(total),
     }));
 
     send_response(resp, &params.f)

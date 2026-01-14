@@ -1,0 +1,90 @@
+<script lang="ts">
+    import { Music } from 'lucide-svelte';
+
+    /**
+     * CoverArt component for displaying music imagery with fallbacks.
+     */
+    let {
+        id,
+        alt = '',
+        size = 24,
+        class: className = '',
+        fallbackClass = 'bg-orange-500',
+    } = $props<{
+        id?: string | null;
+        alt?: string;
+        size?: number;
+        class?: string;
+        fallbackClass?: string;
+    }>();
+
+    let imageLoaded = $state(false);
+    let imageError = $state(false);
+    let imageUrl = $state('');
+    const token = localStorage.getItem('token');
+
+    // Reset state when ID changes
+    $effect(() => {
+        if (!id) {
+            imageUrl = '';
+            return;
+        }
+
+        const controller = new AbortController();
+
+        async function fetchImage() {
+            try {
+                const response = await fetch(`/rest/getCoverArt?id=${id}`, {
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                    },
+                    signal: controller.signal,
+                });
+
+                if (response.ok) {
+                    const blob = await response.blob();
+                    if (imageUrl) URL.revokeObjectURL(imageUrl);
+                    imageUrl = URL.createObjectURL(blob);
+                    imageLoaded = true;
+                } else {
+                    imageError = true;
+                }
+            } catch (err: any) {
+                if (err instanceof Error && err.name !== 'AbortError') {
+                    imageError = true;
+                }
+            }
+        }
+
+        fetchImage();
+
+        return () => {
+            controller.abort();
+        };
+    });
+</script>
+
+<div
+    class="relative flex items-center justify-center overflow-hidden text-white shrink-0 {fallbackClass} {className}"
+>
+    <Music {size} />
+
+    {#if id && imageUrl}
+        <img
+            src={imageUrl}
+            {alt}
+            class="absolute inset-0 w-full h-full object-cover transition-opacity duration-300 {imageLoaded
+                ? 'opacity-100'
+                : 'opacity-0'}"
+            onload={() => {
+                imageLoaded = true;
+                imageError = false;
+            }}
+            onerror={() => {
+                imageError = true;
+                imageLoaded = false;
+            }}
+            style:display={imageError ? 'none' : 'block'}
+        />
+    {/if}
+</div>

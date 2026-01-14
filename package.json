@@ -18,6 +18,7 @@
     "@tailwindcss/vite": "^4.1.18",
     "@tsconfig/svelte": "^5.0.6",
     "@types/node": "^22.19.5",
+    "prettier": "^3.7.4",
     "sass-embedded": "^1.97.2",
     "svelte-check": "^4.3.5",
     "tailwindcss": "^4.1.18",

@@ -17,17 +17,6 @@ export interface FolderInfo {
     song_count: number;
 }
 
-export interface NowPlayingInfo {
-    username: string;
-    player_name: string;
-    song_title: string | null;
-    artist_name: string | null;
-    album_name: string | null;
-    album_id: string | null;
-    cover_art: string | null;
-    updated_at: string;
-}
-
 export interface ScanStatus {
     scanning: boolean;
     count: number;
@@ -38,11 +27,10 @@ export interface DashboardData {
     stats: Stats;
     system: SystemInfo;
     folders: FolderInfo[];
-    now_playing: NowPlayingInfo[];
 }
 
 export interface UserProfile {
     username: string;
     email?: string;
-    admin: boolean;
+    adminRole: boolean;
 }

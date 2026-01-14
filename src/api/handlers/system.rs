@@ -1,11 +1,10 @@
 use poem::{handler, web::{Data, Json}};
-use sea_orm::{DatabaseConnection, EntityTrait, PaginatorTrait, ColumnTrait, QueryFilter, LoaderTrait, QuerySelect};
-use crate::models::{child, album, artist, now_playing, song_artist, genre, music_folder};
+use sea_orm::{DatabaseConnection, EntityTrait, PaginatorTrait, ColumnTrait, QueryFilter, QuerySelect};
+use crate::models::{child, album, artist, genre, music_folder};
 use serde::Serialize;
 use sysinfo::System;
-use std::sync::Mutex;
+use std::{collections::HashMap, sync::Mutex};
 use once_cell::sync::Lazy;
-use std::collections::HashMap;
 
 static SYS: Lazy<Mutex<System>> = Lazy::new(|| {
     let mut sys = System::new_all();
@@ -35,18 +34,6 @@ pub struct FolderInfo {
     pub song_count: u64,
 }
 
-#[derive(Serialize)]
-pub struct NowPlayingInfo {
-    pub username: String,
-    pub player_name: String,
-    pub song_title: Option<String>,
-    pub artist_name: Option<String>,
-    pub album_name: Option<String>,
-    pub album_id: Option<String>,
-    pub cover_art: Option<String>,
-    pub updated_at: chrono::DateTime<chrono::Utc>,
-}
-
 #[handler]
 pub async fn get_stats(
     db: Data<&DatabaseConnection>,
@@ -62,84 +49,6 @@ pub async fn get_stats(
     })?;
 
     Ok(Json(Stats { songs, albums, artists, genres }))
-}
-
-#[handler]
-pub async fn get_now_playing(
-    db: Data<&DatabaseConnection>,
-) -> Result<Json<Vec<NowPlayingInfo>>, poem::Error> {
-    let now_playing_list = now_playing::Entity::find()
-        .all(*db)
-        .await
-        .map_err(|e| {
-            log::error!("Failed to fetch now playing list: {}", e);
-            poem::Error::from_status(poem::http::StatusCode::INTERNAL_SERVER_ERROR)
-        })?;
-
-    let song_ids: Vec<String> = now_playing_list.iter().map(|np| np.song_id.clone()).collect();
-    
-    let songs_with_albums = if !song_ids.is_empty() {
-        child::Entity::find()
-            .filter(child::Column::Id.is_in(song_ids))
-            .find_also_related(album::Entity)
-            .all(*db)
-            .await
-            .map_err(|e| {
-                log::error!("Failed to fetch songs with albums for now playing: {}", e);
-                poem::Error::from_status(poem::http::StatusCode::INTERNAL_SERVER_ERROR)
-            })?
-    } else {
-        Vec::new()
-    };
-
-    let song_models: Vec<child::Model> = songs_with_albums.iter().map(|(s, _)| s.clone()).collect();
-    let artists_per_song = if !song_models.is_empty() {
-        song_models.load_many_to_many(artist::Entity, song_artist::Entity, *db)
-            .await
-            .map_err(|e| {
-                log::error!("Failed to load artists for now playing songs: {}", e);
-                poem::Error::from_status(poem::http::StatusCode::INTERNAL_SERVER_ERROR)
-            })?
-    } else {
-        Vec::new()
-    };
-
-    let mut song_map = HashMap::new();
-    for (i, (song, album)) in songs_with_albums.into_iter().enumerate() {
-        let artists = artists_per_song.get(i).cloned().unwrap_or_default();
-        song_map.insert(song.id.clone(), (song, album, artists));
-    }
-
-    let mut now_playing_info = Vec::new();
-    for np in now_playing_list {
-        let entry = song_map.get(&np.song_id);
-        
-        let info = NowPlayingInfo {
-            username: np.username,
-            player_name: np.player_name,
-            song_title: entry.as_ref().map(|(s, _, _)| s.title.clone()),
-            artist_name: entry.as_ref().map(|(_, _, artists)| {
-                artists.iter()
-                    .map(|a| a.name.clone())
-                    .collect::<Vec<String>>()
-                    .join(", ")
-            }).filter(|s| !s.is_empty()),
-            album_name: entry.as_ref().and_then(|(_, album, _)| album.as_ref().map(|a| a.name.clone())),
-            album_id: entry.as_ref().and_then(|(s, _, _)| s.album_id.clone()),
-            cover_art: entry.as_ref().map(|(s, _, _)| {
-                if let Some(aid) = &s.album_id {
-                    format!("al-{}", aid)
-                } else {
-                    s.id.clone()
-                }
-            }),
-            updated_at: np.updated_at,
-        };
-        
-        now_playing_info.push(info);
-    }
-
-    Ok(Json(now_playing_info))
 }
 
 #[handler]

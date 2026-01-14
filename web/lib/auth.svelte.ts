@@ -1,5 +1,5 @@
 import { push } from 'svelte-spa-router';
-import api from './api';
+import { subsonic } from './api';
 import type { UserProfile } from './types';
 
 class AuthStore {
@@ -8,14 +8,18 @@ class AuthStore {
 
     async fetchProfile() {
         if (this.user) return;
-        
-        const token = localStorage.getItem('token');
-        if (!token) return;
+        const username = localStorage.getItem('username');
+        if (!username) {
+            this.logout();
+            return;
+        }
 
         this.loading = true;
         try {
-            const resp = await api.get('/me');
-            this.user = resp.data;
+            const resp = await subsonic.get<{ user: UserProfile }>('/getUser', {
+                params: { username },
+            });
+            this.user = resp.data.user;
         } catch (e) {
             console.error('Failed to fetch user profile', e);
             if ((e as any).response?.status === 401) {
