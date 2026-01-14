@@ -1,5 +1,5 @@
 import axios, { type InternalAxiosRequestConfig } from 'axios';
-import { push } from 'svelte-spa-router';
+import { navigate } from '../router';
 
 const api = axios.create({
     baseURL: '/api',
@@ -12,7 +12,7 @@ api.interceptors.response.use(
     (error) => {
         if (error.response?.status === 401) {
             localStorage.removeItem('token');
-            push('/login');
+            navigate('/login');
         }
         return Promise.reject(error);
     },

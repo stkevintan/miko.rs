@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { push } from 'svelte-spa-router';
+    import { navigate } from '../router';
     import { onMount } from 'svelte';
     import api from '../lib/api';
     import ThemeSwitcher from '../components/ui/ThemeSwitcher.svelte';
@@ -11,7 +11,7 @@
 
     onMount(() => {
         if (localStorage.getItem('token')) {
-            push('/dashboard');
+            navigate('/dashboard');
         }
     });
 
@@ -25,7 +25,7 @@
             });
             localStorage.setItem('token', response.data.token);
             localStorage.setItem('username', username);
-            push('/dashboard');
+            navigate('/dashboard');
         } catch (e: any) {
             error = e.response?.data?.error || 'Login failed';
         } finally {
