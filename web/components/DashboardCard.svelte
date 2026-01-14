@@ -18,7 +18,7 @@
     }>();
 </script>
 
-<div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 dark:bg-gray-800 dark:border-gray-700 {className}">
+<div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 dark:bg-gray-800 dark:border-gray-700 @container {className}">
     <div class="flex items-center justify-between mb-6 shrink-0">
         <h2 class="text-xl font-bold text-gray-900 dark:text-white flex items-center">
             {#if Icon}

@@ -154,10 +154,8 @@
                         iconClass="text-green-600"
                         class="h-full flex flex-col"
                     >
-                        <div
-                            class="flex-1 flex items-center justify-between w-full"
-                        >
-                            <div class="flex items-center min-w-0">
+                        <div class="flex-1 flex flex-row flex-wrap items-center justify-start w-full gap-8">
+                            <div class="flex items-center min-w-[280px] overflow-hidden">
                                 <div
                                     class="w-20 h-20 rounded-3xl bg-gradient-to-br from-green-400 to-blue-500 flex items-center justify-center text-white text-3xl font-bold mr-5 shrink-0 shadow-lg"
                                 >
@@ -186,9 +184,9 @@
                                     </p>
                                 </div>
                             </div>
-
+                            <div class="flex-1"></div>
                             <div
-                                class="grid grid-cols-2 gap-x-6 gap-y-3 shrink-0"
+                                class="flex flex-wrap justify-start gap-x-6 gap-y-3 @[620px]:grid @[620px]:grid-cols-2 @[620px]:max-w-[400px]"
                             >
                                 <ConnectionItem
                                     name="Netease"
