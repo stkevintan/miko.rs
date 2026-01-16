@@ -60,7 +60,6 @@
                     href={item.path}
                     onclick={(e) => {
                         if (isActive2(item.catalog)) {
-                            console.log('Already on the active page');
                             e.preventDefault();
                             e.stopPropagation();
                         }
