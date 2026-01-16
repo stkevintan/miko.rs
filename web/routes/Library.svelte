@@ -8,9 +8,9 @@
     import DataTable from '../components/ui/DataTable.svelte';
     import Pagination from '../components/ui/Pagination.svelte';
 
-    import { Search, Music } from 'lucide-svelte';
+    import { Music } from 'lucide-svelte';
+    import { librarySearchQuery, librarySearchTrigger } from '../lib/librarySearch';
 
-    let searchQuery = $state('');
     let songs = $state<Song[]>([]);
     let loading = $state(true);
     let totalSongs = $state(0);
@@ -32,7 +32,7 @@
     async function fetchSongs() {
         loading = true;
         try {
-            const query = searchQuery || '';
+            const query = $librarySearchQuery || '';
             const response = await subsonic.get<SubsonicResponse>('/search3', {
                 params: {
                     query: query,
@@ -56,12 +56,6 @@
         }
     }
 
-    function handleSearch(e: Event) {
-        e.preventDefault();
-        currentPage = 0;
-        fetchSongs();
-    }
-
     function handlePageChange(page: number) {
         currentPage = page;
         fetchSongs();
@@ -75,61 +69,61 @@
 
     onMount(() => {
         fetchStats();
+    });
+
+    $effect(() => {
+        $librarySearchTrigger;
+        currentPage = 0;
         fetchSongs();
     });
 </script>
 
 <div class="flex flex-col h-[calc(100vh-8rem)]">
     <!-- Header -->
-    <div
-        class="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4"
-    >
+    <div class="flex flex-col md:flex-row md:items-center mb-6 gap-4">
         <h1 class="text-3xl font-extrabold text-gray-900 dark:text-white">
             Library
         </h1>
-
-        <form onsubmit={handleSearch} class="relative w-full md:w-96">
-            <input
-                type="text"
-                bind:value={searchQuery}
-                placeholder="Search songs, artists, albums..."
-                class="w-full pl-10 pr-4 py-2 bg-gray-50 dark:bg-gray-800 border-none rounded-xl focus:ring-2 focus:ring-orange-500 outline-none transition-all dark:text-white"
-            />
-            <Search class="absolute left-3 top-2.5 text-gray-400" size={20} />
-            <button type="submit" class="hidden">Search</button>
-        </form>
     </div>
 
     <!-- Table Container -->
     <div
         class="flex-1 overflow-hidden bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm flex flex-col relative"
     >
-        <DataTable data={songs} {loading}>
+        <DataTable
+            data={songs}
+            {loading}
+            minWidth="800px"
+            fixed={true}
+            resizable={true}
+        >
             {#snippet header()}
                 <th>Title</th>
-                <th class="hidden md:table-cell">Artist</th>
-                <th class="hidden lg:table-cell">Album</th>
-                <th class="text-right">Duration</th>
+                <th style="width: 192px">Artist</th>
+                <th style="width: 256px">Album</th>
+                <th style="width: 120px" class="text-right">Duration</th>
             {/snippet}
 
             {#snippet row(song)}
                 <td class="px-4 py-3">
                     <TitleCell {song} />
                 </td>
-                <td class="px-6 py-3 hidden md:table-cell">
+                <td class="px-6 py-3">
                     <span
-                        class="text-sm text-gray-600 dark:text-gray-300 line-clamp-1"
+                        class="text-sm text-gray-600 dark:text-gray-300 truncate block"
                         >{song.artist}</span
                     >
                 </td>
-                <td class="px-6 py-3 hidden lg:table-cell">
+                <td class="px-6 py-3">
                     <span
-                        class="text-sm text-gray-500 dark:text-gray-400 line-clamp-1"
+                        class="text-sm text-gray-500 dark:text-gray-400 truncate block"
                         >{song.album}</span
                     >
                 </td>
                 <td class="px-6 py-3 text-right">
-                    <DurationCell duration={song.duration} />
+                    <div class="no-truncate">
+                        <DurationCell duration={song.duration} />
+                    </div>
                 </td>
             {/snippet}
 
@@ -149,7 +143,7 @@
             totalItems={totalSongs}
             itemCount={songs.length}
             {loading}
-            isSearching={!!searchQuery}
+            isSearching={!!$librarySearchQuery}
             onPageChange={handlePageChange}
             onPageSizeChange={handlePageSizeChange}
             unit="songs"

@@ -1,5 +1,5 @@
 import axios, { type InternalAxiosRequestConfig } from 'axios';
-import { navigate } from '../router';
+import { authStore } from './auth.svelte';
 
 const api = axios.create({
     baseURL: '/api',
@@ -11,8 +11,7 @@ api.interceptors.response.use(
     (response) => response,
     (error) => {
         if (error.response?.status === 401) {
-            localStorage.removeItem('token');
-            navigate('/login');
+            authStore.logout();
         }
         return Promise.reject(error);
     },
@@ -57,6 +56,7 @@ subsonic.interceptors.response.use(
 
 function setAuthToken(config: InternalAxiosRequestConfig) {
     const token = localStorage.getItem('token');
+    console.log('token', token)
     if (token) {
         config.headers.Authorization = `Bearer ${token}`;
     }
