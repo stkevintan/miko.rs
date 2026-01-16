@@ -36,8 +36,9 @@ pub async fn update_profile(
     let mut changed = false;
 
     // 2. Update email if provided
-    if user.email != req.email {
-        user_active.email = Set(req.email.clone());
+    let new_email = req.email.as_deref().filter(|s| !s.is_empty()).map(String::from);
+    if user.email != new_email {
+        user_active.email = Set(new_email);
         changed = true;
     }
 
