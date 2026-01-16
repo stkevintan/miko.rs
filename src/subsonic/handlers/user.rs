@@ -242,7 +242,7 @@ pub async fn update_user(
     }
 
     if let Some(email) = &query.email {
-        user_active.email = Set(Some(email.clone()));
+        user_active.email = Set(if email.is_empty() { None } else { Some(email.clone()) });
     }
 
     if let Some(admin_role) = query.admin_role {
