@@ -17,11 +17,15 @@ macro_rules! subsonic_routes {
     };
 }
 
-use crate::subsonic::handlers::{
-    annotation, bookmarks, browsing, lists, media, playlists, scan, search, shared, system, user,
+use crate::subsonic::{
+    common::SubsonicParams,
+    handlers::{
+        annotation, bookmarks, browsing, lists, media, playlists, scan, search, shared, system,
+        user,
+    },
 };
 
-pub fn base_routes() -> Route {
+fn base_routes() -> Route {
     subsonic_routes!(
         Route::new(),
         // system
@@ -100,6 +104,10 @@ pub fn base_routes() -> Route {
         ("/getPlayQueue", bookmarks::get_play_queue),
         ("/savePlayQueue", bookmarks::save_play_queue),
     )
+}
+
+pub fn create_api_route() -> Route {
+    Route::new().nest("/", create_route().data(SubsonicParams::default()))
 }
 
 pub fn create_route() -> Route {
