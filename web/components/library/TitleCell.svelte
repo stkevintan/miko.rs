@@ -2,14 +2,18 @@
     import { Play } from 'lucide-svelte';
     import CoverArt from '../CoverArt.svelte';
 
+    type IconComponent = typeof import('lucide-svelte')['Music'];
+
     let {
         title,
         coverArt,
         showPlay = true,
+        icon,
     }: {
         title: string;
         coverArt?: string | null;
         showPlay?: boolean;
+        icon?: IconComponent;
     } = $props();
 </script>
 
@@ -20,6 +24,7 @@
             size={14} 
             class="w-10 h-10 rounded-lg" 
             fallbackClass="bg-gray-100 dark:bg-gray-800 text-gray-400" 
+            {icon}
         />
         {#if showPlay}
             <div class="absolute inset-0 bg-black/20 opacity-0 group-hover/cover:opacity-100 flex items-center justify-center transition-opacity rounded-lg">

@@ -209,7 +209,7 @@
             items={albums}
             {loading}
             wrapperClass="p-4 overflow-y-auto h-full"
-            itemClass="w-36 sm:w-40 md:w-48 lg:w-56 rounded-xl border border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 p-3"
+            itemClass="w-full max-w-xs rounded-xl border border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 p-3"
         >
             {#snippet emptyState()}
                 <div class="flex flex-col items-center justify-center py-12">

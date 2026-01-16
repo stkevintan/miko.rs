@@ -2,6 +2,8 @@
     import { Music } from 'lucide-svelte';
     import { getCoverArtUrl } from '../lib/api';
 
+    type IconComponent = typeof import('lucide-svelte')['Music'];
+
     /**
      * CoverArt component for displaying music imagery with fallbacks.
      */
@@ -11,12 +13,14 @@
         size = 24,
         class: className = '',
         fallbackClass = 'bg-orange-500',
+        icon = Music,
     } = $props<{
         id?: string | null;
         alt?: string;
         size?: number;
         class?: string;
         fallbackClass?: string;
+        icon?: IconComponent;
     }>();
 
     let imageLoaded = $state(false);
@@ -56,7 +60,10 @@
 <div
     class="relative flex items-center justify-center overflow-hidden text-white shrink-0 {fallbackClass} {className}"
 >
-    <Music {size} />
+    {#if icon}
+        {@const Icon = icon}
+        <Icon {size} />
+    {/if}
 
     {#if id && imageUrl}
         <img

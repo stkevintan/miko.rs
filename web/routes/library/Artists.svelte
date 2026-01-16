@@ -10,7 +10,7 @@
     import DataTable from '../../components/ui/DataTable.svelte';
     import GridList from '../../components/ui/GridList.svelte';
     import Pagination from '../../components/ui/Pagination.svelte';
-    import { Music } from 'lucide-svelte';
+    import { Music, User } from 'lucide-svelte';
     import TitleCell from '../../components/library/TitleCell.svelte';
     import {
         librarySearchQuery,
@@ -124,7 +124,8 @@
                         title={artist.name}
                         coverArt={artist.coverArt}
                         showPlay={false}
-                    />
+                        icon={User}
+                        />
                 </td>
                 <td class="px-6 py-3 text-right">
                     <span class="text-sm text-gray-600 dark:text-gray-300">
@@ -153,7 +154,7 @@
             items={artists}
             {loading}
             wrapperClass="p-4 overflow-y-auto h-full"
-            itemClass="w-36 sm:w-40 md:w-48 lg:w-56 rounded-xl border border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 p-3"
+                itemClass="w-full max-w-xs rounded-xl border border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 p-3"
         >
             {#snippet emptyState()}
                 <div class="flex flex-col items-center justify-center py-12">
@@ -172,7 +173,8 @@
                     title={artist.name}
                     coverArt={artist.coverArt}
                     showPlay={false}
-                />
+                        icon={User}
+                    />
                 <div class="mt-2 text-xs text-gray-500 dark:text-gray-400">
                     {artist.albumCount ?? '—'} albums
                     <span class="mx-1">•</span>

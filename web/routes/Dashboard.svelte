@@ -51,30 +51,38 @@
 
 {#if stats}
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        <StatCard
-            label="Songs"
-            value={stats.songs}
-            color="orange"
-            icon={Music}
-        />
-        <StatCard
-            label="Albums"
-            value={stats.albums}
-            color="blue"
-            icon={Disc}
-        />
-        <StatCard
-            label="Artists"
-            value={stats.artists}
-            color="green"
-            icon={User}
-        />
-        <StatCard
-            label="Genres"
-            value={stats.genres}
-            color="red"
-            icon={Tag}
-        />
+        <a href="/library/tracks" class="block cursor-pointer">
+            <StatCard
+                label="Songs"
+                value={stats.songs}
+                color="orange"
+                icon={Music}
+            />
+        </a>
+        <a href="/library/albums" class="block cursor-pointer">
+            <StatCard
+                label="Albums"
+                value={stats.albums}
+                color="blue"
+                icon={Disc}
+            />
+        </a>
+        <a href="/library/artists" class="block cursor-pointer">
+            <StatCard
+                label="Artists"
+                value={stats.artists}
+                color="green"
+                icon={User}
+            />
+        </a>
+        <a href="/library/genres" class="block cursor-pointer">
+            <StatCard
+                label="Genres"
+                value={stats.genres}
+                color="red"
+                icon={Tag}
+            />
+        </a>
     </div>
 
     <div class="grid grid-cols-1 lg:grid-cols-12 gap-4">

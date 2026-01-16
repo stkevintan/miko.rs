@@ -7,7 +7,7 @@
         item,
         emptyState,
         wrapperClass = 'p-4',
-        gridClass = 'flex flex-wrap gap-4',
+        gridClass = 'grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(9rem,1fr))] sm:[grid-template-columns:repeat(auto-fit,minmax(10rem,1fr))] lg:[grid-template-columns:repeat(auto-fit,minmax(12rem,1fr))]',
         itemClass = '',
     }: {
         items: T[];
