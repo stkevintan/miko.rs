@@ -20,10 +20,7 @@ use poem::{
     middleware::{Cors, Tracing},
     EndpointExt, Route, Server,
 };
-use sea_orm::{
-    ActiveModelTrait, ColumnTrait, Database, DatabaseConnection, EntityTrait, PaginatorTrait,
-    QueryFilter, Set,
-};
+use sea_orm::{ActiveModelTrait, Database, DatabaseConnection, EntityTrait, PaginatorTrait, Set};
 use std::sync::Arc;
 
 async fn init_default_user(
@@ -119,7 +116,10 @@ async fn main() -> Result<(), anyhow::Error> {
 
     let app = Route::new()
         .nest("/rest", subsonic::create_route())
-        .nest("/api", api::create_route(Some(subsonic::create_api_route())))
+        .nest(
+            "/api",
+            api::create_route(Some(subsonic::create_api_route())),
+        )
         .nest("/", api::web::create_route())
         .data(db)
         .data(config)
