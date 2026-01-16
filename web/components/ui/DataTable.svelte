@@ -50,9 +50,13 @@
     const getHeaders = () => {
         if (!table) return [] as HTMLTableCellElement[];
         if (table.querySelector('thead')) {
-            return Array.from(table.querySelectorAll('thead th')) as HTMLTableCellElement[];
+            return Array.from(
+                table.querySelectorAll('thead th'),
+            ) as HTMLTableCellElement[];
         }
-        return Array.from(table.querySelectorAll('tbody tr:first-child td')) as HTMLTableCellElement[];
+        return Array.from(
+            table.querySelectorAll('tbody tr:first-child td'),
+        ) as HTMLTableCellElement[];
     };
 
     const parseWidth = (cell: HTMLTableCellElement) => {
@@ -78,7 +82,8 @@
         const tableWidth = table.getBoundingClientRect().width;
         if (tableWidth <= 0) return;
         for (const header of headers) {
-            const width = (header.getBoundingClientRect().width / tableWidth) * 100;
+            const width =
+                (header.getBoundingClientRect().width / tableWidth) * 100;
             setWidth(header, width);
         }
     };
@@ -96,7 +101,7 @@
         const handleHeight = tableRect.height || theadHeight;
 
         const handles = Array.from(
-            handleContainer.querySelectorAll<HTMLDivElement>('.resize-handle')
+            handleContainer.querySelectorAll<HTMLDivElement>('.resize-handle'),
         );
 
         for (const handle of handles) {
@@ -122,7 +127,8 @@
         if (!operation || !table) return;
         const tableWidth = table.getBoundingClientRect().width;
         if (tableWidth <= 0) return;
-        const difference = ((getPointerX(event) - operation.startX) / tableWidth) * 100;
+        const difference =
+            ((getPointerX(event) - operation.startX) / tableWidth) * 100;
         if (difference === 0) return;
 
         let widthLeft: number | undefined;
@@ -130,13 +136,15 @@
 
         if (difference > 0) {
             widthLeft = constrainWidth(
-                operation.widths.left + (operation.widths.right - operation.newWidths.right)
+                operation.widths.left +
+                    (operation.widths.right - operation.newWidths.right),
             );
             widthRight = constrainWidth(operation.widths.right - difference);
         } else if (difference < 0) {
             widthLeft = constrainWidth(operation.widths.left + difference);
             widthRight = constrainWidth(
-                operation.widths.right + (operation.widths.left - operation.newWidths.left)
+                operation.widths.right +
+                    (operation.widths.left - operation.newWidths.left),
             );
         }
 
@@ -152,7 +160,9 @@
 
         if (handleContainer) {
             const containerRect = handleContainer.getBoundingClientRect();
-            const left = operation.left.getBoundingClientRect().right - containerRect.left;
+            const left =
+                operation.left.getBoundingClientRect().right -
+                containerRect.left;
             operation.handle.style.left = `${left}px`;
         }
     };
@@ -203,7 +213,9 @@
         container?.classList.add('is-resizing');
 
         window.addEventListener('mousemove', onPointerMove as EventListener);
-        window.addEventListener('touchmove', onPointerMove as EventListener, { passive: false });
+        window.addEventListener('touchmove', onPointerMove as EventListener, {
+            passive: false,
+        });
         window.addEventListener('mouseup', onPointerUp);
         window.addEventListener('touchend', onPointerUp);
     };
@@ -242,12 +254,19 @@
             handle.setAttribute('aria-hidden', 'true');
             handleContainer?.appendChild(handle);
 
-            const onMouseDown = (event: MouseEvent | TouchEvent) => onPointerDown(event);
+            const onMouseDown = (event: MouseEvent | TouchEvent) =>
+                onPointerDown(event);
             handle.addEventListener('mousedown', onMouseDown);
-            handle.addEventListener('touchstart', onMouseDown, { passive: false });
+            handle.addEventListener('touchstart', onMouseDown, {
+                passive: false,
+            });
 
-            cleanups.push(() => handle.removeEventListener('mousedown', onMouseDown));
-            cleanups.push(() => handle.removeEventListener('touchstart', onMouseDown));
+            cleanups.push(() =>
+                handle.removeEventListener('mousedown', onMouseDown),
+            );
+            cleanups.push(() =>
+                handle.removeEventListener('touchstart', onMouseDown),
+            );
         });
 
         const onScroll = () => syncHandlePositions(headers);
@@ -288,13 +307,17 @@
     bind:this={container}
     class="flex-1 overflow-auto data-table-container custom-scrollbar relative"
 >
-    <div bind:this={handleContainer} class="resize-handle-container" aria-hidden="true"></div>
+    <div
+        bind:this={handleContainer}
+        class="resize-handle-container"
+        aria-hidden="true"
+    ></div>
     <table
         bind:this={table}
-        class="text-left w-full border-separate border-spacing-0 {fixed
-            ? 'table-fixed'
-            : ''}"
-        style="min-width: {minWidth}; {(fixed || resizable) ? 'table-layout: fixed;' : ''}"
+        class="text-left w-full border-separate border-spacing-0"
+        class:table-fixed={fixed}
+        style:min-width={minWidth}
+        style:table-layout={fixed || resizable ? 'fixed' : undefined}
     >
         <thead
             class="sticky top-0 z-10 bg-white/80 dark:bg-gray-900/80 backdrop-blur-md"

@@ -2,11 +2,12 @@
   import { Menu, Search, User } from 'lucide-svelte';
   import { onMount } from 'svelte';
   import { authStore } from '../lib/auth.svelte';
-  import { librarySearchQuery, submitLibrarySearch } from '../lib/librarySearch';
+  import { submitLibrarySearch } from '../lib/librarySearch';
   import { isActive, navigate } from '../router';
   import Dropdown from './ui/Dropdown.svelte';
   import ThemeSwitcher from './ui/ThemeSwitcher.svelte';
   import ScanButton from './ScanButton.svelte';
+  import LibrarySearchForm from './LibrarySearchForm.svelte';
 
   let { onToggleSidebar } = $props<{
     onToggleSidebar: () => void
@@ -48,17 +49,10 @@
       </div>
 
       <div class="flex-1 flex items-center justify-center min-w-0">
-        <form onsubmit={handleLibrarySearch} class="relative w-full max-w-md hidden md:block">
-          <input
-            type="text"
-            value={$librarySearchQuery}
-            oninput={(e) => librarySearchQuery.set((e.currentTarget as HTMLInputElement).value)}
-            placeholder="Search songs, artists, albums..."
-            class="w-full pl-10 pr-4 py-2 bg-gray-50 dark:bg-gray-800 border-none rounded-xl focus:ring-2 focus:ring-orange-500 outline-none transition-all dark:text-white"
-          />
-          <Search class="absolute left-3 top-2.5 text-gray-400" size={20} />
-          <button type="submit" class="hidden">Search</button>
-        </form>
+        <LibrarySearchForm
+          onSubmit={handleLibrarySearch}
+          className="relative w-full max-w-md hidden md:block"
+        />
       </div>
       
       <div class="flex items-center justify-end flex-1 min-w-0">
@@ -147,17 +141,10 @@
         aria-label="Close search"
       ></button>
       <div class="absolute top-16 left-4 right-4 bg-white dark:bg-gray-900 rounded-xl p-4 shadow-lg border border-gray-100 dark:border-gray-800">
-        <form onsubmit={handleLibrarySearch} class="relative w-full">
-          <input
-            type="text"
-            value={$librarySearchQuery}
-            oninput={(e) => librarySearchQuery.set((e.currentTarget as HTMLInputElement).value)}
-            placeholder="Search songs, artists, albums..."
-            class="w-full pl-10 pr-4 py-2 bg-gray-50 dark:bg-gray-800 border-none rounded-xl focus:ring-2 focus:ring-orange-500 outline-none transition-all dark:text-white"
-          />
-          <Search class="absolute left-3 top-2.5 text-gray-400" size={20} />
-          <button type="submit" class="hidden">Search</button>
-        </form>
+        <LibrarySearchForm
+          onSubmit={handleLibrarySearch}
+          className="relative w-full"
+        />
       </div>
     </div>
   {/if}

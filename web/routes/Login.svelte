@@ -24,7 +24,6 @@
                 password,
             });
             localStorage.setItem('token', response.data.token);
-            console.log('Login successful, navigating to home', response.data.token);
             
             navigate('/');
         } catch (e: any) {
