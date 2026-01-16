@@ -1,11 +1,12 @@
 <script lang="ts">
     import { route } from '../../router';
-    import { Music, Disc, User } from 'lucide-svelte';
+    import { Music, Disc, User, Tag } from 'lucide-svelte';
 
     const tabs = [
         { label: 'Tracks', path: '/library/tracks', icon: Music },
         { label: 'Albums', path: '/library/albums', icon: Disc },
         { label: 'Artists', path: '/library/artists', icon: User },
+        { label: 'Genres', path: '/library/genres', icon: Tag },
     ];
 
     const isActive = (path: string) => (route.pathname || '').startsWith(path);

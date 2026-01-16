@@ -79,6 +79,16 @@ export interface AlbumReference {
 export interface AlbumList2 {
     album: AlbumReference[];
 }
+
+export interface GenreReference {
+    value: string;
+    songCount: number;
+    albumCount: number;
+}
+
+export interface GenresResponse {
+    genre: GenreReference[];
+}
 export interface SearchResult3 {
     song?: Song[];
     album?: AlbumReference[];
@@ -90,4 +100,5 @@ export interface SubsonicResponse {
     version: string;
     searchResult3?: SearchResult3;
     albumList2?: AlbumList2;
+    genres?: GenresResponse;
 }
