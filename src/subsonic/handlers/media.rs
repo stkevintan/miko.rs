@@ -104,7 +104,7 @@ async fn get_song_path_or_error(
 #[handler]
 pub async fn stream(
     db: Data<&DatabaseConnection>,
-    params: Query<SubsonicParams>,
+    params: Data<&SubsonicParams>,
     query: Query<IdQuery>,
     file_req: StaticFileRequest,
 ) -> impl IntoResponse {
@@ -135,7 +135,7 @@ pub async fn stream(
 #[handler]
 pub async fn download(
     db: Data<&DatabaseConnection>,
-    params: Query<SubsonicParams>,
+    params: Data<&SubsonicParams>,
     query: Query<IdQuery>,
     file_req: StaticFileRequest,
 ) -> impl IntoResponse {
@@ -186,7 +186,7 @@ pub async fn download(
 pub async fn get_cover_art(
     db: Data<&DatabaseConnection>,
     config: Data<&Arc<Config>>,
-    params: Query<SubsonicParams>,
+    params: Data<&SubsonicParams>,
     query: Query<IdQuery>,
     file_req: StaticFileRequest,
 ) -> impl IntoResponse {
@@ -259,7 +259,7 @@ pub async fn get_cover_art(
 #[handler]
 pub async fn get_lyrics(
     db: Data<&DatabaseConnection>,
-    params: Query<SubsonicParams>,
+    params: Data<&SubsonicParams>,
     query: Query<LyricsQuery>,
 ) -> impl IntoResponse {
     let artist_name = &query.artist;
@@ -305,7 +305,7 @@ fn some_artist_name_or_default(artist: &Option<String>) -> Option<String> {
 #[handler]
 pub async fn get_lyrics_by_song_id(
     db: Data<&DatabaseConnection>,
-    params: Query<SubsonicParams>,
+    params: Data<&SubsonicParams>,
     query: Query<IdQuery>,
 ) -> impl IntoResponse {
     let id = &query.id;
@@ -356,7 +356,7 @@ pub async fn get_lyrics_by_song_id(
 #[handler]
 pub async fn get_avatar(
     config: Data<&Arc<Config>>,
-    _params: Query<SubsonicParams>,
+    _params: Data<&SubsonicParams>,
     query: Query<UsernameQuery>,
     file_req: StaticFileRequest,
 ) -> impl IntoResponse {

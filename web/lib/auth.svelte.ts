@@ -1,5 +1,5 @@
 import { navigate } from '../router';
-import { subsonic } from './api';
+import { api } from './api';
 import type { UserProfile } from './types';
 
 function parseTokenUsername(token: string | null): string | null {
@@ -32,7 +32,7 @@ class AuthStore {
 
         this.loading = true;
         try {
-            const resp = await subsonic.get<{ user: UserProfile }>('/getUser', {
+            const resp = await api.get<{ user: UserProfile }>('/getUser', {
                 params: { username },
             });
             this.user = resp.data.user;

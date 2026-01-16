@@ -21,7 +21,7 @@ pub struct GetUserQuery {
 pub async fn get_users(
     db: Data<&DatabaseConnection>,
     current_user: Data<&Arc<user::Model>>,
-    params: Query<SubsonicParams>,
+    params: Data<&SubsonicParams>,
 ) -> impl IntoResponse {
     if !current_user.admin_role {
         return send_response(
@@ -62,7 +62,7 @@ pub async fn get_users(
 pub async fn get_user(
     db: Data<&DatabaseConnection>,
     current_user: Data<&Arc<user::Model>>,
-    params: Query<SubsonicParams>,
+    params: Data<&SubsonicParams>,
     query: Query<GetUserQuery>,
 ) -> impl IntoResponse {
     let username = &query.username;

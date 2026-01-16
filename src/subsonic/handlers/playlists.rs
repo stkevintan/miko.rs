@@ -19,7 +19,7 @@ pub struct GetPlaylistsParams {
 pub async fn get_playlists(
     service: Data<&Arc<Service>>,
     current_user: Data<&Arc<user::Model>>,
-    params: Query<SubsonicParams>,
+    params: Data<&SubsonicParams>,
     query: Query<GetPlaylistsParams>,
 ) -> impl IntoResponse {
     let username = &current_user.username;
@@ -49,7 +49,7 @@ pub struct GetPlaylistParams {
 #[handler]
 pub async fn get_playlist(
     service: Data<&Arc<Service>>,
-    params: Query<SubsonicParams>,
+    params: Data<&SubsonicParams>,
     query: Query<GetPlaylistParams>,
 ) -> impl IntoResponse {
     match service.get_playlist(query.id).await {
@@ -82,7 +82,7 @@ pub struct CreatePlaylistParams {
 pub async fn create_playlist(
     service: Data<&Arc<Service>>,
     current_user: Data<&Arc<user::Model>>,
-    params: Query<SubsonicParams>,
+    params: Data<&SubsonicParams>,
     query: Query<CreatePlaylistParams>,
 ) -> impl IntoResponse {
     let name = query.name.clone();
@@ -120,7 +120,7 @@ pub struct UpdatePlaylistParams {
 pub async fn update_playlist(
     service: Data<&Arc<Service>>,
     current_user: Data<&Arc<user::Model>>,
-    params: Query<SubsonicParams>,
+    params: Data<&SubsonicParams>,
     query: Query<UpdatePlaylistParams>,
 ) -> impl IntoResponse {
     let username = &current_user.username;
@@ -157,7 +157,7 @@ pub struct DeletePlaylistParams {
 pub async fn delete_playlist(
     service: Data<&Arc<Service>>,
     current_user: Data<&Arc<user::Model>>,
-    params: Query<SubsonicParams>,
+    params: Data<&SubsonicParams>,
     query: Query<DeletePlaylistParams>,
 ) -> impl IntoResponse {
     let username = &current_user.username;

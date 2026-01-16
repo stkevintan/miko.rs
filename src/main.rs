@@ -9,12 +9,12 @@ mod subsonic;
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
-use migration::{Migrator, MigratorTrait};
-use crate::service::Service;
 use crate::config::Config;
 use crate::models::{music_folder, user};
 use crate::scanner::Scanner;
+use crate::service::Service;
 use chrono::Utc;
+use migration::{Migrator, MigratorTrait};
 use poem::{
     listener::TcpListener,
     middleware::{Cors, Tracing},
@@ -150,7 +150,7 @@ async fn main() -> Result<(), anyhow::Error> {
 
     let app = Route::new()
         .nest("/rest", subsonic::create_route())
-        .nest("/api", api::create_route())
+        .nest("/api", api::create_route(Some(subsonic::base_routes())))
         .nest("/", api::web::create_route())
         .data(db)
         .data(config)

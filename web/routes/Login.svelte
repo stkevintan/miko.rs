@@ -1,7 +1,7 @@
 <script lang="ts">
     import { navigate } from '../router';
     import { onMount } from 'svelte';
-    import api from '../lib/api';
+    import { api } from '../lib/api';
     import ThemeSwitcher from '../components/ui/ThemeSwitcher.svelte';
 
     let username = $state('');
@@ -24,7 +24,7 @@
                 password,
             });
             localStorage.setItem('token', response.data.token);
-            
+
             navigate('/');
         } catch (e: any) {
             error = e.response?.data?.error || 'Login failed';

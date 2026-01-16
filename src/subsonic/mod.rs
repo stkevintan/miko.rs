@@ -1,11 +1,11 @@
 #[macro_use]
 pub mod common;
-pub mod models;
-pub mod handlers;
 pub mod auth;
+pub mod handlers;
 pub mod middleware;
+pub mod models;
 
-use poem::{Route, EndpointExt};
+use poem::{EndpointExt, Route};
 
 macro_rules! subsonic_routes {
     ($route:expr, $(($path:literal, $handler:expr)),* $(,)?) => {
@@ -21,13 +21,16 @@ use crate::subsonic::handlers::{
     annotation, bookmarks, browsing, lists, media, playlists, scan, search, shared, system, user,
 };
 
-pub fn create_route() -> Route {
-    let route = subsonic_routes!(
+pub fn base_routes() -> Route {
+    subsonic_routes!(
         Route::new(),
         // system
         ("/ping", system::ping),
         ("/getLicense", system::get_license),
-        ("/getOpenSubsonicExtensions", system::get_open_subsonic_extensions),
+        (
+            "/getOpenSubsonicExtensions",
+            system::get_open_subsonic_extensions
+        ),
         // browsing
         ("/getMusicFolders", browsing::get_music_folders),
         ("/getIndexes", browsing::get_indexes),
@@ -46,7 +49,6 @@ pub fn create_route() -> Route {
         ("/getSimilarSongs", browsing::get_similar_songs),
         ("/getSimilarSongs2", browsing::get_similar_songs2),
         ("/getTopSongs", browsing::get_top_songs),
-
         // media retrieval
         ("/stream", media::stream),
         ("/download", media::download),
@@ -56,7 +58,6 @@ pub fn create_route() -> Route {
         ("/getLyrics", media::get_lyrics),
         ("/getLyricsBySongId", media::get_lyrics_by_song_id),
         ("/getAvatar", media::get_avatar),
-
         // playlists
         ("/getPlaylists", playlists::get_playlists),
         ("/getPlaylist", playlists::get_playlist),
@@ -72,7 +73,6 @@ pub fn create_route() -> Route {
         ("/search3", search::search3),
         ("/getChatMessages", shared::not_implemented),
         ("/addChatMessage", shared::not_implemented),
-
         // user management
         ("/getUser", user::get_user),
         ("/getUsers", user::get_users),
@@ -80,7 +80,6 @@ pub fn create_route() -> Route {
         ("/updateUser", shared::not_implemented),
         ("/deleteUser", shared::not_implemented),
         ("/changePassword", shared::not_implemented),
-
         // list
         ("/getAlbumList", lists::get_album_list),
         ("/getAlbumList2", lists::get_album_list2),
@@ -89,7 +88,6 @@ pub fn create_route() -> Route {
         ("/getNowPlaying", lists::get_now_playing),
         ("/getStarred", lists::get_starred),
         ("/getStarred2", lists::get_starred2),
-
         // annotation
         ("/star", annotation::star),
         ("/unstar", annotation::unstar),
@@ -101,6 +99,14 @@ pub fn create_route() -> Route {
         ("/deleteBookmark", bookmarks::delete_bookmark),
         ("/getPlayQueue", bookmarks::get_play_queue),
         ("/savePlayQueue", bookmarks::save_play_queue),
-    );
-    Route::new().nest("/", route.with(middleware::SubsonicAuth))
+    )
+}
+
+pub fn create_route() -> Route {
+    Route::new().nest(
+        "/",
+        base_routes()
+            .with(middleware::SubsonicAuth)
+            .with(middleware::SubsonicParamsMiddleware),
+    )
 }

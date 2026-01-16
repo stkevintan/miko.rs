@@ -3,14 +3,14 @@
     import { Play } from 'lucide-svelte';
     import DashboardCard from './DashboardCard.svelte';
     import CoverArt from './CoverArt.svelte';
-    import { subsonic } from '../lib/api';
+    import { api } from '../lib/api';
 
     let sessions = $state<any[]>([]);
     let pollInterval: number | null = null;
 
     async function fetchSessions() {
         try {
-            const res = await subsonic.get('/getNowPlaying');
+            const res = await api.get('/getNowPlaying');
             const data = res.data.nowPlaying;
             if (data && data.entry) {
                 // Handle both single object and array of objects
