@@ -3,7 +3,6 @@ pub mod handlers;
 pub mod models;
 pub mod web;
 
-use crate::subsonic::common::SubsonicParams;
 use poem::{post, EndpointExt, Route};
 
 pub fn create_route(subsonic_routes: Option<Route>) -> Route {
@@ -13,7 +12,7 @@ pub fn create_route(subsonic_routes: Option<Route>) -> Route {
         .at("/folders", handlers::system::get_folders);
 
     if let Some(subsonic_routes) = subsonic_routes {
-        auth_routes = auth_routes.nest("/", subsonic_routes.data(SubsonicParams::default()));
+        auth_routes = auth_routes.nest("/", subsonic_routes);
     }
 
     let auth_routes = auth_routes.with(auth::AuthMiddleware);
