@@ -33,19 +33,6 @@ api.interceptors.response.use(
     },
 );
 
-// export const subsonic = axios.create({
-//     baseURL: '/rest',
-// });
-
-// subsonic.interceptors.request.use((config) => {
-//     config.params = {
-//         ...config.params,
-//         f: 'json',
-//         v: '1.16.1',
-//         c: 'miko-web',
-//     };
-//     return setAuthToken(config);
-// });
 
 api.interceptors.response.use(
     (response) => {
