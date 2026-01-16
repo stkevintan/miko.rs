@@ -6,7 +6,7 @@
     let { song }: { song: Song } = $props();
 </script>
 
-<div class="flex items-center gap-3 py-1">
+<div class="flex items-center gap-3 py-1 min-w-0 overflow-hidden">
     <div class="relative group/cover transition-shadow shrink-0">
         <CoverArt 
             id={song.coverArt} 
@@ -20,6 +20,5 @@
     </div>
     <div class="min-w-0">
         <div class="text-sm font-semibold text-gray-900 dark:text-white truncate">{song.title}</div>
-        <div class="text-xs text-gray-500 dark:text-gray-400 truncate md:hidden">{song.artist}</div>
     </div>
 </div>

@@ -11,7 +11,7 @@
 
     onMount(() => {
         if (localStorage.getItem('token')) {
-            navigate('/dashboard');
+            navigate('/');
         }
     });
 
@@ -24,8 +24,8 @@
                 password,
             });
             localStorage.setItem('token', response.data.token);
-            localStorage.setItem('username', username);
-            navigate('/dashboard');
+            
+            navigate('/');
         } catch (e: any) {
             error = e.response?.data?.error || 'Login failed';
         } finally {
