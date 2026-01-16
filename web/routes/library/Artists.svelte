@@ -17,12 +17,11 @@
         librarySearchTrigger,
     } from '../../lib/librarySearch';
     import { libraryViewMode, setLibraryViewKey } from '../../lib/libraryView';
-    import LibraryViewToggle from '@/components/library/LibraryViewToggle.svelte';
 
     let artists = $state<ArtistReference[]>([]);
     let loading = $state(true);
     let totalArtists = $state(0);
-    let pageSize = $state(20);
+    let pageSize = $state(50);
     let currentPage = $state(0);
     let searchQuery = $state('');
 
@@ -91,15 +90,6 @@
         fetchArtists(searchQuery);
     });
 </script>
-
-<div class="flex items-center mb-4 gap-6">
-    <h2
-        class="mr-auto text-sm font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400"
-    >
-        Artists
-    </h2>
-    <LibraryViewToggle />
-</div>
 
 <div
     class="flex-1 min-h-0 overflow-hidden bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm flex flex-col relative"

@@ -7,13 +7,15 @@
     import DataTable from '../../components/ui/DataTable.svelte';
     import GridList from '../../components/ui/GridList.svelte';
     import Pagination from '../../components/ui/Pagination.svelte';
-    import { librarySearchQuery, librarySearchTrigger } from '../../lib/librarySearch';
+    import {
+        librarySearchQuery,
+        librarySearchTrigger,
+    } from '../../lib/librarySearch';
     import { libraryViewMode, setLibraryViewKey } from '../../lib/libraryView';
-    import LibraryViewToggle from '../../components/library/LibraryViewToggle.svelte';
 
     let genres = $state<GenreReference[]>([]);
     let loading = $state(true);
-    let pageSize = $state(20);
+    let pageSize = $state(50);
     let currentPage = $state(0);
     let searchQuery = $state('');
 
@@ -65,14 +67,9 @@
     });
 </script>
 
-<div class="flex items-center gap-6 mb-4">
-    <h2 class="mr-auto text-sm font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
-        Genres
-    </h2>
-    <LibraryViewToggle />
-</div>
-
-<div class="flex-1 min-h-0 overflow-hidden bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm flex flex-col relative">
+<div
+    class="flex-1 min-h-0 overflow-hidden bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm flex flex-col relative"
+>
     {#if $libraryViewMode === 'table'}
         <DataTable
             data={pagedGenres}
@@ -90,10 +87,17 @@
             {#snippet row(genre)}
                 <td class="px-4 py-3">
                     <div class="flex items-center gap-3">
-                        <div class="w-10 h-10 rounded-lg bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
-                            <Tag size={18} class="text-gray-500 dark:text-gray-400" />
+                        <div
+                            class="w-10 h-10 rounded-lg bg-gray-100 dark:bg-gray-800 flex items-center justify-center"
+                        >
+                            <Tag
+                                size={18}
+                                class="text-gray-500 dark:text-gray-400"
+                            />
                         </div>
-                        <div class="text-sm font-semibold text-gray-900 dark:text-white truncate">
+                        <div
+                            class="text-sm font-semibold text-gray-900 dark:text-white truncate"
+                        >
                             {genre.value}
                         </div>
                     </div>
@@ -128,7 +132,9 @@
             {#snippet emptyState()}
                 <div class="flex flex-col items-center justify-center py-12">
                     <Tag class="text-gray-300 mb-4" size={48} />
-                    <p class="text-gray-500 text-lg font-medium">No genres found</p>
+                    <p class="text-gray-500 text-lg font-medium">
+                        No genres found
+                    </p>
                     <p class="text-gray-400 text-sm mt-1">
                         Try a different search query
                     </p>
@@ -136,14 +142,20 @@
             {/snippet}
 
             {#snippet item(genre)}
-                <div class="w-10 h-10 rounded-lg bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
+                <div
+                    class="w-10 h-10 rounded-lg bg-gray-100 dark:bg-gray-800 flex items-center justify-center"
+                >
                     <Tag size={18} class="text-gray-500 dark:text-gray-400" />
                 </div>
                 <div class="mt-3 min-w-0">
-                    <div class="text-sm font-semibold text-gray-900 dark:text-white truncate">
+                    <div
+                        class="text-sm font-semibold text-gray-900 dark:text-white truncate"
+                    >
                         {genre.value}
                     </div>
-                    <div class="text-xs text-gray-500 dark:text-gray-400 truncate">
+                    <div
+                        class="text-xs text-gray-500 dark:text-gray-400 truncate"
+                    >
                         {genre.albumCount} albums • {genre.songCount} songs
                     </div>
                 </div>

@@ -10,7 +10,7 @@ mod subsonic;
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 use crate::config::Config;
-use crate::models::{music_folder, user};
+use crate::models::user;
 use crate::scanner::Scanner;
 use crate::service::Service;
 use chrono::Utc;
@@ -20,10 +20,7 @@ use poem::{
     middleware::{Cors, Tracing},
     EndpointExt, Route, Server,
 };
-use sea_orm::{
-    ActiveModelTrait, ColumnTrait, Database, DatabaseConnection, EntityTrait, PaginatorTrait,
-    QueryFilter, Set,
-};
+use sea_orm::{ActiveModelTrait, Database, DatabaseConnection, EntityTrait, PaginatorTrait, Set};
 use std::sync::Arc;
 
 async fn init_default_user(
@@ -59,34 +56,6 @@ async fn init_default_user(
 
         admin.insert(db).await?;
         log::info!("Default admin user created");
-    }
-    Ok(())
-}
-
-async fn init_music_folders(
-    db: &DatabaseConnection,
-    folders: &[String],
-) -> Result<(), anyhow::Error> {
-    for path in folders {
-        let exists = music_folder::Entity::find()
-            .filter(music_folder::Column::Path.eq(path))
-            .one(db)
-            .await?;
-
-        if exists.is_none() {
-            log::info!("Adding music folder from config: {}", path);
-            let name = std::path::Path::new(path)
-                .file_name()
-                .map(|n| n.to_string_lossy().to_string())
-                .unwrap_or_else(|| "Music".to_string());
-
-            let folder = music_folder::ActiveModel {
-                path: Set(path.clone()),
-                name: Set(Some(name)),
-                ..Default::default()
-            };
-            folder.insert(db).await?;
-        }
     }
     Ok(())
 }
@@ -137,9 +106,6 @@ async fn main() -> Result<(), anyhow::Error> {
     init_default_user(&db, &config.server.password_secret)
         .await
         .expect("Failed to initialize default user");
-    init_music_folders(&db, &config.subsonic.folders)
-        .await
-        .expect("Failed to initialize music folders");
 
     let scanner = Arc::new(Scanner::new(db.clone(), config.clone()));
     let service = Arc::new(Service::new(db.clone()));
@@ -150,7 +116,10 @@ async fn main() -> Result<(), anyhow::Error> {
 
     let app = Route::new()
         .nest("/rest", subsonic::create_route())
-        .nest("/api", api::create_route(Some(subsonic::create_api_route())))
+        .nest(
+            "/api",
+            api::create_route(Some(subsonic::create_api_route())),
+        )
         .nest("/", api::web::create_route())
         .data(db)
         .data(config)

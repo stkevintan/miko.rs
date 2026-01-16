@@ -15,31 +15,17 @@
     import Pagination from '../../components/ui/Pagination.svelte';
     import { Music } from 'lucide-svelte';
     import { libraryViewMode, setLibraryViewKey } from '../../lib/libraryView';
-    import LibraryViewToggle from '@/components/library/LibraryViewToggle.svelte';
     import {
         librarySearchQuery,
         librarySearchTrigger,
     } from '../../lib/librarySearch';
-
-    const sortOptions = [
-        { label: 'Newest', value: 'newest' },
-        { label: 'Recently Played', value: 'recent' },
-        { label: 'Most Played', value: 'frequent' },
-        { label: 'Random', value: 'random' },
-        { label: 'Starred', value: 'starred' },
-        { label: 'A–Z (Album)', value: 'alphabeticalByName' },
-        { label: 'A–Z (Artist)', value: 'alphabeticalByArtist' },
-        { label: 'By Year', value: 'byYear' },
-    ] as const;
-
-    type AlbumSortType = (typeof sortOptions)[number]['value'];
+    import { albumSortState } from '../../lib/albumSort.svelte';
 
     let albums = $state<AlbumReference[]>([]);
     let loading = $state(true);
     let totalAlbums = $state(0);
-    let pageSize = $state(20);
+    let pageSize = $state(50);
     let currentPage = $state(0);
-    let sortType = $state<AlbumSortType>('newest');
     let searchQuery = $state('');
 
     async function fetchStats() {
@@ -69,13 +55,16 @@
                 });
                 albums = response.data.searchResult3?.album ?? [];
             } else {
-                const response = await api.get<SubsonicResponse>('/getAlbumList2', {
-                    params: {
-                        type: sortType,
-                        size: pageSize,
-                        offset: currentPage * pageSize,
+                const response = await api.get<SubsonicResponse>(
+                    '/getAlbumList2',
+                    {
+                        params: {
+                            type: albumSortState.type,
+                            size: pageSize,
+                            offset: currentPage * pageSize,
+                        },
                     },
-                });
+                );
                 albums = response.data.albumList2?.album ?? [];
             }
         } catch (error) {
@@ -95,11 +84,6 @@
         currentPage = 0;
     }
 
-    function handleSortChange(event: Event) {
-        sortType = (event.target as HTMLSelectElement).value as AlbumSortType;
-        currentPage = 0;
-    }
-
     onMount(() => {
         setLibraryViewKey('albums');
         fetchStats();
@@ -113,37 +97,12 @@
 
     $effect(() => {
         searchQuery;
-        sortType;
+        albumSortState.type;
         currentPage;
         pageSize;
         fetchAlbums();
     });
 </script>
-
-<div class="flex items-center mb-4 gap-6">
-      <h2 class="mr-auto text-sm font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
-        Albums
-    </h2>
-    <div class="flex items-center justify-start">
-        <label
-            class="text-sm text-gray-500 dark:text-gray-400 mr-2"
-            for="albumSort"
-        >
-            Sort by
-        </label>
-        <select
-            id="albumSort"
-            value={sortType}
-            onchange={handleSortChange}
-            class="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white px-3 py-2 focus:ring-2 focus:ring-orange-500"
-        >
-            {#each sortOptions as option}
-                <option value={option.value}>{option.label}</option>
-            {/each}
-        </select>
-    </div>
-    <LibraryViewToggle />
-</div>
 
 <div
     class="flex-1 min-h-0 overflow-hidden bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm flex flex-col relative"

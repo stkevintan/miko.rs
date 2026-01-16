@@ -15,12 +15,11 @@
         librarySearchTrigger,
     } from '../../lib/librarySearch';
     import { libraryViewMode, setLibraryViewKey } from '../../lib/libraryView';
-    import LibraryViewToggle from '@/components/library/LibraryViewToggle.svelte';
 
     let songs = $state<Song[]>([]);
     let loading = $state(true);
     let totalSongs = $state(0);
-    let pageSize = $state(20);
+    let pageSize = $state(50);
     let currentPage = $state(0);
     let searchQuery = $state('');
 
@@ -89,13 +88,6 @@
         fetchSongs(searchQuery);
     });
 </script>
-
-<div class="flex items-center gap-6 mb-4">
-      <h2 class="mr-auto text-sm font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
-        Tracks
-    </h2>
-    <LibraryViewToggle />
-</div>
 <div
     class="flex-1 min-h-0 overflow-hidden bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm flex flex-col relative"
 >
