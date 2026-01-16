@@ -107,7 +107,7 @@ fn base_routes() -> Route {
 }
 
 pub fn create_api_route() -> Route {
-    Route::new().nest("/", create_route().data(SubsonicParams::default()))
+    Route::new().nest("/", base_routes().data(SubsonicParams::default()))
 }
 
 pub fn create_route() -> Route {
