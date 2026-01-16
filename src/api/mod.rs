@@ -13,7 +13,7 @@ pub fn create_route(subsonic_routes: Option<Route>) -> Route {
         .at("/folders", handlers::system::get_folders);
 
     if let Some(subsonic_routes) = subsonic_routes {
-        auth_routes = auth_routes.nest("/", subsonic_routes.with(crate::subsonic::middleware::SubsonicParamsMiddleware));
+        auth_routes = auth_routes.nest("/", subsonic_routes.data(SubsonicParams::default()));
     }
 
     let auth_routes = auth_routes.with(auth::AuthMiddleware);
