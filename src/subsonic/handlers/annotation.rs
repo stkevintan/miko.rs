@@ -71,7 +71,7 @@ async fn update_starred_status(
 #[handler]
 pub async fn star(
     db: Data<&DatabaseConnection>,
-    params: Query<SubsonicParams>,
+    params: Data<&SubsonicParams>,
     query: Query<StarQuery>,
 ) -> impl IntoResponse {
     let now = chrono::Utc::now();
@@ -93,7 +93,7 @@ pub async fn star(
 #[handler]
 pub async fn unstar(
     db: Data<&DatabaseConnection>,
-    params: Query<SubsonicParams>,
+    params: Data<&SubsonicParams>,
     query: Query<StarQuery>,
 ) -> impl IntoResponse {
     match update_starred_status(db.0, query.0, None).await {
@@ -114,7 +114,7 @@ pub async fn unstar(
 #[handler]
 pub async fn set_rating(
     db: Data<&DatabaseConnection>,
-    params: Query<SubsonicParams>,
+    params: Data<&SubsonicParams>,
     query: Query<SetRatingQuery>,
 ) -> impl IntoResponse {
     use crate::models::{album, artist, child};
@@ -206,7 +206,7 @@ pub async fn set_rating(
 #[handler]
 pub async fn scrobble(
     db: Data<&DatabaseConnection>,
-    params: Query<SubsonicParams>,
+    params: Data<&SubsonicParams>,
     query: Query<ScrobbleQuery>,
 ) -> impl IntoResponse {
     use crate::models::{child, now_playing};

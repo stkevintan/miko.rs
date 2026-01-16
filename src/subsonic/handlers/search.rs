@@ -53,7 +53,7 @@ pub struct SearchQuery {
 #[handler]
 pub async fn search3(
     service: Data<&Arc<Service>>,
-    params: Query<SubsonicParams>,
+    params: Data<&SubsonicParams>,
     query: Query<Search23Query>,
 ) -> impl IntoResponse {
     let opts = SearchOptions::from(query.0);
@@ -81,7 +81,7 @@ pub async fn search3(
 #[handler]
 pub async fn search2(
     service: Data<&Arc<Service>>,
-    params: Query<SubsonicParams>,
+    params: Data<&SubsonicParams>,
     query: Query<Search23Query>,
 ) -> impl IntoResponse {
     let opts = SearchOptions::from(query.0);
@@ -115,7 +115,7 @@ pub async fn search2(
 #[handler]
 pub async fn search(
     service: Data<&Arc<Service>>,
-    params: Query<SubsonicParams>,
+    params: Data<&SubsonicParams>,
     query: Query<SearchQuery>,
 ) -> impl IntoResponse {
     let q = &query.query;

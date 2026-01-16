@@ -9,7 +9,7 @@
     import { authStore } from '../lib/auth.svelte';
     import { toast } from '../lib/toast.svelte';
 
-    import api from '../lib/api';
+    import { api } from '../lib/api';
     import type { Stats } from '../lib/types';
     import { Music, User, Disc, Tag } from 'lucide-svelte';
 

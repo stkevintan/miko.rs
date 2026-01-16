@@ -47,7 +47,7 @@ pub struct ArtistQuery {
 #[handler]
 pub async fn get_music_folders(
     db: Data<&DatabaseConnection>,
-    params: Query<SubsonicParams>,
+    params: Data<&SubsonicParams>,
 ) -> impl IntoResponse {
     let folders = match music_folder::Entity::find().all(*db).await {
         Ok(f) => f,
@@ -77,7 +77,7 @@ pub async fn get_indexes(
     service: Data<&Arc<Service>>,
     config: Data<&Arc<Config>>,
     scanner: Data<&Arc<Scanner>>,
-    params: Query<SubsonicParams>,
+    params: Data<&SubsonicParams>,
     query: Query<GetIndexesQuery>,
 ) -> impl IntoResponse {
     let music_folder_id = query.music_folder_id;
@@ -118,7 +118,7 @@ pub async fn get_indexes(
 #[handler]
 pub async fn get_music_directory(
     service: Data<&Arc<Service>>,
-    params: Query<SubsonicParams>,
+    params: Data<&SubsonicParams>,
     query: Query<GetMusicDirectoryQuery>,
 ) -> impl IntoResponse {
     let id = &query.id;
@@ -154,7 +154,7 @@ pub async fn get_music_directory(
 #[handler]
 pub async fn get_genres(
     service: Data<&Arc<Service>>,
-    params: Query<SubsonicParams>,
+    params: Data<&SubsonicParams>,
 ) -> impl IntoResponse {
     let genres = match service.get_genres().await {
         Ok(g) => g,
@@ -178,7 +178,7 @@ pub async fn get_genres(
 pub async fn get_artists(
     service: Data<&Arc<Service>>,
     config: Data<&Arc<Config>>,
-    params: Query<SubsonicParams>,
+    params: Data<&SubsonicParams>,
 ) -> impl IntoResponse {
     match service.get_artists(&config.subsonic.ignored_articles).await {
         Ok(indexes) => {
@@ -210,7 +210,7 @@ pub async fn get_artists(
 #[handler]
 pub async fn get_artist(
     service: Data<&Arc<Service>>,
-    params: Query<SubsonicParams>,
+    params: Data<&SubsonicParams>,
     query: Query<IdQuery>,
 ) -> impl IntoResponse {
     let id = &query.id;
@@ -238,7 +238,7 @@ pub async fn get_artist(
 #[handler]
 pub async fn get_album(
     service: Data<&Arc<Service>>,
-    params: Query<SubsonicParams>,
+    params: Data<&SubsonicParams>,
     query: Query<IdQuery>,
 ) -> impl IntoResponse {
     let id = &query.id;
@@ -265,7 +265,7 @@ pub async fn get_album(
 #[handler]
 pub async fn get_song(
     service: Data<&Arc<Service>>,
-    params: Query<SubsonicParams>,
+    params: Data<&SubsonicParams>,
     query: Query<IdQuery>,
 ) -> impl IntoResponse {
     let id = &query.id;
@@ -287,7 +287,7 @@ pub async fn get_song(
 
 #[handler]
 pub async fn get_artist_info(
-    params: Query<SubsonicParams>,
+    params: Data<&SubsonicParams>,
     _query: Query<IdQuery>,
 ) -> impl IntoResponse {
     let resp = SubsonicResponse::new_ok(SubsonicResponseBody::ArtistInfo(ArtistInfo::default()));
@@ -296,7 +296,7 @@ pub async fn get_artist_info(
 
 #[handler]
 pub async fn get_artist_info2(
-    params: Query<SubsonicParams>,
+    params: Data<&SubsonicParams>,
     _query: Query<IdQuery>,
 ) -> impl IntoResponse {
     let resp = SubsonicResponse::new_ok(SubsonicResponseBody::ArtistInfo2(ArtistInfo2::default()));
@@ -305,7 +305,7 @@ pub async fn get_artist_info2(
 
 #[handler]
 pub async fn get_album_info(
-    params: Query<SubsonicParams>,
+    params: Data<&SubsonicParams>,
     _query: Query<IdQuery>,
 ) -> impl IntoResponse {
     let resp = SubsonicResponse::new_ok(SubsonicResponseBody::AlbumInfo(AlbumInfo::default()));
@@ -314,7 +314,7 @@ pub async fn get_album_info(
 
 #[handler]
 pub async fn get_album_info2(
-    params: Query<SubsonicParams>,
+    params: Data<&SubsonicParams>,
     _query: Query<IdQuery>,
 ) -> impl IntoResponse {
     let resp = SubsonicResponse::new_ok(SubsonicResponseBody::AlbumInfo(AlbumInfo::default()));
@@ -323,7 +323,7 @@ pub async fn get_album_info2(
 
 #[handler]
 pub async fn get_similar_songs(
-    params: Query<SubsonicParams>,
+    params: Data<&SubsonicParams>,
     _query: Query<IdQuery>,
 ) -> impl IntoResponse {
     let resp = SubsonicResponse::new_ok(SubsonicResponseBody::SimilarSongs(SimilarSongs::default()));
@@ -332,7 +332,7 @@ pub async fn get_similar_songs(
 
 #[handler]
 pub async fn get_similar_songs2(
-    params: Query<SubsonicParams>,
+    params: Data<&SubsonicParams>,
     _query: Query<IdQuery>,
 ) -> impl IntoResponse {
     let resp = SubsonicResponse::new_ok(SubsonicResponseBody::SimilarSongs2(SimilarSongs2::default()));
@@ -342,7 +342,7 @@ pub async fn get_similar_songs2(
 #[handler]
 pub async fn get_top_songs(
     service: Data<&Arc<Service>>,
-    params: Query<SubsonicParams>,
+    params: Data<&SubsonicParams>,
     query: Query<ArtistQuery>,
 ) -> impl IntoResponse {
     let count = query.count.unwrap_or(50);

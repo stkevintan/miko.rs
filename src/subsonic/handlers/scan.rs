@@ -15,7 +15,7 @@ pub struct StartScanQuery {
 #[handler]
 pub async fn get_scan_status(
     scanner: Data<&Arc<Scanner>>,
-    params: Query<SubsonicParams>,
+    params: Data<&SubsonicParams>,
 ) -> impl IntoResponse {
     let scanning = scanner.is_scanning();
     let count = scanner.scan_count();
@@ -33,7 +33,7 @@ pub async fn get_scan_status(
 #[handler]
 pub async fn start_scan(
     scanner: Data<&Arc<Scanner>>,
-    params: Query<SubsonicParams>,
+    params: Data<&SubsonicParams>,
     query: Query<StartScanQuery>,
 ) -> impl IntoResponse {
     let incremental = !query.full_scan.unwrap_or(false);

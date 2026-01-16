@@ -36,7 +36,7 @@ pub struct SavePlayQueueQuery {
 pub async fn get_bookmarks(
     service: Data<&Arc<Service>>,
     user: Data<&Arc<user::Model>>,
-    params: Query<SubsonicParams>,
+    params: Data<&SubsonicParams>,
 ) -> impl IntoResponse {
     let username = &user.username;
 
@@ -75,7 +75,7 @@ pub async fn get_bookmarks(
 pub async fn create_bookmark(
     service: Data<&Arc<Service>>,
     user: Data<&Arc<user::Model>>,
-    params: Query<SubsonicParams>,
+    params: Data<&SubsonicParams>,
     query: Query<CreateBookmarkQuery>,
 ) -> impl IntoResponse {
     let username = &user.username;
@@ -103,7 +103,7 @@ pub async fn create_bookmark(
 pub async fn delete_bookmark(
     service: Data<&Arc<Service>>,
     user: Data<&Arc<user::Model>>,
-    params: Query<SubsonicParams>,
+    params: Data<&SubsonicParams>,
     query: Query<DeleteBookmarkQuery>,
 ) -> impl IntoResponse {
     let username = &user.username;
@@ -127,7 +127,7 @@ pub async fn delete_bookmark(
 pub async fn get_play_queue(
     service: Data<&Arc<Service>>,
     user: Data<&Arc<user::Model>>,
-    params: Query<SubsonicParams>,
+    params: Data<&SubsonicParams>,
 ) -> impl IntoResponse {
     let username = &user.username;
 
@@ -176,7 +176,7 @@ pub async fn get_play_queue(
 pub async fn save_play_queue(
     service: Data<&Arc<Service>>,
     user: Data<&Arc<user::Model>>,
-    params: Query<SubsonicParams>,
+    params: Data<&SubsonicParams>,
     query: Query<SavePlayQueueQuery>,
 ) -> impl IntoResponse {
     let username = &user.username;

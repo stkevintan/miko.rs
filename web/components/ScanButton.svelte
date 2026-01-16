@@ -2,7 +2,7 @@
     import { onMount, onDestroy } from 'svelte';
     import { RefreshCw, Loader2, Zap } from 'lucide-svelte';
     import Dropdown from './ui/Dropdown.svelte';
-    import { subsonic } from '../lib/api';
+    import { api } from '../lib/api';
     import type { ScanStatus } from '../lib/types';
 
     let scanStatus = $state<ScanStatus | null>(null);
@@ -10,7 +10,7 @@
 
     async function fetchScanStatus() {
         try {
-            const res = await subsonic.get('/getScanStatus');
+            const res = await api.get('/getScanStatus');
             const data = res.data.scanStatus;
             // Map Subsonic ScanStatus to our ScanStatus type
             scanStatus = {
@@ -26,7 +26,7 @@
     async function startScan(full = false) {
         if (scanStatus?.scanning) return;
         try {
-            await subsonic.get('/startScan', {
+            await api.get('/startScan', {
                 params: {
                     fullScan: full
                 }

@@ -3,7 +3,7 @@
     import DashboardCard from './DashboardCard.svelte';
     import { Folder } from 'lucide-svelte';
     import type { FolderInfo } from '../lib/types';
-    import api from '../lib/api';
+    import { api } from '../lib/api';
     import { toast } from '../lib/toast.svelte';
 
     let folders = $state<FolderInfo[]>([]);

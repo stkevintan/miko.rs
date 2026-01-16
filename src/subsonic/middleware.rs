@@ -1,4 +1,3 @@
-use crate::api::auth::verify_jwt;
 use crate::config::Config;
 use crate::models::user;
 use crate::subsonic::auth::{verify_password, verify_token};
@@ -10,11 +9,38 @@ use std::sync::Arc;
 
 pub struct SubsonicAuth;
 
+pub struct SubsonicParamsMiddleware;
+
 impl<E: Endpoint> Middleware<E> for SubsonicAuth {
     type Output = SubsonicAuthEndpoint<E>;
 
     fn transform(&self, ep: E) -> Self::Output {
         SubsonicAuthEndpoint { ep }
+    }
+}
+
+impl<E: Endpoint> Middleware<E> for SubsonicParamsMiddleware {
+    type Output = SubsonicParamsEndpoint<E>;
+
+    fn transform(&self, ep: E) -> Self::Output {
+        SubsonicParamsEndpoint { ep }
+    }
+}
+
+pub struct SubsonicParamsEndpoint<E> {
+    ep: E,
+}
+
+impl<E: Endpoint> Endpoint for SubsonicParamsEndpoint<E> {
+    type Output = Response;
+
+    async fn call(&self, mut req: Request) -> Result<Self::Output> {
+        let params =
+            serde_urlencoded::from_str::<SubsonicParams>(req.uri().query().unwrap_or_default())
+                .unwrap_or_default();
+        req.set_data(params);
+
+        self.ep.call(req).await.map(IntoResponse::into_response)
     }
 }
 
@@ -26,43 +52,39 @@ impl<E: Endpoint> Endpoint for SubsonicAuthEndpoint<E> {
     type Output = Response;
 
     async fn call(&self, mut req: Request) -> Result<Self::Output> {
+        let query = req.data::<SubsonicParams>().ok_or_else(|| {
+            poem::Error::from_status(poem::http::StatusCode::INTERNAL_SERVER_ERROR)
+        })?;
         let mut authenticated_user = None;
+        let db = req.data::<DatabaseConnection>().ok_or_else(|| {
+            poem::Error::from_status(poem::http::StatusCode::INTERNAL_SERVER_ERROR)
+        })?;
+        let config = req.data::<Arc<Config>>().ok_or_else(|| {
+            poem::Error::from_status(poem::http::StatusCode::INTERNAL_SERVER_ERROR)
+        })?;
+        let username = match &query.u {
+            Some(u) => u,
+            None => {
+                let resp = SubsonicResponse::new_error(10, "User not found".to_string());
+                return Ok(send_response(resp, &query.f));
+            }
+        };
 
-        let query =
-            serde_urlencoded::from_str::<SubsonicParams>(req.uri().query().unwrap_or_default())
-                .unwrap_or_default();
+        let user = user::Entity::find()
+            .filter(user::Column::Username.eq(username))
+            .one(db)
+            .await
+            .map_err(poem::error::InternalServerError)?;
 
-        // 1. Try JWT Auth first (easy for Web UI)
-        if let Ok(user) = verify_jwt(&req).await {
-            authenticated_user = Some(user);
-        } else {
-            // 2. Fallback to Subsonic Auth (u/p or u/t/s)
-            let db = req.data::<DatabaseConnection>().ok_or_else(|| poem::Error::from_status(poem::http::StatusCode::INTERNAL_SERVER_ERROR))?;
-            let config = req.data::<Arc<Config>>().ok_or_else(|| poem::Error::from_status(poem::http::StatusCode::INTERNAL_SERVER_ERROR))?;
-            let username = match &query.u {
-                Some(u) => u,
-                None => {
-                    let resp = SubsonicResponse::new_error(10, "User not found".to_string());
-                    return Ok(send_response(resp, &query.f));
+        if let Some(user) = user {
+            let secret_bytes = config.server.password_secret.as_bytes();
+            if let Some(password) = &query.p {
+                if verify_password(&user.password, password, secret_bytes) {
+                    authenticated_user = Some(user);
                 }
-            };
-
-            let user = user::Entity::find()
-                .filter(user::Column::Username.eq(username))
-                .one(db)
-                .await
-                .map_err(poem::error::InternalServerError)?;
-
-            if let Some(user) = user {
-                let secret_bytes = config.server.password_secret.as_bytes();
-                if let Some(password) = &query.p {
-                    if verify_password(&user.password, password, secret_bytes) {
-                        authenticated_user = Some(user);
-                    }
-                } else if let (Some(token), Some(salt)) = (&query.t, &query.s) {
-                    if verify_token(&user.password, token, salt, secret_bytes) {
-                        authenticated_user = Some(user);
-                    }
+            } else if let (Some(token), Some(salt)) = (&query.t, &query.s) {
+                if verify_token(&user.password, token, salt, secret_bytes) {
+                    authenticated_user = Some(user);
                 }
             }
         }

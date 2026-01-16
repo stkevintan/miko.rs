@@ -61,7 +61,7 @@ where
         .transpose()
 }
 
-#[derive(Deserialize, Debug, Default)]
+#[derive(Deserialize, Debug, Clone)]
 pub struct SubsonicParams {
     pub u: Option<String>,
     pub p: Option<String>,
@@ -69,6 +69,19 @@ pub struct SubsonicParams {
     pub s: Option<String>,
     pub c: Option<String>,
     pub f: Option<String>,
+}
+
+impl Default for SubsonicParams {
+    fn default() -> Self {
+        SubsonicParams {
+            u: None,
+            p: None,
+            t: None,
+            s: None,
+            c: Some("miko-api".to_string()),
+            f: Some("json".to_string()),
+        }
+    }
 }
 
 pub fn send_response(resp: SubsonicResponse, format: &Option<String>) -> Response {

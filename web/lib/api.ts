@@ -1,7 +1,7 @@
 import axios, { type InternalAxiosRequestConfig } from 'axios';
 import { authStore } from './auth.svelte';
 
-const api = axios.create({
+export const api = axios.create({
     baseURL: '/api',
 });
 
@@ -17,21 +17,21 @@ api.interceptors.response.use(
     },
 );
 
-export const subsonic = axios.create({
-    baseURL: '/rest',
-});
+// export const subsonic = axios.create({
+//     baseURL: '/rest',
+// });
 
-subsonic.interceptors.request.use((config) => {
-    config.params = {
-        ...config.params,
-        f: 'json',
-        v: '1.16.1',
-        c: 'miko-web',
-    };
-    return setAuthToken(config);
-});
+// subsonic.interceptors.request.use((config) => {
+//     config.params = {
+//         ...config.params,
+//         f: 'json',
+//         v: '1.16.1',
+//         c: 'miko-web',
+//     };
+//     return setAuthToken(config);
+// });
 
-subsonic.interceptors.response.use(
+api.interceptors.response.use(
     (response) => {
         const contentType = response.headers['content-type'];
         if (typeof contentType === 'string' && contentType.includes('application/json')) {
@@ -61,5 +61,3 @@ function setAuthToken(config: InternalAxiosRequestConfig) {
     }
     return config;
 }
-
-export default api;

@@ -1,6 +1,6 @@
 <script lang="ts">
     import { onMount } from 'svelte';
-    import api, { subsonic } from '../lib/api';
+    import { api } from '../lib/api';
     import { toast } from '../lib/toast.svelte';
     import type { Song, SubsonicResponse, Stats } from '../lib/types';
     import TitleCell from '../components/library/TitleCell.svelte';
@@ -9,7 +9,10 @@
     import Pagination from '../components/ui/Pagination.svelte';
 
     import { Music } from 'lucide-svelte';
-    import { librarySearchQuery, librarySearchTrigger } from '../lib/librarySearch';
+    import {
+        librarySearchQuery,
+        librarySearchTrigger,
+    } from '../lib/librarySearch';
 
     let songs = $state<Song[]>([]);
     let loading = $state(true);
@@ -33,7 +36,7 @@
         loading = true;
         try {
             const query = $librarySearchQuery || '';
-            const response = await subsonic.get<SubsonicResponse>('/search3', {
+            const response = await api.get<SubsonicResponse>('/search3', {
                 params: {
                     query: query,
                     albumCount: 0,
