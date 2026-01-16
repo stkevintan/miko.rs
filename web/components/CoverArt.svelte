@@ -26,7 +26,7 @@
     let imageLoaded = $state(false);
     let imageError = $state(false);
     let imageUrl = $state('');
-
+    let Icon = icon;
     // Reset state when ID changes
     $effect(() => {
         if (!id) {
@@ -61,7 +61,6 @@
     class="relative flex items-center justify-center overflow-hidden text-white shrink-0 {fallbackClass} {className}"
 >
     {#if icon}
-        {@const Icon = icon}
         <Icon {size} />
     {/if}
 

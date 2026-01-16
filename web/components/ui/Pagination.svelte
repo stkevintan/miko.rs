@@ -67,7 +67,7 @@
                 onchange={handlePageSizeChange}
                 class="bg-transparent border-none focus:ring-0 cursor-pointer font-medium text-gray-900 dark:text-white py-0 pl-0 pr-6"
             >
-                {#each [20, 50, 100, 500] as size}
+                {#each [50, 100, 500] as size}
                     <option value={size} class="bg-white dark:bg-gray-900">{size}</option>
                 {/each}
             </select>

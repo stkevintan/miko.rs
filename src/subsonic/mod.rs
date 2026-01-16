@@ -80,9 +80,9 @@ fn base_routes() -> Route {
         // user management
         ("/getUser", user::get_user),
         ("/getUsers", user::get_users),
-        ("/createUser", shared::not_implemented),
-        ("/updateUser", shared::not_implemented),
-        ("/deleteUser", shared::not_implemented),
+        ("/createUser", user::create_user),
+        ("/updateUser", user::update_user),
+        ("/deleteUser", user::delete_user),
         ("/changePassword", shared::not_implemented),
         // list
         ("/getAlbumList", lists::get_album_list),

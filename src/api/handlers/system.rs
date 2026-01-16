@@ -1,6 +1,7 @@
-use poem::{handler, web::{Data, Json, Query}};
-use sea_orm::{DatabaseConnection, EntityTrait, PaginatorTrait, ColumnTrait, QueryFilter, QuerySelect};
-use crate::models::{child, album, artist, genre, music_folder};
+use poem::{handler, web::{Data, Json, Query, Path}, http::StatusCode};
+use sea_orm::{DatabaseConnection, EntityTrait, PaginatorTrait, ColumnTrait, QueryFilter, QuerySelect, ActiveModelTrait, Set, IntoActiveModel};
+use crate::models::{child, album, artist, genre, music_folder, user};
+use crate::api::models::{CreateFolderRequest, UpdateFolderRequest};
 use serde::{Serialize, Deserialize};
 use sysinfo::System;
 use std::{collections::{HashMap, HashSet}, sync::Mutex};
@@ -38,6 +39,7 @@ pub struct SystemInfo {
 
 #[derive(Serialize)]
 pub struct FolderInfo {
+    pub id: i32,
     pub label: String,
     pub path: String,
     pub song_count: u64,
@@ -165,6 +167,7 @@ pub async fn get_folders(
         .map(|folder| {
             let song_count = count_map.get(&folder.id).cloned().unwrap_or(0);
             FolderInfo {
+                id: folder.id,
                 label: folder.name.clone().unwrap_or_else(|| folder.path.clone()),
                 path: folder.path,
                 song_count: song_count as u64,
@@ -173,4 +176,85 @@ pub async fn get_folders(
         .collect();
     
     Ok(Json(folder_infos))
+}
+
+#[handler]
+pub async fn create_folder(
+    db: Data<&DatabaseConnection>,
+    user: Data<&std::sync::Arc<user::Model>>,
+    req: Json<CreateFolderRequest>,
+) -> Result<StatusCode, poem::Error> {
+    if !user.admin_role {
+        return Err(poem::Error::from_status(StatusCode::FORBIDDEN));
+    }
+
+    let folder = music_folder::ActiveModel {
+        path: Set(req.path.clone()),
+        name: Set(req.name.clone()),
+        ..Default::default()
+    };
+
+    folder.insert(*db).await.map_err(|e| {
+        log::error!("Failed to create music folder: {}", e);
+        poem::Error::from_status(StatusCode::INTERNAL_SERVER_ERROR)
+    })?;
+
+    Ok(StatusCode::CREATED)
+}
+
+#[handler]
+pub async fn update_folder(
+    db: Data<&DatabaseConnection>,
+    user: Data<&std::sync::Arc<user::Model>>,
+    Path(id): Path<i32>,
+    req: Json<UpdateFolderRequest>,
+) -> Result<StatusCode, poem::Error> {
+    if !user.admin_role {
+        return Err(poem::Error::from_status(StatusCode::FORBIDDEN));
+    }
+
+    let folder = music_folder::Entity::find_by_id(id)
+        .one(*db)
+        .await
+        .map_err(|e| {
+            log::error!("Database error finding folder: {}", e);
+            poem::Error::from_status(StatusCode::INTERNAL_SERVER_ERROR)
+        })?
+        .ok_or_else(|| poem::Error::from_status(StatusCode::NOT_FOUND))?;
+
+    let mut active = folder.into_active_model();
+    if let Some(path) = &req.path {
+        active.path = Set(path.clone());
+    }
+    if let Some(name) = &req.name {
+        active.name = Set(Some(name.clone()));
+    }
+
+    active.update(*db).await.map_err(|e| {
+        log::error!("Failed to update music folder: {}", e);
+        poem::Error::from_status(StatusCode::INTERNAL_SERVER_ERROR)
+    })?;
+
+    Ok(StatusCode::OK)
+}
+
+#[handler]
+pub async fn delete_folder(
+    db: Data<&DatabaseConnection>,
+    user: Data<&std::sync::Arc<user::Model>>,
+    Path(id): Path<i32>,
+) -> Result<StatusCode, poem::Error> {
+    if !user.admin_role {
+        return Err(poem::Error::from_status(StatusCode::FORBIDDEN));
+    }
+
+    music_folder::Entity::delete_by_id(id)
+        .exec(*db)
+        .await
+        .map_err(|e| {
+            log::error!("Failed to delete music folder: {}", e);
+            poem::Error::from_status(StatusCode::INTERNAL_SERVER_ERROR)
+        })?;
+
+    Ok(StatusCode::NO_CONTENT)
 }

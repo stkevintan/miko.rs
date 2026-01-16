@@ -21,3 +21,22 @@ pub struct Claims {
 pub struct ErrorResponse {
     pub error: String,
 }
+
+#[derive(Debug, Deserialize)]
+pub struct UpdateProfileRequest {
+    pub email: Option<String>,
+    pub current_password: String,
+    pub new_password: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CreateFolderRequest {
+    pub path: String,
+    pub name: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdateFolderRequest {
+    pub path: Option<String>,
+    pub name: Option<String>,
+}

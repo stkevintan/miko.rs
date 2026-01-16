@@ -93,9 +93,10 @@
             </div>
         {:else}
             <div
-                class="text-center py-10 text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-700/30 rounded-xl border border-dashed border-gray-200 dark:border-gray-600"
+                class="flex flex-col items-center justify-center py-12 text-center text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-700/30 rounded-xl border border-dashed border-gray-200 dark:border-gray-600 h-full"
             >
-                No active playback sessions
+                <Play size={32} class="mb-3 opacity-20" />
+                <p class="text-sm font-medium">No active playback sessions</p>
             </div>
         {/if}
     </div>

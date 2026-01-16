@@ -43,46 +43,45 @@
     });
 </script>
 
-<div class="flex items-center justify-between mb-8">
-    <h1 class="text-3xl font-bold text-gray-900 dark:text-white">
-        Dashboard
+<div class="mb-8">
+    <h1 class="text-2xl font-bold text-gray-900 dark:text-white">
+        {authStore.user ? `Hello, ${authStore.user.username}` : 'Welcome back'}
     </h1>
+    <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
+        Here's what's happening with your music library today.
+    </p>
 </div>
 
 {#if stats}
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        <a href="/library/tracks" class="block cursor-pointer">
-            <StatCard
-                label="Songs"
-                value={stats.songs}
-                color="orange"
-                icon={Music}
-            />
-        </a>
-        <a href="/library/albums" class="block cursor-pointer">
-            <StatCard
-                label="Albums"
-                value={stats.albums}
-                color="blue"
-                icon={Disc}
-            />
-        </a>
-        <a href="/library/artists" class="block cursor-pointer">
-            <StatCard
-                label="Artists"
-                value={stats.artists}
-                color="green"
-                icon={User}
-            />
-        </a>
-        <a href="/library/genres" class="block cursor-pointer">
-            <StatCard
-                label="Genres"
-                value={stats.genres}
-                color="red"
-                icon={Tag}
-            />
-        </a>
+        <StatCard
+            label="Songs"
+            value={stats.songs}
+            color="orange"
+            icon={Music}
+            onclick={() => navigate('/library/tracks')}
+        />
+        <StatCard
+            label="Albums"
+            value={stats.albums}
+            color="blue"
+            icon={Disc}
+            onclick={() => navigate('/library/albums')}
+        />
+        <StatCard
+            label="Artists"
+            value={stats.artists}
+            color="green"
+            icon={User}
+            onclick={() => navigate('/library/artists')}
+        />
+        <StatCard
+            label="Genres"
+            value={stats.genres}
+            color="red"
+            icon={Tag}
+            onclick={() => navigate('/library/genres')}
+        />
     </div>
 
     <div class="grid grid-cols-1 lg:grid-cols-12 gap-4">

@@ -10,9 +10,9 @@ api.interceptors.request.use((config) => setAuthToken(config));
 api.interceptors.response.use(
     (response) => response,
     (error) => {
-        if (error.response?.status === 401) {
-            authStore.logout();
-        }
+        // if (error.response?.status === 401) {
+        //     authStore.logout();
+        // }
         return Promise.reject(error);
     },
 );
@@ -38,7 +38,7 @@ api.interceptors.response.use(
             const data = response.data['subsonic-response'];
             if (data) {
                 if (data.status === 'failed') {
-                    const subsonicError = data || { code: 0, message: 'Unknown Subsonic error' };
+                    const subsonicError = data.error || { code: 0, message: 'Unknown Subsonic error' };
                     const error = new Error(subsonicError.message);
                     (error as any).code = subsonicError.code;
                     (error as any).status = data.status;

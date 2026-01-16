@@ -12,27 +12,34 @@
         value, 
         color = 'blue', 
         icon: Icon,
-        children
+        children,
+        onclick
     } = $props<{
         label: string;
         value: string | number | undefined;
         color?: keyof typeof colorClasses;
         icon: any;
         children?: import('svelte').Snippet;
+        onclick?: () => void;
     }>();
 </script>
 
-<div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 dark:bg-gray-800 dark:border-gray-700 flex items-center relative">
-    <div class="p-3 rounded-xl mr-4 {colorClasses[color as keyof typeof colorClasses]}">
+<button 
+    type="button"
+    class="w-full text-left bg-white p-6 rounded-2xl shadow-sm border border-gray-100 dark:bg-gray-800 dark:border-gray-700 flex items-center relative transition-all duration-200 group {onclick ? 'hover:shadow-md hover:border-orange-200 dark:hover:border-orange-900/50' : ''}"
+    {onclick}
+    disabled={!onclick}
+>
+    <div class="p-3 rounded-xl mr-4 {colorClasses[color as keyof typeof colorClasses]} group-hover:scale-110 transition-transform">
         <Icon size={24} />
     </div>
     <div class="flex-1 min-w-0">
-        <p class="text-sm text-gray-500 dark:text-gray-400">{label}</p>
-        <p class="text-2xl font-bold text-gray-900 dark:text-white">{value || 0}</p>
+        <p class="text-sm text-gray-500 dark:text-gray-400 font-medium">{label}</p>
+        <p class="text-2xl font-bold text-gray-900 dark:text-white mt-0.5">{value || 0}</p>
     </div>
     {#if children}
         <div class="absolute top-3 right-3">
             {@render children()}
         </div>
     {/if}
-</div>
+</button>

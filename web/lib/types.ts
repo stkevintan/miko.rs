@@ -12,6 +12,7 @@ export interface SystemInfo {
 }
 
 export interface FolderInfo {
+    id: number;
     label: string;
     path: string;
     song_count: number;
@@ -89,6 +90,28 @@ export interface GenreReference {
 export interface GenresResponse {
     genre: GenreReference[];
 }
+
+export interface SubsonicUser {
+    username: string;
+    email?: string;
+    adminRole: boolean;
+    settingsRole: boolean;
+    downloadRole: boolean;
+    uploadRole: boolean;
+    playlistRole: boolean;
+    coverArtRole: boolean;
+    commentRole: boolean;
+    podcastRole: boolean;
+    streamRole: boolean;
+    jukeboxRole: boolean;
+    shareRole: boolean;
+    videoConversionRole: boolean;
+    folder: number[];
+}
+
+export interface UsersResponse {
+    user: SubsonicUser[];
+}
 export interface SearchResult3 {
     song?: Song[];
     album?: AlbumReference[];
@@ -101,4 +124,5 @@ export interface SubsonicResponse {
     searchResult3?: SearchResult3;
     albumList2?: AlbumList2;
     genres?: GenresResponse;
+    users?: UsersResponse;
 }

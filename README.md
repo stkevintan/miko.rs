@@ -70,7 +70,6 @@ services:
       - PORT=8081
       - DATABASE_URL=sqlite:///app/data/miko.db
       - SUBSONIC_DATA_DIR=/app/data
-      - SUBSONIC_MUSIC_FOLDERS=/music
       - JWT_SECRET=your_secret_key_here
       - PASSWORD_SECRET=your_password_salt_here
     volumes:
@@ -82,7 +81,6 @@ services:
 - **PORT**: The port the server will listen on inside the container (default: `8081`).
 - **DATABASE_URL**: Path to the SQLite database file (e.g., `sqlite:///app/data/miko.db`).
 - **SUBSONIC_DATA_DIR**: Folder where the server stores application data (e.g., `/app/data`).
-- **SUBSONIC_MUSIC_FOLDERS**: Comma-separated list of folders containing your music (e.g., `/music`).
 - **JWT_SECRET**: A secret string for signing JWT tokens.
 - **PASSWORD_SECRET**: A secret string used as a salt for password hashing.
 - **Volumes**:
@@ -100,7 +98,6 @@ docker run -d \
   -e JWT_SECRET=mysecret \
   -e PASSWORD_SECRET=mysalt \
   -e SUBSONIC_DATA_DIR=/app/data \
-  -e SUBSONIC_MUSIC_FOLDERS=/music \
   -v $(pwd)/data:/app/data \
   -v /path/to/your/music:/music:ro \
   ghcr.io/stkevintan/miko.rs:latest
@@ -131,7 +128,6 @@ docker run -d \
    PORT=3334
    PASSWORD_SECRET=your-32-character-secret-here
    JWT_SECRET=your-32-character-secret-here
-   SUBSONIC_MUSIC_FOLDERS=/path/to/your/music
    SUBSONIC_DATA_DIR=./data
    ```
 

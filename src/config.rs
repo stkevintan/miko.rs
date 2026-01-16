@@ -24,7 +24,6 @@ pub struct DatabaseConfig {
 #[derive(Debug, Deserialize, Clone)]
 pub struct SubsonicConfig {
     pub data_dir: String,
-    pub folders: Vec<String>,
     pub ignored_articles: String,
 }
 
@@ -51,11 +50,6 @@ impl Config {
             },
             subsonic: SubsonicConfig {
                 data_dir: read_path("SUBSONIC_DATA_DIR", Some("./data")),
-                folders: read_val("SUBSONIC_MUSIC_FOLDERS", None)
-                    .split(',')
-                    .filter(|s| !s.is_empty())
-                    .map(norm_path)
-                    .collect(),
                 ignored_articles: read_val("SUBSONIC_IGNORED_ARTICLES", Some("The El La Los Las Le Les")),
             },
         })
