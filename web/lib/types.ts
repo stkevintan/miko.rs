@@ -23,12 +23,6 @@ export interface ScanStatus {
     total: number;
 }
 
-export interface DashboardData {
-    stats: Stats;
-    system: SystemInfo;
-    folders: FolderInfo[];
-}
-
 export interface UserProfile {
     username: string;
     email?: string;
