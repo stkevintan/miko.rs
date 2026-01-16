@@ -1,4 +1,7 @@
-import axios, { type InternalAxiosRequestConfig } from 'axios';
+import axios, {
+    type AxiosResponse,
+    type InternalAxiosRequestConfig,
+} from 'axios';
 import { authStore } from './auth.svelte';
 
 export const api = axios.create({
@@ -7,12 +10,25 @@ export const api = axios.create({
 
 api.interceptors.request.use((config) => setAuthToken(config));
 
+// allow list for 401 without logout
+const allowList = ['/profile'];
+function match(url: string | undefined) {
+    if (!url) return false;
+    try {
+        const path = new URL(url).pathname;
+        return allowList.includes(path);
+    } catch {
+        return false;
+    }
+}
+
 api.interceptors.response.use(
     (response) => response,
     (error) => {
-        // if (error.response?.status === 401) {
-        //     authStore.logout();
-        // }
+        const resp = error.response as AxiosResponse | undefined;
+        if (resp?.status === 401 && !match(resp.config.url)) {
+            authStore.logout();
+        }
         return Promise.reject(error);
     },
 );
@@ -34,11 +50,17 @@ api.interceptors.response.use(
 api.interceptors.response.use(
     (response) => {
         const contentType = response.headers['content-type'];
-        if (typeof contentType === 'string' && contentType.includes('application/json')) {
+        if (
+            typeof contentType === 'string' &&
+            contentType.includes('application/json')
+        ) {
             const data = response.data['subsonic-response'];
             if (data) {
                 if (data.status === 'failed') {
-                    const subsonicError = data.error || { code: 0, message: 'Unknown Subsonic error' };
+                    const subsonicError = data.error || {
+                        code: 0,
+                        message: 'Unknown Subsonic error',
+                    };
                     const error = new Error(subsonicError.message);
                     (error as any).code = subsonicError.code;
                     (error as any).status = data.status;
@@ -62,7 +84,10 @@ function setAuthToken(config: InternalAxiosRequestConfig) {
     return config;
 }
 
-export async function getCoverArtUrl(id: string, signal?: AbortSignal): Promise<string> {
+export async function getCoverArtUrl(
+    id: string,
+    signal?: AbortSignal,
+): Promise<string> {
     const response = await api.get('/getCoverArt', {
         params: { id },
         responseType: 'blob',
