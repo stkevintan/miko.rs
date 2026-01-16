@@ -1,5 +1,6 @@
 <script lang="ts">
     import { Music } from 'lucide-svelte';
+    import { getCoverArtUrl } from '../lib/api';
 
     /**
      * CoverArt component for displaying music imagery with fallbacks.
@@ -21,7 +22,6 @@
     let imageLoaded = $state(false);
     let imageError = $state(false);
     let imageUrl = $state('');
-    const token = localStorage.getItem('token');
 
     // Reset state when ID changes
     $effect(() => {
@@ -34,21 +34,10 @@
 
         async function fetchImage() {
             try {
-                const response = await fetch(`/rest/getCoverArt?id=${id}`, {
-                    headers: {
-                        Authorization: `Bearer ${token}`,
-                    },
-                    signal: controller.signal,
-                });
-
-                if (response.ok) {
-                    const blob = await response.blob();
-                    if (imageUrl) URL.revokeObjectURL(imageUrl);
-                    imageUrl = URL.createObjectURL(blob);
-                    imageLoaded = true;
-                } else {
-                    imageError = true;
-                }
+                const url = await getCoverArtUrl(id, controller.signal);
+                if (imageUrl) URL.revokeObjectURL(imageUrl);
+                imageUrl = url;
+                imageLoaded = true;
             } catch (err: any) {
                 if (err instanceof Error && err.name !== 'AbortError') {
                     imageError = true;

@@ -19,11 +19,7 @@ export default defineConfig(({ mode }) => {
         '/api': {
           target: `http://localhost:${port}`,
           changeOrigin: true,
-        },
-        '/rest': {
-          target: `http://localhost:${port}`,
-          changeOrigin: true,
-        },
+        }
       }
     },
     resolve: {

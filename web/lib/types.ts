@@ -56,6 +56,9 @@ export interface Song {
 export interface ArtistReference {
     id: string;
     name: string;
+    coverArt?: string;
+    albumCount?: number;
+    averageRating?: number;
 }
 
 export interface AlbumReference {
@@ -70,6 +73,11 @@ export interface AlbumReference {
     created: string;
     starred?: string;
     year?: number;
+    genre?: string;
+}
+
+export interface AlbumList2 {
+    album: AlbumReference[];
 }
 export interface SearchResult3 {
     song?: Song[];
@@ -81,4 +89,5 @@ export interface SubsonicResponse {
     status: 'ok' | 'failed';
     version: string;
     searchResult3?: SearchResult3;
+    albumList2?: AlbumList2;
 }

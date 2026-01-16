@@ -61,3 +61,13 @@ function setAuthToken(config: InternalAxiosRequestConfig) {
     }
     return config;
 }
+
+export async function getCoverArtUrl(id: string, signal?: AbortSignal): Promise<string> {
+    const response = await api.get('/getCoverArt', {
+        params: { id },
+        responseType: 'blob',
+        signal,
+    });
+
+    return URL.createObjectURL(response.data as Blob);
+}

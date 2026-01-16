@@ -25,8 +25,8 @@
 
   function handleLibrarySearch(event: Event) {
     event.preventDefault();
-    if (!isActive('/library')) {
-      navigate('/library');
+    if (!isActive.startsWith('/library')) {
+      navigate('/library/tracks');
     }
     submitLibrarySearch();
     isSearchOpen = false;

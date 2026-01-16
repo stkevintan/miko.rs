@@ -2,11 +2,11 @@ use crate::models::album::AlbumWithStats;
 use crate::models::artist::ArtistWithStats;
 use crate::models::child::ChildWithMetadata;
 use crate::models::queries::{self};
-use crate::models::{album, album_artist, artist, child, song_artist};
+use crate::models::{album, artist, child, song_artist};
 use crate::service::Service;
 use sea_orm::sea_query::{Expr, Query};
 use sea_orm::{
-    ColumnTrait, DbErr, EntityTrait, JoinType, PaginatorTrait, QueryFilter, QuerySelect,
+    ColumnTrait, DbErr, JoinType, PaginatorTrait, QueryFilter, QuerySelect,
 };
 use serde::Deserialize;
 
@@ -39,17 +39,8 @@ impl Service {
         let search_query = format!("%{}%", clean_query);
 
         // Artists
-        let mut artist_query = artist::Entity::find()
-            .column_as(album_artist::Column::AlbumId.count(), "album_count")
-            .join_rev(
-                JoinType::LeftJoin,
-                album_artist::Entity::belongs_to(artist::Entity)
-                    .from(album_artist::Column::ArtistId)
-                    .to(artist::Column::Id)
-                    .into(),
-            )
-            .filter(artist::Column::Name.like(&search_query))
-            .group_by(artist::Column::Id);
+        let mut artist_query =
+            queries::artist_with_stats_query().filter(artist::Column::Name.like(&search_query));
 
         // Albums
         let mut album_query =

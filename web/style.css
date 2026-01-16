@@ -11,3 +11,7 @@
         @apply bg-gray-900 text-gray-100;
     }
 }
+
+button[type="button"] {
+    cursor: pointer;
+}
