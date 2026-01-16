@@ -117,7 +117,14 @@
             <!-- Expandable Library -->
             <div class="space-y-1">
                 <button
-                    onclick={() => libraryExpanded = !libraryExpanded}
+                    onclick={() => {
+                        if (!isOpen && onToggle) {
+                            onToggle();
+                            libraryExpanded = true;
+                        } else {
+                            libraryExpanded = !libraryExpanded;
+                        }
+                    }}
                     class="flex items-center w-full p-2 text-gray-900 rounded-lg dark:text-white hover:bg-gray-100 dark:hover:bg-gray-700 group
                         {isActive2('/library') ? 'text-orange-600' : ''}"
                 >
@@ -155,7 +162,14 @@
 
             <div class="space-y-1">
                 <button
-                    onclick={() => (settingsExpanded = !settingsExpanded)}
+                    onclick={() => {
+                        if (!isOpen && onToggle) {
+                            onToggle();
+                            settingsExpanded = true;
+                        } else {
+                            settingsExpanded = !settingsExpanded;
+                        }
+                    }}
                     class="flex items-center w-full p-2 text-gray-900 rounded-lg dark:text-white hover:bg-gray-100 dark:hover:bg-gray-700 group
                         {isActive2('/settings') ? 'text-orange-600' : ''}"
                 >
