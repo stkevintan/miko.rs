@@ -23,7 +23,7 @@ pub struct AuthEndpoint<E> {
     ep: E,
 }
 
-pub async fn verify_jwt(req: &Request) -> Result<user::Model, Error> {
+async fn verify_jwt(req: &Request) -> Result<user::Model, Error> {
     let config = req
         .data::<Arc<Config>>()
         .ok_or_else(|| Error::from_status(StatusCode::INTERNAL_SERVER_ERROR))?;
