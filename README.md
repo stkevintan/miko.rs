@@ -168,6 +168,9 @@ Once the service is running, access the Web UI at `http://<your-server-ip>:8081`
 - **Username**: `admin`
 - **Password**: `adminpassword`
 
+> [!WARNING]
+> For security reasons, it is strongly recommended to change the default password immediately after your first login.
+
 The subsonic service will also be available at the same endpoint.
 
 ---
