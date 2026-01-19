@@ -19,6 +19,9 @@ A lightweight, high-performance Subsonic-compatible music server written in Rust
 - ☁️ **Online Music Integration**: Support for online music (downloader/scraper) via extensions (TODO).
 - 📻 **Subsonic & OpenSubsonic**: Fully compatible and tested with clients like Feishin, Airsonic, Submariner, Musiver (音流), and Amcfy Music (箭头音乐).
 - 💻 **Cross-Platform**: Run it anywhere—supports multiple operating systems (Linux, macOS, Windows) and architectures (ARM64, x86_64, etc.).
+- 🔒 **Enhanced Security**:
+  - **Traditional Auth**: Supports Subsonic's password and token-based (`salted MD5`) authentication via the `/rest/` prefix.
+  - **JWT Auth**: Modern `JSON Web Token` authentication for web clients via the `/api/` prefix.
 
 ### Subsonic API Implementation Status
 
@@ -74,7 +77,7 @@ This project implements the Subsonic API (version 1.16.1) to support various mus
   - [x] `createUser`
   - [x] `updateUser`
   - [x] `deleteUser`
-  - [ ] `changePassword`
+  - [x] `changePassword`
 - **Lists**
   - [x] `getAlbumList`
   - [x] `getAlbumList2`

@@ -44,6 +44,12 @@ pub struct DeleteUserQuery {
     pub username: String,
 }
 
+#[derive(Deserialize)]
+pub struct ChangePasswordQuery {
+    pub username: String,
+    pub password: String,
+}
+
 #[handler]
 pub async fn get_users(
     db: Data<&DatabaseConnection>,
@@ -288,6 +294,68 @@ pub async fn delete_user(
         .exec(*db)
         .await
     {
+        Ok(_) => send_response(SubsonicResponse::new_ok(SubsonicResponseBody::None), &params.f),
+        Err(e) => {
+            log::error!("Database error: {}", e);
+            send_response(
+                SubsonicResponse::new_error(0, "Database error".into()),
+                &params.f,
+            )
+        }
+    }
+}
+
+#[handler]
+pub async fn change_password(
+    db: Data<&DatabaseConnection>,
+    config: Data<&Arc<Config>>,
+    current_user: Data<&Arc<user::Model>>,
+    params: Data<&SubsonicParams>,
+    query: Query<ChangePasswordQuery>,
+) -> impl IntoResponse {
+    let target_username = &query.username;
+
+    // Authorization check: only yourself or admin
+    if !current_user.admin_role && current_user.username != *target_username {
+        return send_response(
+            SubsonicResponse::new_error(40, "The user is not authorized for the given operation.".into()),
+            &params.f,
+        );
+    }
+
+    let user = match user::Entity::find_by_id(target_username.to_string()).one(*db).await {
+        Ok(Some(u)) => u,
+        Ok(None) => {
+            return send_response(
+                SubsonicResponse::new_error(70, "User not found".into()),
+                &params.f,
+            );
+        }
+        Err(e) => {
+            log::error!("Database error: {}", e);
+            return send_response(
+                SubsonicResponse::new_error(0, "Database error".into()),
+                &params.f,
+            );
+        }
+    };
+
+    let encrypted_password = match encrypt(&query.password, config.server.password_secret.as_bytes()) {
+        Ok(p) => p,
+        Err(e) => {
+            log::error!("Encryption error: {}", e);
+            return send_response(
+                SubsonicResponse::new_error(0, "Encryption error".into()),
+                &params.f,
+            );
+        }
+    };
+
+    let mut user_active = user.into_active_model();
+    user_active.password = Set(encrypted_password);
+    user_active.updated_at = Set(chrono::Utc::now());
+
+    match user_active.update(*db).await {
         Ok(_) => send_response(SubsonicResponse::new_ok(SubsonicResponseBody::None), &params.f),
         Err(e) => {
             log::error!("Database error: {}", e);
