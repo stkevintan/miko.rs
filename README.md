@@ -14,37 +14,96 @@ A lightweight, high-performance Subsonic-compatible music server written in Rust
 ![dashboard](images/dashboard.png)
 ## Features
 
+- 🚀 **High Performance & Tiny Footprint**: Built with Rust for maximum efficiency.
+- 🎨 **Modern Web UI**: Fascinating web-based dashboard and control panel for easy management.
+- ☁️ **Online Music Integration**: Support for online music (downloader/scraper) via extensions (TODO).
+- 📻 **Subsonic & OpenSubsonic**: Fully compatible and tested with clients like Feishin, Airsonic, Submariner, Musiver (音流), and Amcfy Music (箭头音乐).
+- 💻 **Cross-Platform**: Run it anywhere—supports multiple operating systems (Linux, macOS, Windows) and architectures (ARM64, x86_64, etc.).
+
 ### Subsonic API Implementation Status
 
 This project implements the Subsonic API (version 1.16.1) to support various music clients (e.g., Symfonium, Dsub, Amuse).
 
-#### ✅ Implemented
-- **System**: `ping`, `getLicense`, `getOpenSubsonicExtensions`
-- **Browsing**: `getMusicFolders`, `getIndexes`, `getMusicDirectory`, `getGenres`, `getArtists`, `getArtist`, `getAlbum`, `getSong`, `getArtistInfo`, `getArtistInfo2`, `getAlbumInfo`, `getAlbumInfo2`, `getSimilarSongs`, `getSimilarSongs2`, `getTopSongs`
-- **Media Retrieval**: `stream`, `download`, `getCoverArt`, `getLyrics`, `getAvatar`
-- **Playlists**: `getPlaylists`, `getPlaylist`, `createPlaylist`, `updatePlaylist`, `deletePlaylist`
-- **Searching**: `search`, `search2`, `search3`
-- **Scanning**: `getScanStatus`, `startScan`
-- **Lists**: `getAlbumList`, `getAlbumList2`, `getRandomSongs`, `getSongsByGenre`, `getNowPlaying`, `getStarred`, `getStarred2`
-- **Annotation**: `star`, `unstar`, `setRating`, `scrobble`
-- **Bookmarks**: `getBookmarks`, `createBookmark`, `deleteBookmark`
-- **Play Queue**: `getPlayQueue`, `savePlayQueue`
-- **User Management**: `getUser`, `getUsers`
+- **System**
+  - [x] `ping`
+  - [x] `getLicense`
+  - [x] `getOpenSubsonicExtensions`
+- **Browsing**
+  - [x] `getMusicFolders`
+  - [x] `getIndexes`
+  - [x] `getMusicDirectory`
+  - [x] `getGenres`
+  - [x] `getArtists`
+  - [x] `getArtist`
+  - [x] `getAlbum`
+  - [x] `getSong`
+  - [x] `getArtistInfo`
+  - [x] `getArtistInfo2`
+  - [x] `getAlbumInfo`
+  - [x] `getAlbumInfo2`
+  - [x] `getSimilarSongs`
+  - [x] `getSimilarSongs2`
+  - [x] `getTopSongs`
+  - [ ] `getVideos`
+  - [ ] `getVideoInfo`
+- **Media Retrieval**
+  - [x] `stream`
+  - [x] `download`
+  - [x] `getCoverArt`
+  - [x] `getLyrics`
+  - [x] `getLyricsBySongId`
+  - [x] `getAvatar`
+  - [ ] `hls.m3u8`
+  - [ ] `getCaptions`
+- **Playlists**
+  - [x] `getPlaylists`
+  - [x] `getPlaylist`
+  - [x] `createPlaylist`
+  - [x] `updatePlaylist`
+  - [x] `deletePlaylist`
+- **Scanning**
+  - [x] `getScanStatus`
+  - [x] `startScan`
+- **Searching**
+  - [x] `search`
+  - [x] `search2`
+  - [x] `search3`
+- **User Management**
+  - [x] `getUser`
+  - [x] `getUsers`
+  - [x] `createUser`
+  - [x] `updateUser`
+  - [x] `deleteUser`
+  - [ ] `changePassword`
+- **Lists**
+  - [x] `getAlbumList`
+  - [x] `getAlbumList2`
+  - [x] `getRandomSongs`
+  - [x] `getSongsByGenre`
+  - [x] `getNowPlaying`
+  - [x] `getStarred`
+  - [x] `getStarred2`
+- **Annotation**
+  - [x] `star`
+  - [x] `unstar`
+  - [x] `setRating`
+  - [x] `scrobble`
+- **Bookmarks**
+  - [x] `getBookmarks`
+  - [x] `createBookmark`
+  - [x] `deleteBookmark`
+  - [x] `getPlayQueue`
+  - [x] `savePlayQueue`
+- **Chat**
+  - [ ] `getChatMessages`
+  - [ ] `addChatMessage`
 
-### OpenSubsonic Extensions & Enhancements
+### OpenSubsonic Extensions
 - **Multi-Artist Support**: For songs and albums, an `artists` field is included in the response. This field provides a structured list of all artists associated with the item, which is particularly useful for tracks with multiple contributors.
     - Format: `artists: [{"id": "artist_id", "name": "Artist Name"}, ...]`
 - **Extended Lyrics**: Supports `getLyricsBySongId` for better lyrics compatibility with modern clients.
 - **Incremental Scanning**: `startScan` is incremental by default. It only scans for new or modified files.
     - To trigger a full re-scan, append `fullScan=true` to the request.
-
-#### ❌ Not Implemented / Planned
-- **Videos**: `getVideos`, `getVideoInfo`, `hls.m3u8`, `getCaptions`
-- **Chat**: `getChatMessages`, `addChatMessage`
-- **User Management**: `createUser`, `updateUser`, `deleteUser`, `changePassword`
-- **Podcasts**
-- **Internet Radio**
-- **Jukebox**
 
 ---
 
@@ -102,6 +161,14 @@ docker run -d \
   -v /path/to/your/music:/music:ro \
   ghcr.io/stkevintan/miko.rs:latest
 ```
+
+Once the service is running, access the Web UI at `http://<your-server-ip>:8081` to configure your music folders and user accounts.
+
+**Default Credentials:**
+- **Username**: `admin`
+- **Password**: `adminpassword`
+
+The subsonic service will also be available at the same endpoint.
 
 ---
 
