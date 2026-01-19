@@ -77,7 +77,7 @@ This project implements the Subsonic API (version 1.16.1) to support various mus
   - [x] `createUser`
   - [x] `updateUser`
   - [x] `deleteUser`
-  - [x] `changePassword`
+  - [ ] `changePassword` (Disabled for security; use Web UI)
 - **Lists**
   - [x] `getAlbumList`
   - [x] `getAlbumList2`

@@ -83,7 +83,7 @@ fn base_routes() -> Route {
         ("/createUser", user::create_user),
         ("/updateUser", user::update_user),
         ("/deleteUser", user::delete_user),
-        ("/changePassword", user::change_password),
+        ("/changePassword", shared::not_supported),
         // list
         ("/getAlbumList", lists::get_album_list),
         ("/getAlbumList2", lists::get_album_list2),
