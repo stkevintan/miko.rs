@@ -9,6 +9,7 @@ export default defineConfig(({ mode }) => {
   const port = parseInt(env.PORT || '8081')
 
   return {
+    root: 'web',
     plugins: [
       svelte(),
       tailwindcss(),
@@ -28,7 +29,7 @@ export default defineConfig(({ mode }) => {
       },
     },
     build: {
-      outDir: './dist',
+      outDir: '../dist',
       emptyOutDir: true,
     },
   }
