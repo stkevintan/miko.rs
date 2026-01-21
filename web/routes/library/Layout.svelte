@@ -13,6 +13,7 @@
         '/library/albums': 'Albums',
         '/library/artists': 'Artists',
         '/library/genres': 'Genres',
+        '/library/folders': 'Folders',
     };
 
     let currentTitle = $derived(titles[route.pathname] || 'Library');

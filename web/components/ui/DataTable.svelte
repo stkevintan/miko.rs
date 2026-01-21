@@ -4,23 +4,27 @@
     import { Loader2 } from 'lucide-svelte';
 
     let {
-        data,
+        data = [],
         loading = false,
         header,
         row,
+        onRowClick,
         emptyState,
         minWidth = '800px',
         fixed = false,
         resizable = false,
+        striped = false,
     }: {
         data: T[];
         loading?: boolean;
         header: Snippet;
         row: Snippet<[T]>;
+        onRowClick?: (item: T) => void;
         emptyState?: Snippet;
         minWidth?: string;
         fixed?: boolean;
         resizable?: boolean;
+        striped?: boolean;
     } = $props();
 
     // resizable columns logic from http://dobtco.github.io/jquery-resizable-columns/
@@ -295,7 +299,7 @@
 
     $effect(() => {
         if (!resizable) return;
-        data.length;
+        data?.length;
         void (async () => {
             await tick();
             syncHandlePositions(getHeaders());
@@ -329,7 +333,8 @@
         <tbody class="divide-y divide-gray-50 dark:divide-gray-800">
             {#each data as item}
                 <tr
-                    class="group hover:bg-orange-50/30 dark:hover:bg-orange-500/5 transition-colors cursor-default"
+                    onclick={() => onRowClick?.(item)}
+                    class="group transition-colors cursor-default {onRowClick ? 'cursor-pointer' : ''} {striped ? 'odd:bg-white even:bg-gray-50/50 dark:odd:bg-gray-900 dark:even:bg-gray-800/30' : ''} hover:bg-orange-50/30 dark:hover:bg-orange-500/5"
                 >
                     {@render row(item)}
                 </tr>
@@ -373,7 +378,7 @@
     }
 
     .data-table-container :global(th) {
-        @apply px-6 py-4 text-xs font-semibold uppercase tracking-wider text-gray-500 border-b border-r border-gray-100 dark:border-gray-800 relative select-none truncate;
+        @apply px-4 py-3 text-xs font-semibold uppercase tracking-wider text-gray-500 border-b border-r border-gray-100 dark:border-gray-800 relative select-none truncate;
         min-width: 0;
     }
 

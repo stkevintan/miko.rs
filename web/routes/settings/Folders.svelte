@@ -145,19 +145,19 @@
             >
                 <tr>
                     <th
-                        class="px-6 py-3 font-semibold text-xs uppercase tracking-wider"
+                        class="px-4 py-3 font-semibold text-xs uppercase tracking-wider"
                         >Name</th
                     >
                     <th
-                        class="px-6 py-3 font-semibold text-xs uppercase tracking-wider"
+                        class="px-4 py-3 font-semibold text-xs uppercase tracking-wider"
                         >Path</th
                     >
                     <th
-                        class="px-6 py-3 font-semibold text-xs uppercase tracking-wider text-right"
+                        class="px-4 py-3 font-semibold text-xs uppercase tracking-wider text-right"
                         >Songs</th
                     >
                     <th
-                        class="px-6 py-3 font-semibold text-xs uppercase tracking-wider text-right"
+                        class="px-4 py-3 font-semibold text-xs uppercase tracking-wider text-right"
                         >Actions</th
                     >
                 </tr>
@@ -188,15 +188,15 @@
                 {:else}
                     {#each folders as folder}
                         <tr
-                            class="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
+                            class="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors odd:bg-white even:bg-gray-50/50 dark:odd:bg-gray-900 dark:even:bg-gray-800/30"
                         >
-                            <td class="px-6 py-4">
+                            <td class="px-4 py-3">
                                 <span
                                     class="font-medium text-gray-900 dark:text-white"
                                     >{folder.label}</span
                                 >
                             </td>
-                            <td class="px-6 py-4">
+                            <td class="px-4 py-3">
                                 <code
                                     class="text-xs bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded text-gray-600 dark:text-gray-400"
                                 >
@@ -204,11 +204,11 @@
                                 </code>
                             </td>
                             <td
-                                class="px-6 py-4 text-right text-gray-500 dark:text-gray-400"
+                                class="px-4 py-3 text-right text-gray-500 dark:text-gray-400"
                             >
                                 {folder.song_count.toLocaleString()}
                             </td>
-                            <td class="px-6 py-4 text-right">
+                            <td class="px-4 py-3 text-right">
                                 <div class="flex justify-end gap-2">
                                     {#if authStore.user?.adminRole}
                                         <button

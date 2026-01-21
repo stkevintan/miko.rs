@@ -77,6 +77,7 @@
             minWidth="560px"
             fixed={true}
             resizable={true}
+            striped={true}
         >
             {#snippet header()}
                 <th>Genre</th>
@@ -102,12 +103,12 @@
                         </div>
                     </div>
                 </td>
-                <td class="px-6 py-3 text-right">
+                <td class="px-4 py-3 text-right">
                     <span class="text-sm text-gray-600 dark:text-gray-300">
                         {genre.albumCount}
                     </span>
                 </td>
-                <td class="px-6 py-3 text-right">
+                <td class="px-4 py-3 text-right">
                     <span class="text-sm text-gray-600 dark:text-gray-300">
                         {genre.songCount}
                     </span>

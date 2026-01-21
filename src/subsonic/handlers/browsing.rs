@@ -1,6 +1,6 @@
 use crate::service::Service;
 use crate::config::Config;
-use crate::models::music_folder;
+use crate::models::{child, music_folder};
 use crate::scanner::Scanner;
 use crate::subsonic::{
     common::{send_response, SubsonicParams},
@@ -16,7 +16,7 @@ use poem::{
     web::{Data, Query},
     IntoResponse,
 };
-use sea_orm::{DatabaseConnection, EntityTrait};
+use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, PaginatorTrait, QueryFilter};
 use serde::Deserialize;
 use std::sync::Arc;
 
@@ -59,14 +59,37 @@ pub async fn get_music_folders(
         }
     };
 
+    let mut music_folders = Vec::with_capacity(folders.len());
+    for f in folders {
+        let directory_id = child::Entity::find()
+            .filter(child::Column::MusicFolderId.eq(f.id))
+            .filter(child::Column::Parent.is_null())
+            .filter(child::Column::IsDir.eq(true))
+            .one(*db)
+            .await
+            .ok()
+            .flatten()
+            .map(|c| c.id);
+
+        let song_count = child::Entity::find()
+            .filter(child::Column::MusicFolderId.eq(f.id))
+            .filter(child::Column::IsDir.eq(false))
+            .paginate(*db, 1)
+            .num_items()
+            .await
+            .unwrap_or(0) as i32;
+
+        music_folders.push(MusicFolder {
+            id: f.id,
+            name: f.name,
+            path: Some(f.path),
+            song_count: Some(song_count),
+            directory_id,
+        });
+    }
+
     let resp = SubsonicResponse::new_ok(SubsonicResponseBody::MusicFolders(MusicFolders {
-        music_folder: folders
-            .into_iter()
-            .map(|f| MusicFolder {
-                id: f.id,
-                name: f.name,
-            })
-            .collect(),
+        music_folder: music_folders,
     }));
 
     send_response(resp, &params.f)
@@ -136,6 +159,7 @@ pub async fn get_music_directory(
                 average_rating: Some(data.dir.average_rating),
                 play_count: Some(data.dir.play_count),
                 total_count: Some(data.total_count),
+                path: Some(data.dir.path),
                 child: data.children.into_iter().map(Child::from).collect(),
             }));
 

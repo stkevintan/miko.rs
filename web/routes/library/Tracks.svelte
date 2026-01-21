@@ -15,6 +15,7 @@
         librarySearchTrigger,
     } from '../../lib/librarySearch';
     import { libraryViewMode, setLibraryViewKey } from '../../lib/libraryView';
+    import SongMetadataDrawer from '../../components/library/SongMetadataDrawer.svelte';
 
     let songs = $state<Song[]>([]);
     let loading = $state(true);
@@ -22,6 +23,8 @@
     let pageSize = $state(50);
     let currentPage = $state(0);
     let searchQuery = $state('');
+    let selectedSongId = $state<string | null>(null);
+    let isDrawerOpen = $state(false);
 
     async function fetchStats() {
         try {
@@ -98,6 +101,11 @@
                 minWidth="800px"
                 fixed={true}
                 resizable={true}
+                striped={true}
+                onRowClick={(song) => {
+                    selectedSongId = song.id;
+                    isDrawerOpen = true;
+                }}
             >
                 {#snippet header()}
                     <th>Title</th>
@@ -110,19 +118,19 @@
                     <td class="px-4 py-3">
                         <TitleCell title={song.title} coverArt={song.coverArt} />
                     </td>
-                    <td class="px-6 py-3">
+                    <td class="px-4 py-3">
                         <span
                             class="text-sm text-gray-600 dark:text-gray-300 truncate block"
                             >{song.artist}</span
                         >
                     </td>
-                    <td class="px-6 py-3">
+                    <td class="px-4 py-3">
                         <span
                             class="text-sm text-gray-500 dark:text-gray-400 truncate block"
                             >{song.album}</span
                         >
                     </td>
-                    <td class="px-6 py-3 text-right">
+                    <td class="px-4 py-3 text-right">
                         <div class="no-truncate">
                             <DurationCell duration={song.duration} />
                         </div>
@@ -142,7 +150,11 @@
                 items={songs}
                 {loading}
                 wrapperClass="p-4 overflow-y-auto h-full"
-                itemClass="w-full max-w-xs rounded-xl border border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 p-3"
+                itemClass="group w-full max-w-xs rounded-xl border border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 p-3 transition-all duration-300 cursor-pointer hover:border-orange-500/40 hover:shadow-xl hover:shadow-orange-500/5"
+                onItemClick={(song) => {
+                    selectedSongId = song.id;
+                    isDrawerOpen = true;
+                }}
             >
                 {#snippet emptyState()}
                     <div class="flex flex-col items-center justify-center py-12">
@@ -155,24 +167,26 @@
                 {/snippet}
 
                 {#snippet item(song)}
-                    <CoverArt
-                        id={song.coverArt}
-                        alt={song.title}
-                        size={24}
-                        class="w-full aspect-square rounded-lg"
-                    />
-                    <div class="mt-3 min-w-0">
-                        <div class="text-sm font-semibold text-gray-900 dark:text-white truncate">
-                            {song.title}
-                        </div>
-                        <div class="text-xs text-gray-500 dark:text-gray-400 truncate">
-                            {song.artist}
-                        </div>
-                        <div class="text-xs text-gray-400 dark:text-gray-500 truncate">
-                            {song.album}
-                        </div>
-                        <div class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                            <DurationCell duration={song.duration} />
+                    <div class="flex flex-col items-center text-center w-full min-w-0">
+                        <CoverArt
+                            id={song.coverArt}
+                            alt={song.title}
+                            size={24}
+                            class="w-full aspect-square rounded-lg transition-transform duration-500 group-hover:scale-[1.02]"
+                        />
+                        <div class="mt-3 w-full min-w-0">
+                            <div class="text-sm font-semibold text-gray-900 dark:text-white truncate px-1">
+                                {song.title}
+                            </div>
+                            <div class="text-xs text-gray-500 dark:text-gray-400 truncate px-1">
+                                {song.artist}
+                            </div>
+                            <div class="text-xs text-gray-400 dark:text-gray-500 truncate px-1">
+                                {song.album}
+                            </div>
+                            <div class="mt-1">
+                                <DurationCell duration={song.duration} />
+                            </div>
                         </div>
                     </div>
                 {/snippet}
@@ -191,3 +205,5 @@
             unit="songs"
         />
     </div>
+
+<SongMetadataDrawer bind:isOpen={isDrawerOpen} songId={selectedSongId} />

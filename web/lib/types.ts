@@ -118,6 +118,89 @@ export interface SearchResult3 {
     artist?: ArtistReference[];
 }
 
+export interface Directory {
+    id: string;
+    parent?: string;
+    name: string;
+    path?: string;
+    child?: Song[];
+}
+
+export interface SongTags {
+    title?: string;
+    artist?: string;
+    artists?: string[];
+    album?: string;
+    albumArtist?: string;
+    albumArtists?: string[];
+    track?: number;
+    disc?: number;
+    year?: number;
+    genre?: string;
+    genres?: string[];
+    lyrics?: string;
+    comment?: string;
+    duration: number;
+    bitRate?: number;
+    format: string;
+    frontCover?: string;
+    // Additional tags
+    composer?: string;
+    conductor?: string;
+    remixer?: string;
+    arranger?: string;
+    lyricist?: string;
+    engineer?: string;
+    producer?: string;
+    djMixer?: string;
+    mixer?: string;
+    label?: string;
+    isrc?: string;
+    barcode?: string;
+    asin?: string;
+    catalogNumber?: string;
+    bpm?: number;
+    initialKey?: string;
+    mood?: string;
+    grouping?: string;
+    movementName?: string;
+    movementNumber?: string;
+    movementCount?: string;
+    work?: string;
+    language?: string;
+    copyright?: string;
+    license?: string;
+    encodedBy?: string;
+    encoderSettings?: string;
+    // MusicBrainz/AcoustID
+    musicBrainzTrackId?: string;
+    musicBrainzAlbumId?: string;
+    musicBrainzArtistId?: string;
+    musicBrainzReleaseGroupId?: string;
+    musicBrainzAlbumArtistId?: string;
+    musicBrainzWorkId?: string;
+    musicBrainzReleaseTrackId?: string;
+    acoustidId?: string;
+    acoustidFingerprint?: string;
+    musicipPuid?: string;
+}
+
+export interface MusicFolder {
+    id: number;
+    name: string;
+    path?: string;
+    directoryId?: string;
+    songCount?: number;
+}
+
+export interface ArtistWithAlbums extends ArtistReference {
+    album: AlbumReference[];
+}
+
+export interface AlbumWithSongs extends AlbumReference {
+    song: Song[];
+}
+
 export interface SubsonicResponse {
     status: 'ok' | 'failed';
     version: string;
@@ -125,4 +208,8 @@ export interface SubsonicResponse {
     albumList2?: AlbumList2;
     genres?: GenresResponse;
     users?: UsersResponse;
+    musicFolders?: { musicFolder: MusicFolder[] };
+    directory?: Directory;
+    album?: AlbumWithSongs;
+    artist?: ArtistWithAlbums;
 }

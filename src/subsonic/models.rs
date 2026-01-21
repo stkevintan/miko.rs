@@ -169,6 +169,12 @@ pub struct MusicFolder {
     pub id: i32,
     #[serde(rename = "@name", skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
+    #[serde(rename = "@path", skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
+    #[serde(rename = "@songCount", skip_serializing_if = "Option::is_none")]
+    pub song_count: Option<i32>,
+    #[serde(rename = "@directoryId", skip_serializing_if = "Option::is_none")]
+    pub directory_id: Option<String>,
 }
 
 impl SubsonicResponse {
@@ -279,6 +285,8 @@ pub struct Directory {
     pub play_count: Option<i64>,
     #[serde(rename = "@totalCount", skip_serializing_if = "Option::is_none")]
     pub total_count: Option<i64>,
+    #[serde(rename = "@path", skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub child: Vec<Child>,
 }
