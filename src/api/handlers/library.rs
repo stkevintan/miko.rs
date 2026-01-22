@@ -10,6 +10,11 @@ use lofty::config::WriteOptions;
 use lofty::picture::{Picture, PictureType, MimeType};
 use base64::{Engine as _, engine::general_purpose};
 
+// Constants for custom tag names
+const ACOUSTID_ID: &str = "ACOUSTID_ID";
+const ACOUSTID_FINGERPRINT: &str = "ACOUSTID_FINGERPRINT";
+const MUSICIP_PUID: &str = "MUSICIP_PUID";
+
 #[derive(Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct SongTags {
@@ -180,9 +185,9 @@ pub async fn get_song_tags(
         tags.music_brainz_release_track_id = get_one(ItemKey::MusicBrainzRecordingId);
 
         // AcoustID / MusicIP (using Unknown variant for custom tags)
-        tags.acoustid_id = get_one(ItemKey::Unknown("ACOUSTID_ID".to_string()));
-        tags.acoustid_fingerprint = get_one(ItemKey::Unknown("ACOUSTID_FINGERPRINT".to_string()));
-        tags.musicip_puid = get_one(ItemKey::Unknown("MUSICIP_PUID".to_string()));
+        tags.acoustid_id = get_one(ItemKey::Unknown(ACOUSTID_ID.to_string()));
+        tags.acoustid_fingerprint = get_one(ItemKey::Unknown(ACOUSTID_FINGERPRINT.to_string()));
+        tags.musicip_puid = get_one(ItemKey::Unknown(MUSICIP_PUID.to_string()));
 
         // Extract front cover
         for picture in primary_tag.pictures() {
@@ -292,11 +297,11 @@ pub async fn update_song_tags(
         if let Some(mb_album_artist_id) = new_tags.music_brainz_album_artist_id { tag.insert(TagItem::new(ItemKey::MusicBrainzReleaseArtistId, ItemValue::Text(mb_album_artist_id))); }
         if let Some(mb_work_id) = new_tags.music_brainz_work_id { tag.insert(TagItem::new(ItemKey::MusicBrainzWorkId, ItemValue::Text(mb_work_id))); }
         if let Some(mb_recording_id) = new_tags.music_brainz_release_track_id { tag.insert(TagItem::new(ItemKey::MusicBrainzRecordingId, ItemValue::Text(mb_recording_id))); }
-        
+
         // AcoustID / MusicIP IDs
-        if let Some(acoustid_id) = new_tags.acoustid_id { tag.insert(TagItem::new(ItemKey::Unknown("ACOUSTID_ID".to_string()), ItemValue::Text(acoustid_id))); }
-        if let Some(acoustid_fingerprint) = new_tags.acoustid_fingerprint { tag.insert(TagItem::new(ItemKey::Unknown("ACOUSTID_FINGERPRINT".to_string()), ItemValue::Text(acoustid_fingerprint))); }
-        if let Some(musicip_puid) = new_tags.musicip_puid { tag.insert(TagItem::new(ItemKey::Unknown("MUSICIP_PUID".to_string()), ItemValue::Text(musicip_puid))); }
+        if let Some(acoustid_id) = new_tags.acoustid_id { tag.insert(TagItem::new(ItemKey::Unknown(ACOUSTID_ID.to_string()), ItemValue::Text(acoustid_id))); }
+        if let Some(acoustid_fingerprint) = new_tags.acoustid_fingerprint { tag.insert(TagItem::new(ItemKey::Unknown(ACOUSTID_FINGERPRINT.to_string()), ItemValue::Text(acoustid_fingerprint))); }
+        if let Some(musicip_puid) = new_tags.musicip_puid { tag.insert(TagItem::new(ItemKey::Unknown(MUSICIP_PUID.to_string()), ItemValue::Text(musicip_puid))); }
 
         tag.save_to_path(path, WriteOptions::default()).map_err(|e| {
             log::error!("Failed to save tags to {}: {}", path.display(), e);
