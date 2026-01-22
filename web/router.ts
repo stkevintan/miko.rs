@@ -6,6 +6,7 @@ import LibraryTracks from './routes/library/Tracks.svelte';
 import LibraryAlbums from './routes/library/Albums.svelte';
 import LibraryArtists from './routes/library/Artists.svelte';
 import LibraryGenres from './routes/library/Genres.svelte';
+import LibraryFolders from './routes/Folders.svelte';
 import SettingsLayout from './routes/settings/Layout.svelte';
 import SettingsProfile from './routes/settings/Profile.svelte';
 import SettingsFolders from './routes/settings/Folders.svelte';
@@ -27,6 +28,7 @@ export const { p, navigate, route, isActive } = createRouter({
         '/genres': LibraryGenres,
         layout: LibraryLayout,
     },
+    '/folders': LibraryFolders,
     '/settings': {
         '/': SettingsProfile,
         '/profile': SettingsProfile,

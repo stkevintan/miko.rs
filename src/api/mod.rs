@@ -11,6 +11,8 @@ pub fn create_route(subsonic_routes: Option<Route>) -> Route {
         .at("/system", get(handlers::system::get_system_info))
         .at("/folders", get(handlers::system::get_folders).post(handlers::system::create_folder))
         .at("/folders/:id", post(handlers::system::update_folder).delete(handlers::system::delete_folder))
+        .at("/songs/:id/tags", get(handlers::library::get_song_tags).post(handlers::library::update_song_tags))
+        .at("/songs/:id/cover", post(handlers::library::update_song_cover))
         .at("/profile", post(handlers::user::update_profile));
 
     if let Some(subsonic_routes) = subsonic_routes {

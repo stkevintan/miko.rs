@@ -9,6 +9,7 @@
         wrapperClass = 'p-4',
         gridClass = 'grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(9rem,1fr))] sm:[grid-template-columns:repeat(auto-fit,minmax(10rem,1fr))] lg:[grid-template-columns:repeat(auto-fit,minmax(12rem,1fr))]',
         itemClass = '',
+        onItemClick,
     }: {
         items: T[];
         loading?: boolean;
@@ -17,6 +18,7 @@
         wrapperClass?: string;
         gridClass?: string;
         itemClass?: string;
+        onItemClick?: (item: T) => void;
     } = $props();
 </script>
 
@@ -28,9 +30,13 @@
     {:else}
         <div class={gridClass}>
             {#each items as entry}
-                <div class={itemClass}>
+                <button
+                    class="text-left {itemClass}"
+                    onclick={() => onItemClick?.(entry)}
+                    disabled={!onItemClick}
+                >
                     {@render item(entry)}
-                </div>
+                </button>
             {/each}
         </div>
     {/if}

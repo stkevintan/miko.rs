@@ -20,6 +20,7 @@
         librarySearchTrigger,
     } from '../../lib/librarySearch';
     import { albumSortState } from '../../lib/albumSort.svelte';
+    import AlbumMetadataDrawer from '../../components/library/AlbumMetadataDrawer.svelte';
 
     let albums = $state<AlbumReference[]>([]);
     let loading = $state(true);
@@ -27,6 +28,8 @@
     let pageSize = $state(50);
     let currentPage = $state(0);
     let searchQuery = $state('');
+    let selectedAlbumId = $state<string | null>(null);
+    let isDrawerOpen = $state(false);
 
     async function fetchStats() {
         try {
@@ -114,6 +117,11 @@
             minWidth="800px"
             fixed={true}
             resizable={true}
+            striped={true}
+            onRowClick={(album) => {
+                selectedAlbumId = album.id;
+                isDrawerOpen = true;
+            }}
         >
             {#snippet header()}
                 <th>Album</th>
@@ -131,24 +139,24 @@
                         showPlay={false}
                     />
                 </td>
-                <td class="px-6 py-3">
+                <td class="px-4 py-3">
                     <span
                         class="text-sm text-gray-600 dark:text-gray-300 truncate block"
                     >
                         {album.artist || 'Unknown Artist'}
                     </span>
                 </td>
-                <td class="px-6 py-3 text-right">
+                <td class="px-4 py-3 text-right">
                     <span class="text-sm text-gray-500 dark:text-gray-400">
                         {album.year || '—'}
                     </span>
                 </td>
-                <td class="px-6 py-3 text-right">
+                <td class="px-4 py-3 text-right">
                     <span class="text-sm text-gray-500 dark:text-gray-400">
                         {album.songCount ?? '—'}
                     </span>
                 </td>
-                <td class="px-6 py-3 text-right">
+                <td class="px-4 py-3 text-right">
                     <div class="no-truncate">
                         <DurationCell duration={album.duration} />
                     </div>
@@ -168,7 +176,11 @@
             items={albums}
             {loading}
             wrapperClass="p-4 overflow-y-auto h-full"
-            itemClass="w-full max-w-xs rounded-xl border border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 p-3"
+            itemClass="group w-full max-w-xs rounded-xl border border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 p-3 transition-all duration-300 cursor-pointer hover:border-orange-500/40 hover:shadow-xl hover:shadow-orange-500/5"
+            onItemClick={(album) => {
+                selectedAlbumId = album.id;
+                isDrawerOpen = true;
+            }}
         >
             {#snippet emptyState()}
                 <div class="flex flex-col items-center justify-center py-12">
@@ -183,30 +195,32 @@
             {/snippet}
 
             {#snippet item(album)}
-                <CoverArt
-                    id={album.coverArt}
-                    alt={album.name}
-                    size={24}
-                    class="w-full aspect-square rounded-lg"
-                />
-                <div class="mt-3 min-w-0">
-                    <div
-                        class="text-sm font-semibold text-gray-900 dark:text-white truncate"
-                    >
-                        {album.name}
-                    </div>
-                    <div
-                        class="text-xs text-gray-500 dark:text-gray-400 truncate"
-                    >
-                        {album.artist || 'Unknown Artist'}
-                    </div>
-                    <div
-                        class="text-xs text-gray-400 dark:text-gray-500 truncate"
-                    >
-                        {album.year || '—'} • {album.songCount ?? '—'} tracks
-                    </div>
-                    <div class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                        <DurationCell duration={album.duration} />
+                <div class="flex flex-col items-center text-center w-full min-w-0">
+                    <CoverArt
+                        id={album.coverArt}
+                        alt={album.name}
+                        size={24}
+                        class="w-full aspect-square rounded-lg transition-transform duration-500 group-hover:scale-[1.02]"
+                    />
+                    <div class="mt-3 w-full min-w-0">
+                        <div
+                            class="text-sm font-semibold text-gray-900 dark:text-white truncate px-1"
+                        >
+                            {album.name}
+                        </div>
+                        <div
+                            class="text-xs text-gray-500 dark:text-gray-400 truncate px-1"
+                        >
+                            {album.artist || 'Unknown Artist'}
+                        </div>
+                        <div
+                            class="text-[10px] text-gray-400 dark:text-gray-500 truncate"
+                        >
+                            {album.year || '—'} • {album.songCount ?? '—'} tracks
+                        </div>
+                        <div class="mt-1">
+                            <DurationCell duration={album.duration} />
+                        </div>
                     </div>
                 </div>
             {/snippet}
@@ -225,3 +239,5 @@
         unit="albums"
     />
 </div>
+
+<AlbumMetadataDrawer bind:isOpen={isDrawerOpen} albumId={selectedAlbumId} />

@@ -53,6 +53,21 @@
         { name: 'Connections', path: '/settings/connections', icon: Globe },
         { name: 'Users', path: '/settings/users', icon: Users },
     ];
+
+    function handleLinkClick() {
+        if (typeof window !== 'undefined' && window.innerWidth < 1024 && isOpen && onToggle) {
+            onToggle();
+        }
+    }
+
+    $effect(() => {
+        if (typeof window !== 'undefined' && isOpen && window.innerWidth < 1024) {
+            document.body.style.overflow = 'hidden';
+            return () => {
+                document.body.style.overflow = '';
+            };
+        }
+    });
 </script>
 
 <!-- Mobile Overlay -->
@@ -94,6 +109,7 @@
                             e.preventDefault();
                             e.stopPropagation();
                         }
+                        handleLinkClick();
                     }}
                     class="flex items-center p-2 text-gray-900 rounded-lg dark:text-white hover:bg-gray-100 dark:hover:bg-gray-700 group
           {isActive2(item.catalog)
@@ -149,6 +165,7 @@
                         {#each libraryItems as subItem}
                             <a
                                 href={subItem.path}
+                                onclick={handleLinkClick}
                                 class="flex items-center p-2 text-sm text-gray-600 rounded-lg dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 group
                                     {isActive2(subItem.path) ? 'text-orange-600 bg-orange-50 dark:bg-gray-700 font-medium' : ''}"
                             >
@@ -158,6 +175,24 @@
                         {/each}
                     </div>
                 {/if}
+            </div>
+
+            <!-- Folders -->
+            <div class="space-y-1">
+                <a
+                    href="/folders"
+                    onclick={handleLinkClick}
+                    class="flex items-center w-full p-2 text-gray-900 rounded-lg dark:text-white hover:bg-gray-100 dark:hover:bg-gray-700 group
+                        {isActive2('/folders') ? 'text-orange-600 bg-orange-50 dark:bg-gray-700 font-medium' : ''}"
+                >
+                    <Folder
+                        size={20}
+                        class={isActive2('/folders') ? 'text-orange-600' : 'text-gray-500'}
+                    />
+                    <span class="ms-3 transition-opacity duration-300 flex-1 text-left {isOpen ? 'opacity-100' : 'opacity-0 lg:hidden'}">
+                        Folders
+                    </span>
+                </a>
             </div>
 
             <div class="space-y-1">
@@ -200,6 +235,7 @@
                         {#each settingsItems as subItem}
                             <a
                                 href={subItem.path}
+                                onclick={handleLinkClick}
                                 class="flex items-center p-2 text-sm text-gray-600 rounded-lg dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 group
                                     {isActive2(subItem.path)
                                     ? 'text-orange-600 bg-orange-50 dark:bg-gray-700 font-medium'
