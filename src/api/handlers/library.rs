@@ -160,8 +160,10 @@ pub async fn get_song_tags(
         tags.initial_key = get_one(ItemKey::InitialKey);
         tags.mood = get_one(ItemKey::Mood);
         tags.grouping = get_one(ItemKey::ContentGroup);
+        tags.movement_name = get_one(ItemKey::Movement);
         tags.movement_number = get_one(ItemKey::MovementNumber);
         tags.movement_count = get_one(ItemKey::MovementTotal);
+        tags.work = get_one(ItemKey::Work);
         tags.language = get_one(ItemKey::Language);
         tags.copyright = get_one(ItemKey::CopyrightMessage);
         tags.license = get_one(ItemKey::License);
@@ -170,8 +172,12 @@ pub async fn get_song_tags(
 
         // MusicBrainz
         tags.music_brainz_track_id = get_one(ItemKey::MusicBrainzTrackId);
+        tags.music_brainz_album_id = get_one(ItemKey::MusicBrainzReleaseId);
         tags.music_brainz_artist_id = get_one(ItemKey::MusicBrainzArtistId);
         tags.music_brainz_release_group_id = get_one(ItemKey::MusicBrainzReleaseGroupId);
+        tags.music_brainz_album_artist_id = get_one(ItemKey::MusicBrainzReleaseArtistId);
+        tags.music_brainz_work_id = get_one(ItemKey::MusicBrainzWorkId);
+        tags.music_brainz_release_track_id = get_one(ItemKey::MusicBrainzRecordingId);
 
         // Extract front cover
         for picture in primary_tag.pictures() {
@@ -254,6 +260,33 @@ pub async fn update_song_tags(
         if let Some(engineer) = new_tags.engineer { tag.insert(TagItem::new(ItemKey::Engineer, ItemValue::Text(engineer))); }
         if let Some(mixer) = new_tags.mixer { tag.insert(TagItem::new(ItemKey::MixEngineer, ItemValue::Text(mixer))); }
         if let Some(bpm) = new_tags.bpm { tag.insert(TagItem::new(ItemKey::Bpm, ItemValue::Text(bpm.to_string()))); }
+        
+        // Additional extended tags
+        if let Some(label) = new_tags.label { tag.insert(TagItem::new(ItemKey::Label, ItemValue::Text(label))); }
+        if let Some(isrc) = new_tags.isrc { tag.insert(TagItem::new(ItemKey::Isrc, ItemValue::Text(isrc))); }
+        if let Some(barcode) = new_tags.barcode { tag.insert(TagItem::new(ItemKey::Barcode, ItemValue::Text(barcode))); }
+        if let Some(catalog_number) = new_tags.catalog_number { tag.insert(TagItem::new(ItemKey::CatalogNumber, ItemValue::Text(catalog_number))); }
+        if let Some(initial_key) = new_tags.initial_key { tag.insert(TagItem::new(ItemKey::InitialKey, ItemValue::Text(initial_key))); }
+        if let Some(mood) = new_tags.mood { tag.insert(TagItem::new(ItemKey::Mood, ItemValue::Text(mood))); }
+        if let Some(grouping) = new_tags.grouping { tag.insert(TagItem::new(ItemKey::ContentGroup, ItemValue::Text(grouping))); }
+        if let Some(movement_name) = new_tags.movement_name { tag.insert(TagItem::new(ItemKey::Movement, ItemValue::Text(movement_name))); }
+        if let Some(movement_number) = new_tags.movement_number { tag.insert(TagItem::new(ItemKey::MovementNumber, ItemValue::Text(movement_number))); }
+        if let Some(movement_count) = new_tags.movement_count { tag.insert(TagItem::new(ItemKey::MovementTotal, ItemValue::Text(movement_count))); }
+        if let Some(work) = new_tags.work { tag.insert(TagItem::new(ItemKey::Work, ItemValue::Text(work))); }
+        if let Some(language) = new_tags.language { tag.insert(TagItem::new(ItemKey::Language, ItemValue::Text(language))); }
+        if let Some(copyright) = new_tags.copyright { tag.insert(TagItem::new(ItemKey::CopyrightMessage, ItemValue::Text(copyright))); }
+        if let Some(license) = new_tags.license { tag.insert(TagItem::new(ItemKey::License, ItemValue::Text(license))); }
+        if let Some(encoded_by) = new_tags.encoded_by { tag.insert(TagItem::new(ItemKey::EncodedBy, ItemValue::Text(encoded_by))); }
+        if let Some(encoder_settings) = new_tags.encoder_settings { tag.insert(TagItem::new(ItemKey::EncoderSettings, ItemValue::Text(encoder_settings))); }
+        
+        // MusicBrainz IDs
+        if let Some(mb_track_id) = new_tags.music_brainz_track_id { tag.insert(TagItem::new(ItemKey::MusicBrainzTrackId, ItemValue::Text(mb_track_id))); }
+        if let Some(mb_album_id) = new_tags.music_brainz_album_id { tag.insert(TagItem::new(ItemKey::MusicBrainzReleaseId, ItemValue::Text(mb_album_id))); }
+        if let Some(mb_artist_id) = new_tags.music_brainz_artist_id { tag.insert(TagItem::new(ItemKey::MusicBrainzArtistId, ItemValue::Text(mb_artist_id))); }
+        if let Some(mb_release_group_id) = new_tags.music_brainz_release_group_id { tag.insert(TagItem::new(ItemKey::MusicBrainzReleaseGroupId, ItemValue::Text(mb_release_group_id))); }
+        if let Some(mb_album_artist_id) = new_tags.music_brainz_album_artist_id { tag.insert(TagItem::new(ItemKey::MusicBrainzReleaseArtistId, ItemValue::Text(mb_album_artist_id))); }
+        if let Some(mb_work_id) = new_tags.music_brainz_work_id { tag.insert(TagItem::new(ItemKey::MusicBrainzWorkId, ItemValue::Text(mb_work_id))); }
+        if let Some(mb_recording_id) = new_tags.music_brainz_release_track_id { tag.insert(TagItem::new(ItemKey::MusicBrainzRecordingId, ItemValue::Text(mb_recording_id))); }
 
         tag.save_to_path(path, WriteOptions::default()).map_err(|e| {
             log::error!("Failed to save tags to {}: {}", path.display(), e);
