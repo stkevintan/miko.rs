@@ -41,7 +41,10 @@ impl ScrapeService {
             .ok_or_else(|| anyhow::anyhow!("Song not found"))?;
 
         let path = std::path::Path::new(&song.path);
-        let mut tags = SongTags::from_file(path).unwrap_or_default();
+        let mut tags = SongTags::from_file(path).unwrap_or_else(|e| {
+            warn!("Failed to read tags from {}: {}. Proceeding with empty tags.", path.display(), e);
+            Default::default()
+        });
 
         let mut search_title = tags.title.clone().filter(|s| !s.trim().is_empty());
         let mut search_artist = tags.artist.clone().filter(|s| !s.trim().is_empty());
