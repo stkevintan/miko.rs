@@ -64,6 +64,20 @@
         const file = (e.target as HTMLInputElement).files?.[0];
         if (!file || !songId) return;
 
+        // Maximum allowed image size: 10MB (must match backend limit)
+        const MAX_IMAGE_SIZE = 10 * 1024 * 1024;
+
+        // Validate file size before uploading
+        if (file.size > MAX_IMAGE_SIZE) {
+            const sizeMB = (file.size / (1024 * 1024)).toFixed(2);
+            toast.error(`Image too large (${sizeMB}MB). Maximum size is 10MB`);
+            // Clear the file input
+            if (e.target) {
+                (e.target as HTMLInputElement).value = '';
+            }
+            return;
+        }
+
         uploadingImage = true;
         const formData = new FormData();
         formData.append('image', file);

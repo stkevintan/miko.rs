@@ -305,6 +305,9 @@ pub async fn update_song_cover(
     Path(id): Path<String>,
     mut multipart: Multipart,
 ) -> Result<StatusCode, poem::Error> {
+    // Maximum allowed image size: 10MB
+    const MAX_IMAGE_SIZE: usize = 10 * 1024 * 1024;
+
     let song = child::Entity::find_by_id(id)
         .one(*db)
         .await
@@ -323,6 +326,13 @@ pub async fn update_song_cover(
         if name == Some("image".to_string()) {
             mime_type = field.content_type().unwrap_or("image/jpeg").to_string();
             image_data = field.bytes().await.map_err(|_| poem::Error::from_status(StatusCode::INTERNAL_SERVER_ERROR))?.to_vec();
+            
+            // Validate image size
+            if image_data.len() > MAX_IMAGE_SIZE {
+                log::warn!("Image upload rejected: size {} exceeds maximum {}", image_data.len(), MAX_IMAGE_SIZE);
+                return Err(poem::Error::from_status(StatusCode::PAYLOAD_TOO_LARGE));
+            }
+            
             break;
         }
     }
