@@ -44,7 +44,7 @@ impl LyricsService {
         debug!("Fetching lyrics from LRCLIB: {}", url);
 
         let response = self.client.get(&url)
-            .header("User-Agent", "miko-rs/0.1.0 ( https://github.com/miko-rs/miko-rs )")
+            .header("User-Agent", format!("{}/{} ( {} )", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"), env!("CARGO_PKG_REPOSITORY")))
             .send()
             .await?;
 

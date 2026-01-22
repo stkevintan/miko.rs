@@ -2,6 +2,7 @@
 name = "miko-rs"
 version = "0.1.0"
 edition = "2021"
+repository = "https://github.com/stkevintan/miko.rs"
 
 [dependencies]
 poem = { version = "3", features = ["anyhow", "rustls", "static-files", "multipart"] }
