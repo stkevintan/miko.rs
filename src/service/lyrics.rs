@@ -12,14 +12,21 @@ pub struct LrcLibLyrics {
 
 pub struct LyricsService {
     client: reqwest::Client,
+    user_agent: String,
 }
 
 impl LyricsService {
     pub fn new() -> Result<Self> {
+        let user_agent = format!("{}/{} ( {} )", 
+            env!("CARGO_PKG_NAME"), 
+            env!("CARGO_PKG_VERSION"), 
+            env!("CARGO_PKG_REPOSITORY"));
+        
         Ok(Self {
             client: reqwest::Client::builder()
                 .timeout(Duration::from_secs(10))
                 .build()?,
+            user_agent,
         })
     }
 
@@ -44,7 +51,7 @@ impl LyricsService {
         debug!("Fetching lyrics from LRCLIB: {}", url);
 
         let response = self.client.get(&url)
-            .header("User-Agent", format!("{}/{} ( {} )", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"), env!("CARGO_PKG_REPOSITORY")))
+            .header("User-Agent", &self.user_agent)
             .send()
             .await?;
 
