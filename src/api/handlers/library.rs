@@ -1,6 +1,6 @@
 use poem::{handler, web::{Data, Json, Path, Multipart}, http::StatusCode};
 use sea_orm::{DatabaseConnection, EntityTrait};
-use crate::models::child;
+use crate::models::{child, user};
 use serde::Deserialize;
 use std::sync::Arc;
 use lofty::prelude::*;
@@ -51,9 +51,14 @@ pub async fn get_song_tags(
 #[handler]
 pub async fn update_song_tags(
     db: Data<&DatabaseConnection>,
+    user: Data<&std::sync::Arc<user::Model>>,
     Path(id): Path<String>,
     Json(new_tags): Json<SongTags>,
 ) -> Result<StatusCode, poem::Error> {
+    if !user.admin_role {
+        return Err(poem::Error::from_status(StatusCode::FORBIDDEN));
+    }
+
     let song = child::Entity::find_by_id(id)
         .one(*db)
         .await
@@ -159,9 +164,14 @@ pub async fn update_song_tags(
 #[handler]
 pub async fn update_song_cover(
     db: Data<&DatabaseConnection>,
+    user: Data<&std::sync::Arc<user::Model>>,
     Path(id): Path<String>,
     mut multipart: Multipart,
 ) -> Result<StatusCode, poem::Error> {
+    if !user.admin_role {
+        return Err(poem::Error::from_status(StatusCode::FORBIDDEN));
+    }
+
     // Maximum allowed image size: 10MB
     const MAX_IMAGE_SIZE: usize = 10 * 1024 * 1024;
 
