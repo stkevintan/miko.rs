@@ -1,79 +1,19 @@
-use poem::{handler, web::{Data, Json, Path, Multipart}, http::StatusCode};
+use poem::{handler, web::{Data, Json, Path, Multipart, Query}, http::StatusCode};
 use sea_orm::{DatabaseConnection, EntityTrait};
-use crate::models::child;
-use serde::{Deserialize, Serialize};
+use crate::models::{child, user};
+use serde::Deserialize;
+use std::sync::Arc;
 use lofty::prelude::*;
-use lofty::file::AudioFile;
-use lofty::tag::{Accessor, ItemKey, TagItem, ItemValue};
+use lofty::tag::{ItemKey, TagItem, ItemValue};
 use lofty::probe::Probe;
 use lofty::config::WriteOptions;
 use lofty::picture::{Picture, PictureType, MimeType};
-use base64::{Engine as _, engine::general_purpose};
+use crate::service::scrape::ScrapeService;
+use crate::service::tag::SongTags;
 
-// Constants for custom tag names
-const ACOUSTID_ID: &str = "ACOUSTID_ID";
-const ACOUSTID_FINGERPRINT: &str = "ACOUSTID_FINGERPRINT";
-const MUSICIP_PUID: &str = "MUSICIP_PUID";
-
-#[derive(Serialize, Deserialize, Default)]
-#[serde(rename_all = "camelCase")]
-pub struct SongTags {
-    pub title: Option<String>,
-    pub artist: Option<String>,
-    pub artists: Option<Vec<String>>,
-    pub album: Option<String>,
-    pub album_artist: Option<String>,
-    pub album_artists: Option<Vec<String>>,
-    pub track: Option<u32>,
-    pub disc: Option<u32>,
-    pub year: Option<u32>,
-    pub genre: Option<String>,
-    pub genres: Option<Vec<String>>,
-    pub lyrics: Option<String>,
-    pub comment: Option<String>,
-    pub duration: u32,
-    pub bit_rate: Option<u32>,
-    pub format: Option<String>,
-    pub front_cover: Option<String>,
-    // Extended tags
-    pub composer: Option<String>,
-    pub conductor: Option<String>,
-    pub remixer: Option<String>,
-    pub arranger: Option<String>,
-    pub lyricist: Option<String>,
-    pub engineer: Option<String>,
-    pub producer: Option<String>,
-    pub mixer: Option<String>,
-    pub label: Option<String>,
-    pub isrc: Option<String>,
-    pub barcode: Option<String>,
-    pub asin: Option<String>,
-    pub catalog_number: Option<String>,
-    pub bpm: Option<u32>,
-    pub initial_key: Option<String>,
-    pub mood: Option<String>,
-    pub grouping: Option<String>,
-    pub movement_name: Option<String>,
-    pub movement_number: Option<String>,
-    pub movement_count: Option<String>,
-    pub work: Option<String>,
-    pub language: Option<String>,
-    pub copyright: Option<String>,
-    pub license: Option<String>,
-    pub encoded_by: Option<String>,
-    pub encoder_settings: Option<String>,
-    // MusicBrainz/AcoustID
-    pub music_brainz_track_id: Option<String>,
-    pub music_brainz_album_id: Option<String>,
-    pub music_brainz_artist_id: Option<String>,
-    pub music_brainz_release_group_id: Option<String>,
-    pub music_brainz_album_artist_id: Option<String>,
-    pub music_brainz_work_id: Option<String>,
-    pub music_brainz_release_track_id: Option<String>,
-    pub acoustid_id: Option<String>,
-    pub acoustid_fingerprint: Option<String>,
-    pub musicip_puid: Option<String>,
-}
+const ACOUSTID_ID: &str = "Acoustid Id";
+const ACOUSTID_FINGERPRINT: &str = "Acoustid Fingerprint";
+const MUSICIP_PUID: &str = "MusicIP PUID";
 
 #[handler]
 pub async fn get_song_tags(
@@ -95,111 +35,13 @@ pub async fn get_song_tags(
         return Err(poem::Error::from_status(StatusCode::NOT_FOUND));
     }
 
-    let probe = Probe::open(path)
-        .map_err(|e| {
-            log::error!("Failed to open audio file: {}", e);
-            poem::Error::from_status(StatusCode::INTERNAL_SERVER_ERROR)
-        })?;
+    let mut tags = SongTags::from_file(path).map_err(|e| {
+        log::error!("Failed to read song tags: {}", e);
+        poem::Error::from_status(StatusCode::INTERNAL_SERVER_ERROR)
+    })?;
 
-    let tagged_file = probe.read()
-        .map_err(|e| {
-            log::error!("Failed to read audio tags: {}", e);
-            poem::Error::from_status(StatusCode::INTERNAL_SERVER_ERROR)
-        })?;
-
-    let properties = tagged_file.properties();
-    
-    let mut tags = SongTags {
-        duration: properties.duration().as_secs() as u32,
-        bit_rate: properties.audio_bitrate(),
-        format: path.extension().and_then(|s| s.to_str()).map(|s| s.to_string()),
-        ..Default::default()
-    };
-
-    if let Some(primary_tag) = tagged_file.primary_tag() {
-        // Core tags via Accessor trait
-        tags.title = primary_tag.title().map(|s| s.into_owned());
-        tags.artist = primary_tag.artist().map(|s| s.into_owned());
-        tags.album = primary_tag.album().map(|s| s.into_owned());
-        tags.year = primary_tag.year();
-        tags.track = primary_tag.track();
-        tags.genre = primary_tag.genre().map(|s| s.into_owned());
-        tags.comment = primary_tag.comment().map(|s| s.into_owned());
-        tags.disc = primary_tag.disk();
-
-        // Helper for multi-value tags
-        let get_all = |key: ItemKey| -> Option<Vec<String>> {
-            let items: Vec<String> = primary_tag.get_items(&key)
-                .filter_map(|i| i.value().text())
-                .map(|s| s.to_string())
-                .collect();
-            if items.is_empty() { None } else { Some(items) }
-        };
-
-        // Helper for single string tags
-        let get_one = |key: ItemKey| -> Option<String> {
-            primary_tag.get(&key).and_then(|i| i.value().text()).map(|s| s.to_string())
-        };
-
-        // Multi-value support
-        tags.artists = get_all(ItemKey::TrackArtist);
-        tags.album_artists = get_all(ItemKey::AlbumArtist);
-        tags.genres = get_all(ItemKey::Genre);
-
-        // Extended tags
-        tags.album_artist = get_one(ItemKey::AlbumArtist);
-        tags.lyrics = get_one(ItemKey::Lyrics);
-        tags.composer = get_one(ItemKey::Composer);
-        tags.conductor = get_one(ItemKey::Conductor);
-        tags.remixer = get_one(ItemKey::Remixer);
-        tags.arranger = get_one(ItemKey::Arranger);
-        tags.lyricist = get_one(ItemKey::Lyricist);
-        tags.engineer = get_one(ItemKey::Engineer);
-        tags.producer = get_one(ItemKey::Producer);
-        tags.mixer = get_one(ItemKey::MixEngineer);
-        tags.label = get_one(ItemKey::Label);
-        tags.isrc = get_one(ItemKey::Isrc);
-        tags.barcode = get_one(ItemKey::Barcode);
-        tags.catalog_number = get_one(ItemKey::CatalogNumber);
-        tags.bpm = get_one(ItemKey::Bpm).and_then(|s| s.parse().ok());
-        tags.initial_key = get_one(ItemKey::InitialKey);
-        tags.mood = get_one(ItemKey::Mood);
-        tags.grouping = get_one(ItemKey::ContentGroup);
-        tags.movement_name = get_one(ItemKey::Movement);
-        tags.movement_number = get_one(ItemKey::MovementNumber);
-        tags.movement_count = get_one(ItemKey::MovementTotal);
-        tags.work = get_one(ItemKey::Work);
-        tags.language = get_one(ItemKey::Language);
-        tags.copyright = get_one(ItemKey::CopyrightMessage);
-        tags.license = get_one(ItemKey::License);
-        tags.encoded_by = get_one(ItemKey::EncodedBy);
-        tags.encoder_settings = get_one(ItemKey::EncoderSettings);
-
-        // MusicBrainz
-        tags.music_brainz_track_id = get_one(ItemKey::MusicBrainzTrackId);
-        tags.music_brainz_album_id = get_one(ItemKey::MusicBrainzReleaseId);
-        tags.music_brainz_artist_id = get_one(ItemKey::MusicBrainzArtistId);
-        tags.music_brainz_release_group_id = get_one(ItemKey::MusicBrainzReleaseGroupId);
-        tags.music_brainz_album_artist_id = get_one(ItemKey::MusicBrainzReleaseArtistId);
-        tags.music_brainz_work_id = get_one(ItemKey::MusicBrainzWorkId);
-        tags.music_brainz_release_track_id = get_one(ItemKey::MusicBrainzRecordingId);
-
-        // AcoustID / MusicIP (using Unknown variant for custom tags)
-        tags.acoustid_id = get_one(ItemKey::Unknown(ACOUSTID_ID.to_string()));
-        tags.acoustid_fingerprint = get_one(ItemKey::Unknown(ACOUSTID_FINGERPRINT.to_string()));
-        tags.musicip_puid = get_one(ItemKey::Unknown(MUSICIP_PUID.to_string()));
-
-        // Extract front cover
-        for picture in primary_tag.pictures() {
-            if picture.pic_type() == lofty::picture::PictureType::CoverFront {
-                let base64_data = general_purpose::STANDARD.encode(picture.data());
-                let mime_type = picture.mime_type().map(|m| m.as_str()).unwrap_or("image/jpeg");
-                tags.front_cover = Some(format!("data:{};base64,{}", mime_type, base64_data));
-                break;
-            }
-        }
-    } else {
-        // Fallback to title from database if no tags found
+    // Fallback to title from database if no tags found
+    if tags.title.is_none() {
         tags.title = Some(song.title);
     }
 
@@ -209,9 +51,14 @@ pub async fn get_song_tags(
 #[handler]
 pub async fn update_song_tags(
     db: Data<&DatabaseConnection>,
+    user: Data<&std::sync::Arc<user::Model>>,
     Path(id): Path<String>,
     Json(new_tags): Json<SongTags>,
 ) -> Result<StatusCode, poem::Error> {
+    if !user.admin_role {
+        return Err(poem::Error::from_status(StatusCode::FORBIDDEN));
+    }
+
     let song = child::Entity::find_by_id(id)
         .one(*db)
         .await
@@ -317,9 +164,14 @@ pub async fn update_song_tags(
 #[handler]
 pub async fn update_song_cover(
     db: Data<&DatabaseConnection>,
+    user: Data<&std::sync::Arc<user::Model>>,
     Path(id): Path<String>,
     mut multipart: Multipart,
 ) -> Result<StatusCode, poem::Error> {
+    if !user.admin_role {
+        return Err(poem::Error::from_status(StatusCode::FORBIDDEN));
+    }
+
     // Maximum allowed image size: 10MB
     const MAX_IMAGE_SIZE: usize = 10 * 1024 * 1024;
 
@@ -408,4 +260,49 @@ pub async fn update_song_cover(
     }).await.map_err(|_| poem::Error::from_status(StatusCode::INTERNAL_SERVER_ERROR))??;
 
     Ok(StatusCode::OK)
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScrapeRequest {
+    pub mbid: Option<String>,
+}
+
+#[handler]
+pub async fn scrape_song_tags(
+    db: Data<&DatabaseConnection>,
+    mb_client: Data<&Arc<crate::service::musicbrainz::MusicBrainzClient>>,
+    lyrics_service: Data<&Arc<crate::service::lyrics::LyricsService>>,
+    Path(id): Path<String>,
+    Query(req): Query<ScrapeRequest>,
+) -> Result<Json<SongTags>, poem::Error> {
+    let scrape_service = ScrapeService::new((*db).clone(), (*mb_client).clone(), (*lyrics_service).clone());
+    
+    let tags = scrape_service.scrape_recording_tags(&id, req.mbid)
+        .await
+        .map_err(|e| {
+            log::error!("Scrape failed: {}", e);
+            poem::Error::from_status(StatusCode::NOT_FOUND)
+        })?;
+
+    Ok(Json(tags))
+}
+
+#[handler]
+pub async fn scrape_song_lyrics(
+    db: Data<&DatabaseConnection>,
+    mb_client: Data<&Arc<crate::service::musicbrainz::MusicBrainzClient>>,
+    lyrics_service: Data<&Arc<crate::service::lyrics::LyricsService>>,
+    Path(id): Path<String>,
+) -> Result<Json<serde_json::Value>, poem::Error> {
+    let scrape_service = ScrapeService::new((*db).clone(), (*mb_client).clone(), (*lyrics_service).clone());
+    
+    let lyrics = scrape_service.scrape_lyrics(&id)
+        .await
+        .map_err(|e| {
+            log::error!("Lyrics scrape failed: {}", e);
+            poem::Error::from_status(StatusCode::NOT_FOUND)
+        })?;
+
+    Ok(Json(serde_json::json!({ "lyrics": lyrics })))
 }

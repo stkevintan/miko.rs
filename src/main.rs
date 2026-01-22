@@ -63,6 +63,14 @@ async fn init_default_user(
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
     env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
+    
+    let mb_client = Arc::new(crate::service::musicbrainz::MusicBrainzClient::new(
+        env!("CARGO_PKG_NAME"),
+        env!("CARGO_PKG_VERSION"),
+        env!("CARGO_PKG_REPOSITORY")
+    )?);
+    
+    let lyrics_service = Arc::new(crate::service::lyrics::LyricsService::new()?);
 
     let config = Config::load()?;
     let config = Arc::new(config);
@@ -125,6 +133,8 @@ async fn main() -> Result<(), anyhow::Error> {
         .data(config)
         .data(scanner)
         .data(service)
+        .data(mb_client)
+        .data(lyrics_service)
         .with(Tracing)
         .with(
             Cors::new()

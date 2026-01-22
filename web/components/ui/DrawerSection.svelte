@@ -4,20 +4,27 @@
     let { 
         title, 
         icon: IconSnippet, 
-        children 
+        children,
+        action: ActionSnippet
     }: {
         title: string;
         icon?: Snippet;
         children: Snippet;
+        action?: Snippet;
     } = $props();
 </script>
 
 <section>
     <h4 class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4 flex items-center gap-2">
         {#if IconSnippet}
-            {@render IconSnippet()}
+            <span class="flex-shrink-0">
+                {@render IconSnippet()}
+            </span>
         {/if}
-        {title}
+        <span class="flex-1 truncate">{title}</span>
+        {#if ActionSnippet}
+            {@render ActionSnippet()}
+        {/if}
     </h4>
     {@render children()}
 </section>
