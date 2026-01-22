@@ -180,7 +180,8 @@ impl MusicBrainzClient {
     }
 
     pub async fn fetch_cover_art(&self, release_mbid: &str) -> Result<Option<String>> {
-        let url = format!("https://coverartarchive.org/release/{}/front", release_mbid);
+        let url = format!("https://coverartarchive.org/release/{}/front", 
+            urlencoding::encode(release_mbid));
         
         debug!("Fetching cover art from CAA for release: {}", release_mbid);
         
