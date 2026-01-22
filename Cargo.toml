@@ -35,6 +35,9 @@ mimalloc = "0.1"
 regex = "1.10"
 once_cell = "1.19"
 ammonia = "4.0"
+reqwest = { version = "0.12", features = ["json"] }
+urlencoding = "2.1"
+governor = "0.6"
 migration = { path = "migration" }
 path-clean = "1.0.1"
 rust-embed = "8.5.0"
