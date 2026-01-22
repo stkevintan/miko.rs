@@ -103,21 +103,20 @@ pub struct MusicBrainzClient {
 }
 
 impl MusicBrainzClient {
-    pub fn new(app_name: &str, version: &str, contact: &str) -> Self {
+    pub fn new(app_name: &str, version: &str, contact: &str) -> Result<Self> {
         let user_agent = format!("{}/{}/{} ( {} )", app_name, version, app_name, contact);
         
         // MusicBrainz allows 1 request per second
         let quota = Quota::per_second(NonZeroU32::new(1).unwrap());
         let rate_limiter = RateLimiter::direct(quota);
 
-        Self {
+        Ok(Self {
             client: reqwest::Client::builder()
                 .timeout(Duration::from_secs(10))
-                .build()
-                .unwrap(),
+                .build()?,
             user_agent,
             rate_limiter,
-        }
+        })
     }
 
     async fn request_with_retry<T: for<'de> Deserialize<'de>>(&self, url: &str) -> Result<T> {
