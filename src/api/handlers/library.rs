@@ -38,6 +38,7 @@ pub struct SongTags {
     pub lyricist: Option<String>,
     pub engineer: Option<String>,
     pub producer: Option<String>,
+    pub mixer: Option<String>,
     pub label: Option<String>,
     pub isrc: Option<String>,
     pub barcode: Option<String>,
@@ -150,6 +151,7 @@ pub async fn get_song_tags(
         tags.lyricist = get_one(ItemKey::Lyricist);
         tags.engineer = get_one(ItemKey::Engineer);
         tags.producer = get_one(ItemKey::Producer);
+        tags.mixer = get_one(ItemKey::MixEngineer);
         tags.label = get_one(ItemKey::Label);
         tags.isrc = get_one(ItemKey::Isrc);
         tags.barcode = get_one(ItemKey::Barcode);
@@ -250,6 +252,7 @@ pub async fn update_song_tags(
         if let Some(remixer) = new_tags.remixer { tag.insert(TagItem::new(ItemKey::Remixer, ItemValue::Text(remixer))); }
         if let Some(arranger) = new_tags.arranger { tag.insert(TagItem::new(ItemKey::Arranger, ItemValue::Text(arranger))); }
         if let Some(engineer) = new_tags.engineer { tag.insert(TagItem::new(ItemKey::Engineer, ItemValue::Text(engineer))); }
+        if let Some(mixer) = new_tags.mixer { tag.insert(TagItem::new(ItemKey::MixEngineer, ItemValue::Text(mixer))); }
         if let Some(bpm) = new_tags.bpm { tag.insert(TagItem::new(ItemKey::Bpm, ItemValue::Text(bpm.to_string()))); }
 
         tag.save_to_path(path, WriteOptions::default()).map_err(|e| {
