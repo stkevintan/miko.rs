@@ -32,8 +32,8 @@ pub struct SongTags {
     pub lyrics: Option<String>,
     pub comment: Option<String>,
     pub duration: u32,
-    pub bit_rate: u32,
-    pub format: String,
+    pub bit_rate: Option<u32>,
+    pub format: Option<String>,
     pub front_cover: Option<String>,
     // Extended tags
     pub composer: Option<String>,
@@ -111,8 +111,8 @@ pub async fn get_song_tags(
     
     let mut tags = SongTags {
         duration: properties.duration().as_secs() as u32,
-        bit_rate: properties.audio_bitrate().unwrap_or(0),
-        format: path.extension().and_then(|s| s.to_str()).unwrap_or("unknown").to_string(),
+        bit_rate: properties.audio_bitrate(),
+        format: path.extension().and_then(|s| s.to_str()).map(|s| s.to_string()),
         ..Default::default()
     };
 
