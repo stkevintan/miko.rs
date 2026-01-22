@@ -1,6 +1,6 @@
 use crate::service::Service;
 use crate::config::Config;
-use crate::models::{child, music_folder};
+use crate::models::music_folder;
 use crate::scanner::Scanner;
 use crate::subsonic::{
     common::{send_response, SubsonicParams},
@@ -16,7 +16,7 @@ use poem::{
     web::{Data, Query},
     IntoResponse,
 };
-use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, PaginatorTrait, QueryFilter};
+use sea_orm::{ConnectionTrait, DatabaseConnection, EntityTrait, FromQueryResult, Statement};
 use serde::Deserialize;
 use std::sync::Arc;
 
@@ -44,6 +44,13 @@ pub struct ArtistQuery {
     pub count: Option<u64>,
 }
 
+#[derive(Debug, FromQueryResult)]
+struct MusicFolderStats {
+    pub id: i32,
+    pub directory_id: Option<String>,
+    pub song_count: i32,
+}
+
 #[handler]
 pub async fn get_music_folders(
     db: Data<&DatabaseConnection>,
@@ -59,34 +66,54 @@ pub async fn get_music_folders(
         }
     };
 
-    let mut music_folders = Vec::with_capacity(folders.len());
-    for f in folders {
-        let directory_id = child::Entity::find()
-            .filter(child::Column::MusicFolderId.eq(f.id))
-            .filter(child::Column::Parent.is_null())
-            .filter(child::Column::IsDir.eq(true))
-            .one(*db)
-            .await
-            .ok()
-            .flatten()
-            .map(|c| c.id);
+    // Optimize by fetching all stats in a single query using SQL aggregation
+    // Note: We use raw SQL here instead of the child Entity to avoid N+1 queries
+    let sql = r#"
+        SELECT 
+            mf.id,
+            (SELECT c.id FROM children c 
+             WHERE c.music_folder_id = mf.id 
+             AND c.parent IS NULL 
+             AND c.is_dir = 1 
+             LIMIT 1) as directory_id,
+            (SELECT COUNT(*) FROM children c 
+             WHERE c.music_folder_id = mf.id 
+             AND c.is_dir = 0) as song_count
+        FROM music_folders mf
+    "#;
+    
+    let stats_map: std::collections::HashMap<i32, MusicFolderStats> = match MusicFolderStats::find_by_statement(
+        Statement::from_string((*db).get_database_backend(), sql.to_owned())
+    )
+    .all(*db)
+    .await
+    {
+        Ok(stats) => stats.into_iter().map(|s| (s.id, s)).collect(),
+        Err(e) => {
+            log::error!("Failed to fetch music folder stats: {:?}", e);
+            return send_response(
+                SubsonicResponse::new_error(0, "Failed to fetch music folder stats".into()),
+                &params.f,
+            );
+        }
+    };
 
-        let song_count = child::Entity::find()
-            .filter(child::Column::MusicFolderId.eq(f.id))
-            .filter(child::Column::IsDir.eq(false))
-            .paginate(*db, 1)
-            .num_items()
-            .await
-            .unwrap_or(0) as i32;
-
-        music_folders.push(MusicFolder {
-            id: f.id,
-            name: f.name,
-            path: Some(f.path),
-            song_count: Some(song_count),
-            directory_id,
-        });
-    }
+    let music_folders = folders
+        .into_iter()
+        .map(|f| {
+            let stats = stats_map.get(&f.id);
+            if stats.is_none() {
+                log::warn!("No stats found for music folder id={}, this may indicate a database inconsistency", f.id);
+            }
+            MusicFolder {
+                id: f.id,
+                name: f.name,
+                path: Some(f.path),
+                song_count: stats.map(|s| s.song_count),
+                directory_id: stats.and_then(|s| s.directory_id.clone()),
+            }
+        })
+        .collect();
 
     let resp = SubsonicResponse::new_ok(SubsonicResponseBody::MusicFolders(MusicFolders {
         music_folder: music_folders,

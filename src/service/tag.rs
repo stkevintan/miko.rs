@@ -34,6 +34,8 @@ pub struct SongTags {
     pub lyricist: Option<String>,
     pub engineer: Option<String>,
     pub producer: Option<String>,
+    pub mixer: Option<String>,
+    pub dj_mixer: Option<String>,
     pub label: Option<String>,
     pub isrc: Option<String>,
     pub barcode: Option<String>,
@@ -56,8 +58,8 @@ pub struct SongTags {
     pub music_brainz_track_id: Option<String>,
     pub music_brainz_album_id: Option<String>,
     pub music_brainz_artist_id: Option<String>,
-    pub music_brainz_release_group_id: Option<String>,
     pub music_brainz_album_artist_id: Option<String>,
+    pub music_brainz_release_group_id: Option<String>,
     pub music_brainz_work_id: Option<String>,
     pub music_brainz_release_track_id: Option<String>,
     pub acoustid_id: Option<String>,
@@ -125,6 +127,8 @@ impl SongTags {
         self.lyricist = get_one(ItemKey::Lyricist);
         self.engineer = get_one(ItemKey::Engineer);
         self.producer = get_one(ItemKey::Producer);
+        self.mixer = get_one(ItemKey::MixEngineer);
+        self.dj_mixer = get_one(ItemKey::Unknown("DJ Mixer".to_string()));
         self.label = get_one(ItemKey::Label);
         self.isrc = get_one(ItemKey::Isrc);
         self.barcode = get_one(ItemKey::Barcode);
@@ -133,8 +137,10 @@ impl SongTags {
         self.initial_key = get_one(ItemKey::InitialKey);
         self.mood = get_one(ItemKey::Mood);
         self.grouping = get_one(ItemKey::ContentGroup);
+        self.movement_name = get_one(ItemKey::Movement);
         self.movement_number = get_one(ItemKey::MovementNumber);
         self.movement_count = get_one(ItemKey::MovementTotal);
+        self.work = get_one(ItemKey::Work);
         self.language = get_one(ItemKey::Language);
         self.copyright = get_one(ItemKey::CopyrightMessage);
         self.license = get_one(ItemKey::License);
@@ -143,8 +149,17 @@ impl SongTags {
 
         // MusicBrainz
         self.music_brainz_track_id = get_one(ItemKey::MusicBrainzTrackId);
+        self.music_brainz_album_id = get_one(ItemKey::MusicBrainzReleaseId);
         self.music_brainz_artist_id = get_one(ItemKey::MusicBrainzArtistId);
         self.music_brainz_release_group_id = get_one(ItemKey::MusicBrainzReleaseGroupId);
+        self.music_brainz_album_artist_id = get_one(ItemKey::MusicBrainzReleaseArtistId);
+        self.music_brainz_work_id = get_one(ItemKey::MusicBrainzWorkId);
+        self.music_brainz_release_track_id = get_one(ItemKey::MusicBrainzRecordingId);
+
+        // AcoustID / MusicIP
+        self.acoustid_id = get_one(ItemKey::Unknown("Acoustid Id".to_string()));
+        self.acoustid_fingerprint = get_one(ItemKey::Unknown("Acoustid Fingerprint".to_string()));
+        self.musicip_puid = get_one(ItemKey::Unknown("MusicIP PUID".to_string()));
 
         // Extract front cover
         for picture in tag.pictures() {

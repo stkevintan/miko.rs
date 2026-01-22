@@ -25,7 +25,7 @@
     let scraping = $state(false);
     let scrapingLyrics = $state(false);
     let mbidInput = $state("");
-    let fileInput: HTMLInputElement;
+    let fileInput = $state<HTMLInputElement>();
 
     $effect(() => {
         if (isOpen && songId) {
@@ -152,6 +152,20 @@
         const file = (e.target as HTMLInputElement).files?.[0];
         if (!file || !songId) return;
 
+        // Maximum allowed image size: 10MB (must match backend limit)
+        const MAX_IMAGE_SIZE = 10 * 1024 * 1024;
+
+        // Validate file size before uploading
+        if (file.size > MAX_IMAGE_SIZE) {
+            const sizeMB = (file.size / (1024 * 1024)).toFixed(2);
+            toast.error(`Image too large (${sizeMB}MB). Maximum size is 10MB`);
+            // Clear the file input
+            if (e.target) {
+                (e.target as HTMLInputElement).value = '';
+            }
+            return;
+        }
+
         uploadingImage = true;
         const formData = new FormData();
         formData.append('image', file);
@@ -199,7 +213,6 @@
                         if (e.key === 'Enter') saveField(field);
                         if (e.key === 'Escape') editingField = null;
                     }}
-                    autofocus
                     disabled={saving}
                 />
                 <div class="flex gap-1">
@@ -270,22 +283,24 @@
                 </div>
             </div>
         {:else}
-            <div class="flex flex-col gap-2">
-                <div 
-                    class="p-4 bg-gray-50 dark:bg-gray-900/40 rounded-xl text-sm leading-relaxed whitespace-pre-wrap break-all text-gray-600 dark:text-gray-400 italic font-serif cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors {isChanged ? 'border-2 border-blue-500/50 !text-blue-600 dark:!text-blue-400 !italic-none' : ''}"
-                    onclick={() => {
+            <div 
+                class="p-4 bg-gray-50 dark:bg-gray-900/40 rounded-xl text-sm leading-relaxed whitespace-pre-wrap text-gray-600 dark:text-gray-400 italic font-serif cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors {isChanged ? 'ring-1 ring-blue-500/50' : ''}"
+                role="button"
+                tabindex="0"
+                onclick={() => {
+                    editingField = field;
+                    editValue = value || "";
+                }}
+                onkeydown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
                         editingField = field;
                         editValue = value || "";
-                    }}
-                    title="Click to edit {label.toLowerCase()}"
-                >
-                    {value || `No ${label.toLowerCase()} available. Click to add.`}
-                </div>
-                {#if isChanged}
-                    <div class="px-4 text-[11px] text-gray-400 line-through whitespace-pre-wrap">
-                        Was: {originalTags?.[field] || 'None'}
-                    </div>
-                {/if}
+                    }
+                }}
+                title="Click to edit {label.toLowerCase()}"
+            >
+                {value || `No ${label.toLowerCase()} available. Click to add.`}
             </div>
         {/if}
     </DrawerSection>
@@ -317,7 +332,7 @@
 
             {#if tags.frontCover}
                 <button 
-                    onclick={() => fileInput.click()}
+                    onclick={() => fileInput?.click()}
                     disabled={uploadingImage}
                     class="group/cover relative aspect-square w-full rounded-2xl overflow-hidden shadow-lg border border-gray-100 dark:border-gray-700 hover:border-orange-500 transition-all cursor-pointer"
                 >
@@ -333,7 +348,7 @@
                 </button>
             {:else}
                 <button
-                    onclick={() => fileInput.click()}
+                    onclick={() => fileInput?.click()}
                     disabled={uploadingImage}
                     class="aspect-square w-full rounded-2xl bg-gray-50 dark:bg-gray-800/50 border-2 border-dashed border-gray-200 dark:border-gray-700 flex flex-col items-center justify-center text-gray-400 hover:border-orange-500 hover:text-orange-500 transition-all cursor-pointer"
                 >
@@ -506,12 +521,10 @@
             {/snippet}
             {@render editableTextarea('Lyrics', 'lyrics', tags.lyrics, fileTextIcon, lyricsAction)}
 
-            {#if tags.comment || editingField === 'comment'}
-                {#snippet commentIcon()}
-                    <Layers size={14} />
-                {/snippet}
-                {@render editableTextarea('Comment', 'comment', tags.comment, commentIcon)}
-            {/if}
+            {#snippet commentIcon()}
+                <Layers size={14} />
+            {/snippet}
+            {@render editableTextarea('Comment', 'comment', tags.comment, commentIcon)}
         </div>
     {:else}
         <div class="flex-1 flex flex-col items-center justify-center p-6 text-center">
