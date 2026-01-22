@@ -104,7 +104,7 @@ pub struct MusicBrainzClient {
 
 impl MusicBrainzClient {
     pub fn new(app_name: &str, version: &str, contact: &str) -> Result<Self> {
-        let user_agent = format!("{}/{}/{} ( {} )", app_name, version, app_name, contact);
+        let user_agent = format!("{}/{} ( {} )", app_name, version, contact);
         
         // MusicBrainz allows 1 request per second
         let quota = Quota::per_second(NonZeroU32::MIN);
