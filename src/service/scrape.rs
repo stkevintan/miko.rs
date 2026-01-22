@@ -10,7 +10,9 @@ use crate::service::musicbrainz::MusicBrainzClient;
 use crate::service::tag::SongTags;
 
 /// Escapes Lucene special characters in a search query string.
-/// Lucene special characters: + - && || ! ( ) { } [ ] ^ " ~ * ? : \ /
+/// Escapes individual characters that form Lucene operators and special syntax:
+/// + - & | ! ( ) { } [ ] ^ " ~ * ? : \ /
+/// Note: Escaping & and | prevents formation of && and || operators
 fn escape_lucene(query: &str) -> String {
     let special_chars = r#"+-&|!(){}[]^"~*?:\/"#;
     let mut escaped = String::with_capacity(query.len() * 2);
