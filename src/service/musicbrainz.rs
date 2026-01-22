@@ -107,8 +107,7 @@ impl MusicBrainzClient {
         let user_agent = format!("{}/{}/{} ( {} )", app_name, version, app_name, contact);
         
         // MusicBrainz allows 1 request per second
-        // SAFETY: 1 is a non-zero value
-        let quota = Quota::per_second(unsafe { NonZeroU32::new_unchecked(1) });
+        let quota = Quota::per_second(NonZeroU32::MIN);
         let rate_limiter = RateLimiter::direct(quota);
 
         Ok(Self {
