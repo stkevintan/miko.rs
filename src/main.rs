@@ -68,7 +68,7 @@ async fn main() -> Result<(), anyhow::Error> {
         "miko-rs",
         "0.1.0",
         "https://github.com/miko-rs/miko-rs"
-    ));
+    )?);
     
     let lyrics_service = Arc::new(crate::service::lyrics::LyricsService::new()?);
 
