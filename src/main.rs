@@ -65,9 +65,9 @@ async fn main() -> Result<(), anyhow::Error> {
     env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
     
     let mb_client = Arc::new(crate::service::musicbrainz::MusicBrainzClient::new(
-        "miko-rs",
-        "0.1.0",
-        "https://github.com/miko-rs/miko-rs"
+        env!("CARGO_PKG_NAME"),
+        env!("CARGO_PKG_VERSION"),
+        env!("CARGO_PKG_REPOSITORY")
     )?);
     
     let lyrics_service = Arc::new(crate::service::lyrics::LyricsService::new()?);
