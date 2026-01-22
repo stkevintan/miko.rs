@@ -15,13 +15,12 @@ pub struct LyricsService {
 }
 
 impl LyricsService {
-    pub fn new() -> Self {
-        Self {
+    pub fn new() -> Result<Self> {
+        Ok(Self {
             client: reqwest::Client::builder()
                 .timeout(Duration::from_secs(10))
-                .build()
-                .unwrap(),
-        }
+                .build()?,
+        })
     }
 
     pub async fn fetch_lyrics(

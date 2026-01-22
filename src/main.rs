@@ -70,7 +70,7 @@ async fn main() -> Result<(), anyhow::Error> {
         "https://github.com/miko-rs/miko-rs"
     ));
     
-    let lyrics_service = Arc::new(crate::service::lyrics::LyricsService::new());
+    let lyrics_service = Arc::new(crate::service::lyrics::LyricsService::new()?);
 
     let config = Config::load()?;
     let config = Arc::new(config);
