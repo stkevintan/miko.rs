@@ -1,4 +1,4 @@
-use poem::{handler, web::{Data, Json, Path, Multipart}, http::StatusCode};
+use poem::{handler, web::{Data, Json, Path, Multipart, Query}, http::StatusCode};
 use sea_orm::{DatabaseConnection, EntityTrait};
 use crate::models::{child, user};
 use serde::Deserialize;
@@ -274,7 +274,7 @@ pub async fn scrape_song_tags(
     mb_client: Data<&Arc<crate::service::musicbrainz::MusicBrainzClient>>,
     lyrics_service: Data<&Arc<crate::service::lyrics::LyricsService>>,
     Path(id): Path<String>,
-    Json(req): Json<ScrapeRequest>,
+    Query(req): Query<ScrapeRequest>,
 ) -> Result<Json<SongTags>, poem::Error> {
     let scrape_service = ScrapeService::new((*db).clone(), (*mb_client).clone(), (*lyrics_service).clone());
     

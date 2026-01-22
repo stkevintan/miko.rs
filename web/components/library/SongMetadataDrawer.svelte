@@ -63,9 +63,15 @@
             // Keep a copy of current tags for comparison/revert
             originalTags = JSON.parse(JSON.stringify(tags));
 
-            const response = await api.post<SongTags>(`/songs/${songId}/scrape-tags`, {
-                mbid: mbidInput || null
-            });
+            // Build query string with mbid if provided
+            const params = new URLSearchParams();
+            if (mbidInput) {
+                params.append('mbid', mbidInput);
+            }
+            const queryString = params.toString();
+            const url = `/songs/${songId}/scrape-tags${queryString ? `?${queryString}` : ''}`;
+            
+            const response = await api.get<SongTags>(url);
             
             // Merge labels/values from scraped results into current tags
             // but don't save yet - let the user review
@@ -91,7 +97,7 @@
                 originalTags = JSON.parse(JSON.stringify(tags));
             }
 
-            const response = await api.post<{ lyrics: string }>(`/songs/${songId}/scrape-lyrics`);
+            const response = await api.get<{ lyrics: string }>(`/songs/${songId}/scrape-lyrics`);
             
             const newLyrics = response.data.lyrics;
             tags = { ...tags, lyrics: newLyrics };
@@ -130,22 +136,22 @@
         }
     }
 
-    async function saveField(field: keyof SongTags) {
-        if (!tags || !songId) return;
-        
-        saving = true;
-        const updatedTags = { ...tags, [field]: editValue };
-        try {
-            await api.post(`/songs/${songId}/tags`, updatedTags);
-            tags = updatedTags;
-            editingField = null;
-            toast.success(`Updated ${field}`);
-        } catch (error) {
-            console.error('Failed to update tags:', error);
-            toast.error(`Failed to update ${field}`);
-        } finally {
-            saving = false;
+    function startEditField(field: keyof SongTags, value: any) {
+        // When starting to edit, enter review mode and save original tags
+        if (!isReviewing) {
+            originalTags = JSON.parse(JSON.stringify(tags));
+            isReviewing = true;
         }
+        editingField = field;
+        editValue = value || "";
+    }
+
+    function applyFieldEdit(field: keyof SongTags) {
+        if (!tags) return;
+        
+        // Update the tag value but don't save yet - just apply to local state
+        tags = { ...tags, [field]: editValue };
+        editingField = null;
     }
 
     async function handleImageUpload(e: Event) {
@@ -210,7 +216,7 @@
                     bind:value={editValue}
                     class="flex-1 text-sm font-semibold bg-white dark:bg-gray-800 border border-orange-500 rounded px-2 py-1 outline-none focus:ring-1 focus:ring-orange-500 dark:text-gray-200"
                     onkeydown={(e) => {
-                        if (e.key === 'Enter') saveField(field);
+                        if (e.key === 'Enter') applyFieldEdit(field);
                         if (e.key === 'Escape') editingField = null;
                     }}
                     disabled={saving}
@@ -218,9 +224,9 @@
                 <div class="flex gap-1">
                     <button 
                         disabled={saving}
-                        onclick={() => saveField(field)} 
+                        onclick={() => applyFieldEdit(field)} 
                         class="p-1 text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20 rounded transition-colors disabled:opacity-50"
-                        title="Save"
+                        title="Apply"
                     >
                         <Check size={16} />
                     </button>
@@ -237,10 +243,7 @@
             <div class="flex-1 flex flex-col">
                 <button 
                     class="text-left text-sm font-semibold dark:text-gray-200 hover:text-orange-600 cursor-pointer transition-colors py-1 group-hover/field:translate-x-1 break-all {isChanged ? 'text-blue-600 dark:text-blue-400' : ''}"
-                    onclick={() => {
-                        editingField = field;
-                        editValue = value || "";
-                    }}
+                    onclick={() => startEditField(field, value)}
                     title="Click to edit"
                 >
                     {value || 'Unknown'}
@@ -269,10 +272,10 @@
                 <div class="flex justify-end gap-2">
                     <button 
                         disabled={saving}
-                        onclick={() => saveField(field)} 
+                        onclick={() => applyFieldEdit(field)} 
                         class="px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2 text-sm disabled:opacity-50"
                     >
-                        <Check size={16} /> Save
+                        <Check size={16} /> Apply
                     </button>
                     <button 
                         onclick={() => editingField = null} 
@@ -287,15 +290,11 @@
                 class="p-4 bg-gray-50 dark:bg-gray-900/40 rounded-xl text-sm leading-relaxed whitespace-pre-wrap text-gray-600 dark:text-gray-400 italic font-serif cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors {isChanged ? 'ring-1 ring-blue-500/50' : ''}"
                 role="button"
                 tabindex="0"
-                onclick={() => {
-                    editingField = field;
-                    editValue = value || "";
-                }}
+                onclick={() => startEditField(field, value)}
                 onkeydown={(e) => {
                     if (e.key === 'Enter' || e.key === ' ') {
                         e.preventDefault();
-                        editingField = field;
-                        editValue = value || "";
+                        startEditField(field, value);
                     }
                 }}
                 title="Click to edit {label.toLowerCase()}"
@@ -526,6 +525,35 @@
             {/snippet}
             {@render editableTextarea('Comment', 'comment', tags.comment, commentIcon)}
         </div>
+
+        <!-- Sticky action bar for review mode -->
+        {#if isReviewing}
+            <div class="sticky bottom-0 left-0 right-0 bg-gradient-to-t from-white dark:from-gray-900 to-transparent p-6 pt-12 pointer-events-none">
+                <div class="flex gap-3 pointer-events-auto shadow-lg rounded-xl overflow-hidden">
+                    <button 
+                        onclick={saveAllTags}
+                        disabled={saving}
+                        class="flex-1 px-6 py-4 bg-green-600 text-white hover:bg-green-700 transition-colors flex items-center justify-center gap-3 text-sm font-bold disabled:opacity-50"
+                    >
+                        {#if saving}
+                            <div class="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                            Saving All Changes...
+                        {:else}
+                            <Check size={18} />
+                            Save All Changes
+                        {/if}
+                    </button>
+                    <button 
+                        onclick={cancelReview}
+                        disabled={saving}
+                        class="px-6 py-4 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors flex items-center justify-center gap-3 text-sm font-bold disabled:opacity-50"
+                    >
+                        <X size={18} />
+                        Discard
+                    </button>
+                </div>
+            </div>
+        {/if}
     {:else}
         <div class="flex-1 flex flex-col items-center justify-center p-6 text-center">
             <Info size={48} class="text-gray-300 mb-4" />
