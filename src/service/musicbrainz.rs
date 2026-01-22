@@ -173,7 +173,8 @@ impl MusicBrainzClient {
     }
 
     pub async fn fetch_recording(&self, mbid: &str) -> Result<MBRecording> {
-        let url = format!("https://musicbrainz.org/ws/2/recording/{}?inc=artist-credits+releases+genres+isrcs+media&fmt=json", mbid);
+        let url = format!("https://musicbrainz.org/ws/2/recording/{}?inc=artist-credits+releases+genres+isrcs+media&fmt=json", 
+            urlencoding::encode(mbid));
         
         self.request_with_retry(&url).await
     }
