@@ -335,19 +335,15 @@
                 </div>
             </DrawerSection>
 
-            {#if tags.lyrics || editingField === 'lyrics'}
-                {#snippet fileTextIcon()}
-                    <FileText size={14} />
-                {/snippet}
-                {@render editableTextarea('Lyrics', 'lyrics', tags.lyrics, fileTextIcon)}
-            {/if}
+            {#snippet fileTextIcon()}
+                <FileText size={14} />
+            {/snippet}
+            {@render editableTextarea('Lyrics', 'lyrics', tags.lyrics, fileTextIcon)}
 
-            {#if tags.comment || editingField === 'comment'}
-                {#snippet commentIcon()}
-                    <Layers size={14} />
-                {/snippet}
-                {@render editableTextarea('Comment', 'comment', tags.comment, commentIcon)}
-            {/if}
+            {#snippet commentIcon()}
+                <Layers size={14} />
+            {/snippet}
+            {@render editableTextarea('Comment', 'comment', tags.comment, commentIcon)}
         </div>
     {:else}
         <div class="flex-1 flex flex-col items-center justify-center p-6 text-center">
