@@ -67,6 +67,7 @@ pub async fn get_music_folders(
     };
 
     // Optimize by fetching all stats in a single query using SQL aggregation
+    // Note: We use raw SQL here instead of the child Entity to avoid N+1 queries
     let sql = r#"
         SELECT 
             mf.id,
@@ -82,7 +83,7 @@ pub async fn get_music_folders(
     "#;
     
     let stats_map: std::collections::HashMap<i32, MusicFolderStats> = match MusicFolderStats::find_by_statement(
-        Statement::from_string((*db).get_database_backend(), sql.to_string())
+        Statement::from_string((*db).get_database_backend(), sql.to_owned())
     )
     .all(*db)
     .await
@@ -101,6 +102,9 @@ pub async fn get_music_folders(
         .into_iter()
         .map(|f| {
             let stats = stats_map.get(&f.id);
+            if stats.is_none() {
+                log::warn!("No stats found for music folder id={}, this may indicate a database inconsistency", f.id);
+            }
             MusicFolder {
                 id: f.id,
                 name: f.name,
