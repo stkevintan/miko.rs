@@ -19,7 +19,7 @@
     let editValue = $state("");
     let saving = $state(false);
     let uploadingImage = $state(false);
-    let fileInput: HTMLInputElement;
+    let fileInput = $state<HTMLInputElement>();
 
     $effect(() => {
         if (isOpen && songId) {
@@ -110,7 +110,6 @@
                         if (e.key === 'Enter') saveField(field);
                         if (e.key === 'Escape') editingField = null;
                     }}
-                    autofocus
                     disabled={saving}
                 />
                 <div class="flex gap-1">
@@ -175,9 +174,18 @@
         {:else}
             <div 
                 class="p-4 bg-gray-50 dark:bg-gray-900/40 rounded-xl text-sm leading-relaxed whitespace-pre-wrap text-gray-600 dark:text-gray-400 italic font-serif cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                role="button"
+                tabindex="0"
                 onclick={() => {
                     editingField = field;
                     editValue = value || "";
+                }}
+                onkeydown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        editingField = field;
+                        editValue = value || "";
+                    }
                 }}
                 title="Click to edit {label.toLowerCase()}"
             >
@@ -213,7 +221,7 @@
 
             {#if tags.frontCover}
                 <button 
-                    onclick={() => fileInput.click()}
+                    onclick={() => fileInput?.click()}
                     disabled={uploadingImage}
                     class="group/cover relative aspect-square w-full rounded-2xl overflow-hidden shadow-lg border border-gray-100 dark:border-gray-700 hover:border-orange-500 transition-all cursor-pointer"
                 >
@@ -229,7 +237,7 @@
                 </button>
             {:else}
                 <button
-                    onclick={() => fileInput.click()}
+                    onclick={() => fileInput?.click()}
                     disabled={uploadingImage}
                     class="aspect-square w-full rounded-2xl bg-gray-50 dark:bg-gray-800/50 border-2 border-dashed border-gray-200 dark:border-gray-700 flex flex-col items-center justify-center text-gray-400 hover:border-orange-500 hover:text-orange-500 transition-all cursor-pointer"
                 >
