@@ -9,6 +9,20 @@ use crate::service::lyrics::LyricsService;
 use crate::service::musicbrainz::MusicBrainzClient;
 use crate::service::tag::SongTags;
 
+/// Escapes Lucene special characters in a search query string.
+/// Lucene special characters: + - && || ! ( ) { } [ ] ^ " ~ * ? : \ /
+fn escape_lucene(query: &str) -> String {
+    let special_chars = r#"+-&|!(){}[]^"~*?:\/"#;
+    let mut escaped = String::with_capacity(query.len() * 2);
+    for c in query.chars() {
+        if special_chars.contains(c) {
+            escaped.push('\\');
+        }
+        escaped.push(c);
+    }
+    escaped
+}
+
 pub struct ScrapeService {
     db: DatabaseConnection,
     mb_client: Arc<MusicBrainzClient>,
@@ -90,20 +104,20 @@ impl ScrapeService {
             if !search_title.is_empty() {
                 query1.push_str(&format!(
                     "recording:\"{}\"",
-                    search_title.replace("\"", "\\\"")
+                    escape_lucene(&search_title)
                 ));
             }
             if let Some(ref a) = search_artist {
                 if !query1.is_empty() {
                     query1.push_str(" AND ");
                 }
-                query1.push_str(&format!("artist:\"{}\"", a.replace("\"", "\\\"")));
+                query1.push_str(&format!("artist:\"{}\"", escape_lucene(a)));
             }
             if let Some(ref alb) = search_album {
                 if !query1.is_empty() {
                     query1.push_str(" AND ");
                 }
-                query1.push_str(&format!("release:\"{}\"", alb.replace("\"", "\\\"")));
+                query1.push_str(&format!("release:\"{}\"", escape_lucene(alb)));
             }
 
             if !query1.is_empty() {
@@ -127,9 +141,9 @@ impl ScrapeService {
                 && !search_title.is_empty()
                 && search_artist.is_some()
             {
-                let mut query2 = format!("recording:\"{}\"", search_title.replace("\"", "\\\""));
+                let mut query2 = format!("recording:\"{}\"", escape_lucene(&search_title));
                 if let Some(ref a) = search_artist {
-                    query2.push_str(&format!(" AND artist:\"{}\"", a.replace("\"", "\\\"")));
+                    query2.push_str(&format!(" AND artist:\"{}\"", escape_lucene(a)));
                 }
                 debug!("MusicBrainz Search Try 2 (Recording + Artist): {}", query2);
 
@@ -144,7 +158,7 @@ impl ScrapeService {
 
             // Try 3: Just Title
             if final_mbid.is_none() && !search_title.is_empty() {
-                let query3 = format!("recording:\"{}\"", search_title.replace("\"", "\\\""));
+                let query3 = format!("recording:\"{}\"", escape_lucene(&search_title));
                 debug!("MusicBrainz Search Try 3 (Recording only): {}", query3);
 
                 if let Ok(recordings) = self.mb_client.search_recording(&query3).await {
@@ -159,7 +173,7 @@ impl ScrapeService {
 
         // If we still don't have an MBID, use the database song title as a last resort search
         if final_mbid.is_none() && search_title != song.title && !song.title.is_empty() {
-            let query_last = format!("recording:\"{}\"", song.title.replace("\"", "\\\""));
+            let query_last = format!("recording:\"{}\"", escape_lucene(&song.title));
             debug!("Attempting last resort search with query: {}", query_last);
             if let Ok(recordings) = self.mb_client.search_recording(&query_last).await {
                 if !recordings.is_empty() {
