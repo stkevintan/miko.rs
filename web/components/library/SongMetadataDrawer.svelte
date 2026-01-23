@@ -39,7 +39,6 @@
     let editValue = $state('');
     let saving = $state(false);
     let scraping = $state(false);
-    let scrapingLyrics = $state(false);
     let mbidInput = $state('');
     let candidates = $state<ScrapeCandidate[]>([]);
     let searching = $state(false);
@@ -118,12 +117,25 @@
             
             // In Svelte 5, updating the object via a spread of a snapshot is the safest way to ensure reactivity
             // and avoid potential proxy-related merging issues.
-            const updatedTags = { ...$state.snapshot(tags), ...scrapedData };
-            
-            // If the scraper found a new cover, it will be in scrapedData.frontCover (base64).
-            // If it's null/empty, we should preserve the current one.
-            if (!scrapedData.frontCover && tags.frontCover) {
-                updatedTags.frontCover = tags.frontCover;
+            const currentSnapshot = $state.snapshot(tags);
+            const updatedTags = { ...currentSnapshot };
+
+            // Merge logic: only overwrite existing values with NON-EMPTY scraped data
+            // This prevents the scraper from clearing fields it doesn't have info for (e.g. lyrics, genre)
+            for (const key in scrapedData) {
+                const k = key as keyof SongTags;
+                const newVal = scrapedData[k];
+                const oldVal = currentSnapshot[k];
+                
+                const isNewUnknown = newVal === null || newVal === undefined || newVal === '' || (Array.isArray(newVal) && newVal.length === 0);
+                const isOldUnknown = oldVal === null || oldVal === undefined || oldVal === '' || (Array.isArray(oldVal) && oldVal.length === 0);
+                
+                // Only overwrite if:
+                // 1. The new value is actually useful (NOT unknown)
+                // 2. OR the current value itself is unknown (we are just syncing "no data" states)
+                if (!isNewUnknown || isOldUnknown) {
+                    updatedTags[k] = newVal as any;
+                }
             }
             
             tags = updatedTags;
@@ -135,34 +147,6 @@
             toast.error('Failed to fetch metadata from MusicBrainz');
         } finally {
             scraping = false;
-        }
-    }
-
-    async function scrapeLyrics() {
-        if (!songId || !tags) return;
-
-        scrapingLyrics = true;
-        try {
-            // Keep a copy of current tags if not already reviewing
-            if (!isReviewing) {
-                originalTags = JSON.parse(JSON.stringify(tags));
-            }
-
-            const response = await api.get<{ lyrics: string }>(
-                `/songs/${songId}/scrape-lyrics`,
-            );
-
-            const newLyrics = response.data.lyrics;
-            tags = { ...tags, lyrics: newLyrics };
-            isReviewing = true;
-            toast.success(
-                'Lyrics fetched from LRCLIB. Review the changes below.',
-            );
-        } catch (error) {
-            console.error('Failed to scrape lyrics:', error);
-            toast.error('Failed to fetch lyrics from LRCLIB');
-        } finally {
-            scrapingLyrics = false;
         }
     }
 
@@ -532,10 +516,10 @@
             {#snippet searchIcon()}
                 <Search size={14} />
             {/snippet}
-            <DrawerSection title="Metadata & Lyrics Lookup" icon={searchIcon}>
+            <DrawerSection title="Metadata Lookup" icon={searchIcon}>
                 <div class="space-y-4">
                     <p class="text-xs text-gray-500">
-                        Fetch metadata from MusicBrainz and lyrics from LRCLIB.
+                        Fetch metadata from MusicBrainz.
                         Review changes before applying.
                     </p>
                     <div class="flex gap-2">
@@ -747,31 +731,11 @@
             {#snippet fileTextIcon()}
                 <FileText size={14} />
             {/snippet}
-            {#snippet lyricsAction()}
-                <button
-                    onclick={(e) => {
-                        e.stopPropagation();
-                        scrapeLyrics();
-                    }}
-                    disabled={scrapingLyrics}
-                    class="p-1 -mr-1 text-gray-400 hover:text-orange-600 transition-colors disabled:opacity-50"
-                    title="Fetch lyrics from LRCLIB"
-                >
-                    {#if scrapingLyrics}
-                        <div
-                            class="animate-spin rounded-full h-3.5 w-3.5 border-b-2 border-orange-600"
-                        ></div>
-                    {:else}
-                        <Search size={14} />
-                    {/if}
-                </button>
-            {/snippet}
             {@render editableTextarea(
                 'Lyrics',
                 'lyrics',
                 tags.lyrics,
                 fileTextIcon,
-                lyricsAction,
             )}
 
             {#snippet commentIcon()}

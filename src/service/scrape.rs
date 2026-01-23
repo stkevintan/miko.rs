@@ -6,7 +6,6 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 // Use our own MusicBrainz service instead of musicbrainz_rs
-use crate::service::lyrics::LyricsService;
 use crate::service::musicbrainz::MusicBrainzClient;
 use crate::service::tag::SongTags;
 
@@ -29,7 +28,6 @@ fn escape_lucene(query: &str) -> String {
 pub struct ScrapeService {
     db: DatabaseConnection,
     mb_client: Arc<MusicBrainzClient>,
-    lyrics_service: Arc<LyricsService>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -47,12 +45,10 @@ impl ScrapeService {
     pub fn new(
         db: DatabaseConnection,
         mb_client: Arc<MusicBrainzClient>,
-        lyrics_service: Arc<LyricsService>,
     ) -> Self {
         Self {
             db,
             mb_client,
-            lyrics_service,
         }
     }
 
@@ -442,43 +438,5 @@ impl ScrapeService {
             song.title, mbid
         );
         Ok(tags)
-    }
-
-    pub async fn scrape_lyrics(&self, song_id: &str) -> Result<String> {
-        info!("Starting lyrics scrape for song_id: {}", song_id);
-
-        let song = child::Entity::find_by_id(song_id.to_string())
-            .one(&self.db)
-            .await?
-            .ok_or_else(|| anyhow::anyhow!("Song not found"))?;
-
-        let path = std::path::Path::new(&song.path);
-        let tags = SongTags::from_file(path).unwrap_or_default();
-
-        let title = tags.title.unwrap_or_else(|| song.title.clone());
-        let artist = tags.artist;
-
-        if let Some(artist) = artist {
-            match self
-                .lyrics_service
-                .fetch_lyrics(&title, &artist, tags.album.as_deref(), tags.duration)
-                .await
-            {
-                Ok(Some(lyrics)) => {
-                    info!("Found lyrics for '{}' by '{}'", title, artist);
-                    return Ok(lyrics);
-                }
-                Ok(None) => {
-                    debug!("No lyrics found for '{}' by '{}'", title, artist);
-                    return Err(anyhow::anyhow!("Lyrics not found"));
-                }
-                Err(e) => {
-                    warn!("Failed to fetch lyrics: {}", e);
-                    return Err(e);
-                }
-            }
-        }
-
-        Err(anyhow::anyhow!("Missing artist tag to search for lyrics"))
     }
 }

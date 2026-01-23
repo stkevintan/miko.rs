@@ -313,11 +313,10 @@ pub struct ScrapeSearchRequest {
 pub async fn scrape_search(
     db: Data<&DatabaseConnection>,
     mb_client: Data<&Arc<crate::service::musicbrainz::MusicBrainzClient>>,
-    lyrics_service: Data<&Arc<crate::service::lyrics::LyricsService>>,
     Path(id): Path<String>,
     Query(req): Query<ScrapeSearchRequest>,
 ) -> Result<Json<Vec<crate::service::scrape::ScrapeCandidate>>, poem::Error> {
-    let scrape_service = ScrapeService::new((*db).clone(), (*mb_client).clone(), (*lyrics_service).clone());
+    let scrape_service = ScrapeService::new((*db).clone(), (*mb_client).clone());
     
     let candidates = scrape_service.search_recording_candidates(&id, req.query)
         .await
@@ -333,11 +332,10 @@ pub async fn scrape_search(
 pub async fn scrape_song_tags(
     db: Data<&DatabaseConnection>,
     mb_client: Data<&Arc<crate::service::musicbrainz::MusicBrainzClient>>,
-    lyrics_service: Data<&Arc<crate::service::lyrics::LyricsService>>,
     Path(id): Path<String>,
     Query(req): Query<ScrapeRequest>,
 ) -> Result<Json<SongTags>, poem::Error> {
-    let scrape_service = ScrapeService::new((*db).clone(), (*mb_client).clone(), (*lyrics_service).clone());
+    let scrape_service = ScrapeService::new((*db).clone(), (*mb_client).clone());
     
     let tags = scrape_service.scrape_recording_tags(&id, req.mbid, req.album_mbid)
         .await
@@ -347,23 +345,4 @@ pub async fn scrape_song_tags(
         })?;
 
     Ok(Json(tags))
-}
-
-#[handler]
-pub async fn scrape_song_lyrics(
-    db: Data<&DatabaseConnection>,
-    mb_client: Data<&Arc<crate::service::musicbrainz::MusicBrainzClient>>,
-    lyrics_service: Data<&Arc<crate::service::lyrics::LyricsService>>,
-    Path(id): Path<String>,
-) -> Result<Json<serde_json::Value>, poem::Error> {
-    let scrape_service = ScrapeService::new((*db).clone(), (*mb_client).clone(), (*lyrics_service).clone());
-    
-    let lyrics = scrape_service.scrape_lyrics(&id)
-        .await
-        .map_err(|e| {
-            log::error!("Lyrics scrape failed: {}", e);
-            poem::Error::from_status(StatusCode::NOT_FOUND)
-        })?;
-
-    Ok(Json(serde_json::json!({ "lyrics": lyrics })))
 }
