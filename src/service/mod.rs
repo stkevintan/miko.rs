@@ -8,7 +8,6 @@ pub mod bookmarks;
 pub mod scrape;
 pub mod tag;
 pub mod musicbrainz;
-pub mod lyrics;
 pub mod utils;
 
 pub struct Service {

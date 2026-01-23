@@ -70,8 +70,6 @@ async fn main() -> Result<(), anyhow::Error> {
         env!("CARGO_PKG_REPOSITORY")
     )?);
     
-    let lyrics_service = Arc::new(crate::service::lyrics::LyricsService::new()?);
-
     let config = Config::load()?;
     let config = Arc::new(config);
     config.validate()?;
@@ -134,7 +132,6 @@ async fn main() -> Result<(), anyhow::Error> {
         .data(scanner)
         .data(service)
         .data(mb_client)
-        .data(lyrics_service)
         .with(Tracing)
         .with(
             Cors::new()

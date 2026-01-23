@@ -4,6 +4,7 @@ use crate::models::{child, user};
 use serde::Deserialize;
 use std::sync::Arc;
 use lofty::prelude::*;
+use base64::{Engine as _, engine::general_purpose};
 use lofty::tag::{ItemKey, TagItem, ItemValue};
 use lofty::probe::Probe;
 use lofty::config::WriteOptions;
@@ -150,6 +151,39 @@ pub async fn update_song_tags(
         if let Some(acoustid_fingerprint) = new_tags.acoustid_fingerprint { tag.insert(TagItem::new(ItemKey::Unknown(ACOUSTID_FINGERPRINT.to_string()), ItemValue::Text(acoustid_fingerprint))); }
         if let Some(musicip_puid) = new_tags.musicip_puid { tag.insert(TagItem::new(ItemKey::Unknown(MUSICIP_PUID.to_string()), ItemValue::Text(musicip_puid))); }
 
+        // Front Cover
+        if let Some(front_cover) = new_tags.front_cover {
+            if front_cover.starts_with("data:") {
+                if let Some(comma_pos) = front_cover.find(',') {
+                    let mime_part = &front_cover[5..comma_pos];
+                    let base64_data = &front_cover[comma_pos + 1..];
+                    
+                    let mime_type = if mime_part.contains("image/png") {
+                        MimeType::Png
+                    } else if mime_part.contains("image/gif") {
+                        MimeType::Gif
+                    } else if mime_part.contains("image/bmp") {
+                        MimeType::Bmp
+                    } else if mime_part.contains("image/tiff") {
+                        MimeType::Tiff
+                    } else {
+                        MimeType::Jpeg
+                    };
+
+                    if let Ok(data) = general_purpose::STANDARD.decode(base64_data) {
+                        let picture = Picture::new_unchecked(
+                            PictureType::CoverFront,
+                            Some(mime_type),
+                            None,
+                            data,
+                        );
+                        tag.remove_picture_type(PictureType::CoverFront);
+                        tag.push_picture(picture);
+                    }
+                }
+            }
+        }
+
         tag.save_to_path(path, WriteOptions::default()).map_err(|e| {
             log::error!("Failed to save tags to {}: {}", path.display(), e);
             poem::Error::from_status(StatusCode::INTERNAL_SERVER_ERROR)
@@ -266,19 +300,44 @@ pub async fn update_song_cover(
 #[serde(rename_all = "camelCase")]
 pub struct ScrapeRequest {
     pub mbid: Option<String>,
+    pub album_mbid: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScrapeSearchRequest {
+    pub query: Option<String>,
+}
+
+#[handler]
+pub async fn scrape_search(
+    db: Data<&DatabaseConnection>,
+    mb_client: Data<&Arc<crate::service::musicbrainz::MusicBrainzClient>>,
+    Path(id): Path<String>,
+    Query(req): Query<ScrapeSearchRequest>,
+) -> Result<Json<Vec<crate::service::scrape::ScrapeCandidate>>, poem::Error> {
+    let scrape_service = ScrapeService::new((*db).clone(), (*mb_client).clone());
+    
+    let candidates = scrape_service.search_recording_candidates(&id, req.query)
+        .await
+        .map_err(|e| {
+            log::error!("Scrape search failed: {}", e);
+            poem::Error::from_status(StatusCode::NOT_FOUND)
+        })?;
+
+    Ok(Json(candidates))
 }
 
 #[handler]
 pub async fn scrape_song_tags(
     db: Data<&DatabaseConnection>,
     mb_client: Data<&Arc<crate::service::musicbrainz::MusicBrainzClient>>,
-    lyrics_service: Data<&Arc<crate::service::lyrics::LyricsService>>,
     Path(id): Path<String>,
     Query(req): Query<ScrapeRequest>,
 ) -> Result<Json<SongTags>, poem::Error> {
-    let scrape_service = ScrapeService::new((*db).clone(), (*mb_client).clone(), (*lyrics_service).clone());
+    let scrape_service = ScrapeService::new((*db).clone(), (*mb_client).clone());
     
-    let tags = scrape_service.scrape_recording_tags(&id, req.mbid)
+    let tags = scrape_service.scrape_recording_tags(&id, req.mbid, req.album_mbid)
         .await
         .map_err(|e| {
             log::error!("Scrape failed: {}", e);
@@ -286,23 +345,4 @@ pub async fn scrape_song_tags(
         })?;
 
     Ok(Json(tags))
-}
-
-#[handler]
-pub async fn scrape_song_lyrics(
-    db: Data<&DatabaseConnection>,
-    mb_client: Data<&Arc<crate::service::musicbrainz::MusicBrainzClient>>,
-    lyrics_service: Data<&Arc<crate::service::lyrics::LyricsService>>,
-    Path(id): Path<String>,
-) -> Result<Json<serde_json::Value>, poem::Error> {
-    let scrape_service = ScrapeService::new((*db).clone(), (*mb_client).clone(), (*lyrics_service).clone());
-    
-    let lyrics = scrape_service.scrape_lyrics(&id)
-        .await
-        .map_err(|e| {
-            log::error!("Lyrics scrape failed: {}", e);
-            poem::Error::from_status(StatusCode::NOT_FOUND)
-        })?;
-
-    Ok(Json(serde_json::json!({ "lyrics": lyrics })))
 }
