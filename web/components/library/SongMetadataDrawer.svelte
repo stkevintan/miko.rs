@@ -126,15 +126,15 @@
                 const k = key as keyof SongTags;
                 const newVal = scrapedData[k];
                 const oldVal = currentSnapshot[k];
-                
-                const isNewUnknown = newVal === null || newVal === undefined || newVal === '' || (Array.isArray(newVal) && newVal.length === 0);
-                const isOldUnknown = oldVal === null || oldVal === undefined || oldVal === '' || (Array.isArray(oldVal) && oldVal.length === 0);
-                
+
+                const isNewUnknown = isUnknown(newVal);
+                const isOldUnknown = isUnknown(oldVal);
+
                 // Only overwrite if:
                 // 1. The new value is actually useful (NOT unknown)
                 // 2. OR the current value itself is unknown (we are just syncing "no data" states)
                 if (!isNewUnknown || isOldUnknown) {
-                    updatedTags[k] = newVal as any;
+                    updatedTags[k] = newVal as never;
                 }
             }
             
@@ -254,6 +254,15 @@
         return `${min}:${sec.toString().padStart(2, '0')}`;
     }
 
+    function isUnknown(val: any) {
+        return (
+            val === null ||
+            val === undefined ||
+            val === '' ||
+            (Array.isArray(val) && val.length === 0)
+        );
+    }
+
     function enterReviewMode() {
         if (!isReviewing && tags) {
             originalTags = JSON.parse(JSON.stringify(tags));
@@ -268,8 +277,8 @@
         const val2 = tags[field];
 
         // If both are "unknown" (null, undefined, or empty string), they are NOT different
-        const isUnknown1 = val1 === null || val1 === undefined || val1 === '';
-        const isUnknown2 = val2 === null || val2 === undefined || val2 === '';
+        const isUnknown1 = isUnknown(val1);
+        const isUnknown2 = isUnknown(val2);
 
         if (isUnknown1 && isUnknown2) return false;
 
