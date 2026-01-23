@@ -2,6 +2,7 @@ use crate::models::child;
 use anyhow::Result;
 use log::{debug, error, info, warn};
 use sea_orm::{DatabaseConnection, EntityTrait};
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 // Use our own MusicBrainz service instead of musicbrainz_rs
@@ -31,6 +32,17 @@ pub struct ScrapeService {
     lyrics_service: Arc<LyricsService>,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScrapeCandidate {
+    pub mbid: String,
+    pub title: String,
+    pub artist: String,
+    pub album: Option<String>,
+    pub album_mbid: Option<String>,
+    pub year: Option<u32>,
+}
+
 impl ScrapeService {
     pub fn new(
         db: DatabaseConnection,
@@ -44,10 +56,96 @@ impl ScrapeService {
         }
     }
 
+    pub async fn search_recording_candidates(
+        &self,
+        song_id: &str,
+        query: Option<String>,
+    ) -> Result<Vec<ScrapeCandidate>> {
+        let recordings = if let Some(q) = query.map(|s| s.trim().to_string()) {
+            // Check if it's an MBID (UUID format: 8-4-4-4-12)
+            if q.len() == 36 && q.chars().filter(|&c| c == '-').count() == 4 {
+                match self.mb_client.fetch_recording(&q).await {
+                    Ok(recording) => vec![recording],
+                    Err(_) => {
+                        // Fallback to searching if fetch fails (maybe it's not a recording MBID)
+                        self.mb_client.search_recording(&q).await?
+                    }
+                }
+            } else {
+                self.mb_client.search_recording(&q).await?
+            }
+        } else {
+            let song = child::Entity::find_by_id(song_id.to_string())
+                .one(&self.db)
+                .await?
+                .ok_or_else(|| anyhow::anyhow!("Song not found"))?;
+
+            let path = std::path::Path::new(&song.path);
+            let tags = SongTags::from_file(path).unwrap_or_default();
+
+            let search_title = tags.title.clone().unwrap_or_else(|| song.title.clone());
+            let search_artist = tags.artist.clone();
+            let search_album = tags.album.clone();
+
+            let mut lucene_query = format!("recording:\"{}\"", escape_lucene(&search_title));
+            if let Some(ref a) = search_artist {
+                lucene_query.push_str(&format!(" AND artist:\"{}\"", escape_lucene(a)));
+            }
+            if let Some(ref alb) = search_album {
+                lucene_query.push_str(&format!(" AND release:\"{}\"", escape_lucene(alb)));
+            }
+
+            self.mb_client.search_recording(&lucene_query).await?
+        };
+
+        let candidates = recordings
+            .into_iter()
+            .map(|r| {
+                let artist = r
+                    .artist_credit
+                    .as_ref()
+                    .map(|ac| ac.iter().map(|a| a.name.clone()).collect::<Vec<_>>().join(", "))
+                    .unwrap_or_default();
+
+                let album = r
+                    .releases
+                    .as_ref()
+                    .and_then(|rel| rel.get(0))
+                    .map(|rel| rel.title.clone());
+
+                let album_mbid = r
+                    .releases
+                    .as_ref()
+                    .and_then(|rel| rel.get(0))
+                    .map(|rel| rel.id.clone());
+
+                let year = r
+                    .releases
+                    .as_ref()
+                    .and_then(|rel| rel.get(0))
+                    .and_then(|rel| rel.date.as_ref())
+                    .and_then(|date| date.split('-').next())
+                    .and_then(|y| y.parse::<u32>().ok());
+
+                ScrapeCandidate {
+                    mbid: r.id,
+                    title: r.title,
+                    artist,
+                    album,
+                    album_mbid,
+                    year,
+                }
+            })
+            .collect();
+
+        Ok(candidates)
+    }
+
     pub async fn scrape_recording_tags(
         &self,
         song_id: &str,
         mbid: Option<String>,
+        album_mbid: Option<String>,
     ) -> Result<SongTags> {
         info!("Starting metadata scrape for song_id: {}", song_id);
 
@@ -62,8 +160,19 @@ impl ScrapeService {
             Default::default()
         });
 
+        // We use existing tags to aid searching, but we want the returned tags
+        // to only represent what we found on MusicBrainz.
         let mut search_title = tags.title.clone().filter(|s| !s.trim().is_empty());
         let mut search_artist = tags.artist.clone().filter(|s| !s.trim().is_empty());
+
+        // Reset tags but preserve duration/bitrate/format which are technical and won't change
+        let duration = tags.duration;
+        let bit_rate = tags.bit_rate;
+        let format = tags.format.clone();
+        tags = SongTags::default();
+        tags.duration = duration;
+        tags.bit_rate = bit_rate;
+        tags.format = format;
 
         if search_title.is_none() {
             if let Some(file_stem) = path.file_stem().and_then(|s| s.to_str()) {
@@ -228,81 +337,101 @@ impl ScrapeService {
             tags.genre = Some(genre_names.join(", "));
         }
 
+        // If an album MBID was specifically provided, try to fetch its cover first
+        let mut found_scraped_cover = false;
+        if let Some(ref ambid) = album_mbid {
+            match self.mb_client.fetch_cover_art(ambid).await {
+                Ok(Some(base64_cover)) => {
+                    info!("Found cover art for provided album MBID: {}", ambid);
+                    tags.front_cover = Some(base64_cover);
+                    found_scraped_cover = true;
+                }
+                _ => debug!("No cover art found for provided album MBID: {}", ambid),
+            }
+        }
+
         if let Some(releases) = recording.releases {
-            if let Some(release) = releases.get(0) {
-                tags.album = Some(release.title.clone());
-                tags.music_brainz_album_id = Some(release.id.clone());
-                tags.barcode = release.barcode.clone();
-                tags.asin = release.asin.clone();
+            // If album_mbid is provided, try to find that specific release first
+            let prioritized_releases = if let Some(ref ambid) = album_mbid {
+                let mut list: Vec<_> = releases.iter().collect();
+                list.sort_by_key(|r| r.id != *ambid);
+                list
+            } else {
+                releases.iter().collect()
+            };
 
-                if let Some(rg) = &release.release_group {
-                    tags.music_brainz_release_group_id = Some(rg.id.clone());
-                }
+            for release in prioritized_releases {
+                if tags.album.is_none() {
+                    tags.album = Some(release.title.clone());
+                    tags.music_brainz_album_id = Some(release.id.clone());
+                    tags.barcode = release.barcode.clone();
+                    tags.asin = release.asin.clone();
 
-                if let Some(info) = &release.label_info {
-                    if let Some(li) = info.get(0) {
-                        if let Some(label) = &li.label {
-                            tags.label = Some(label.name.clone());
+                    if let Some(rg) = &release.release_group {
+                        tags.music_brainz_release_group_id = Some(rg.id.clone());
+                    }
+
+                    if let Some(info) = &release.label_info {
+                        if let Some(li) = info.get(0) {
+                            if let Some(label) = &li.label {
+                                tags.label = Some(label.name.clone());
+                            }
+                            tags.catalog_number = li.catalog_number.clone();
                         }
-                        tags.catalog_number = li.catalog_number.clone();
                     }
-                }
 
-                // If the release has cover art, we could potentially use it
-                // For now, we prefer the local cover if it exists, or we could add a flag to fetch MB cover
-
-                if let Some(date) = &release.date {
-                    if let Ok(year) = date.split('-').next().unwrap_or("").parse::<u32>() {
-                        tags.year = Some(year);
+                    if let Some(date) = &release.date {
+                        if let Ok(year) = date.split('-').next().unwrap_or("").parse::<u32>() {
+                            tags.year = Some(year);
+                        }
                     }
-                }
 
-                if let Some(media) = &release.media {
-                    if let Some(m) = media.get(0) {
-                        tags.disc = m.position;
-                        if let Some(tracks) = &m.tracks {
-                            // Find this recording in the tracks
-                            if let Some(track) = tracks.iter().find(|t| {
-                                t.recording.as_ref().map(|r| r.id.as_str()) == Some(mbid.as_str())
-                            }) {
-                                tags.track = track.position;
-                                tags.music_brainz_release_track_id = Some(track.id.clone());
+                    if let Some(media) = &release.media {
+                        if let Some(m) = media.get(0) {
+                            tags.disc = m.position;
+                            if let Some(tracks) = &m.tracks {
+                                // Find this recording in the tracks
+                                if let Some(track) = tracks.iter().find(|t| {
+                                    t.recording.as_ref().map(|r| r.id.as_str())
+                                        == Some(mbid.as_str())
+                                }) {
+                                    tags.track = track.position;
+                                    tags.music_brainz_release_track_id = Some(track.id.clone());
+                                }
                             }
                         }
                     }
-                }
 
-                if let Some(artist_credits) = &release.artist_credit {
-                    let album_artists: Vec<String> =
-                        artist_credits.iter().map(|a| a.name.clone()).collect();
-                    tags.album_artist = Some(album_artists.join(", "));
-                    tags.album_artists = Some(album_artists);
-                    if !artist_credits.is_empty() {
-                        tags.music_brainz_album_artist_id =
-                            Some(artist_credits[0].artist.id.clone());
+                    if let Some(artist_credits) = &release.artist_credit {
+                        let album_artists: Vec<String> =
+                            artist_credits.iter().map(|a| a.name.clone()).collect();
+                        tags.album_artist = Some(album_artists.join(", "));
+                        tags.album_artists = Some(album_artists);
+                        if !artist_credits.is_empty() {
+                            tags.music_brainz_album_artist_id =
+                                Some(artist_credits[0].artist.id.clone());
+                        }
                     }
                 }
 
-                // Fetch cover art from MB (overriding local tag if available)
-                let has_cover = release
-                    .cover_art_archive
-                    .as_ref()
-                    .map(|caa| caa.front)
-                    .unwrap_or(false);
-                if has_cover {
-                    match self.mb_client.fetch_cover_art(&release.id).await {
-                        Ok(Some(base64_cover)) => {
-                            info!(
-                                "Found cover art for release: {} (overriding local if any)",
-                                release.id
-                            );
-                            tags.front_cover = Some(base64_cover);
+                // If we don't have a cover yet, try to fetch it from this release
+                if !found_scraped_cover {
+                    // Try even if the indicator might be missing, but prioritize indicators
+                    let has_cover = release
+                        .cover_art_archive
+                        .as_ref()
+                        .map(|caa| caa.front)
+                        .unwrap_or(false);
+
+                    if has_cover {
+                        match self.mb_client.fetch_cover_art(&release.id).await {
+                            Ok(Some(base64_cover)) => {
+                                info!("Found cover art for release: {}", release.id);
+                                tags.front_cover = Some(base64_cover);
+                                found_scraped_cover = true;
+                            }
+                            _ => {}
                         }
-                        Ok(None) => debug!(
-                            "Cover art marked as present but not found for release: {}",
-                            release.id
-                        ),
-                        Err(e) => warn!("Failed to fetch cover art: {}", e),
                     }
                 }
             }

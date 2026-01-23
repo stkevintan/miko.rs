@@ -12,8 +12,10 @@
         Upload,
         Search,
         RotateCcw,
+        Edit2,
+        ChevronRight,
     } from 'lucide-svelte';
-    import type { SongTags } from '../../lib/types';
+    import type { SongTags, ScrapeCandidate } from '../../lib/types';
     import { api } from '../../lib/api';
     import { toast } from '../../lib/toast.svelte';
     import Drawer from '../ui/Drawer.svelte';
@@ -36,10 +38,11 @@
     let editingField = $state<string | null>(null);
     let editValue = $state('');
     let saving = $state(false);
-    let uploadingImage = $state(false);
     let scraping = $state(false);
     let scrapingLyrics = $state(false);
     let mbidInput = $state('');
+    let candidates = $state<ScrapeCandidate[]>([]);
+    let searching = $state(false);
     let fileInput = $state<HTMLInputElement>();
 
     $effect(() => {
@@ -51,18 +54,17 @@
             isReviewing = false;
             editingField = null;
             mbidInput = '';
+            candidates = [];
         }
     });
 
     async function fetchTags(id: string) {
         loading = true;
         isReviewing = false;
+        candidates = [];
         try {
             const response = await api.get<SongTags>(`/songs/${id}/tags`);
             tags = response.data;
-            if (tags?.musicBrainzTrackId) {
-                mbidInput = tags.musicBrainzTrackId;
-            }
         } catch (error) {
             console.error('Failed to fetch song tags:', error);
         } finally {
@@ -70,32 +72,64 @@
         }
     }
 
-    async function scrapeTags() {
+    async function searchCandidates() {
+        if (!songId) return;
+
+        searching = true;
+        candidates = [];
+        try {
+            const params = new URLSearchParams();
+            if (mbidInput) {
+                params.append('query', mbidInput);
+            }
+            const response = await api.get<ScrapeCandidate[]>(
+                `/songs/${songId}/scrape-search?${params.toString()}`,
+            );
+            candidates = response.data;
+            if (candidates.length === 0) {
+                toast.error('No results found on MusicBrainz');
+            }
+        } catch (error) {
+            console.error('Failed to search candidates:', error);
+            toast.error('Failed to search MusicBrainz');
+        } finally {
+            searching = false;
+        }
+    }
+
+    async function scrapeTags(mbid?: string, albumMbid?: string) {
         if (!songId || !tags) return;
 
         scraping = true;
         try {
             // Keep a copy of current tags for comparison/revert
-            originalTags = JSON.parse(JSON.stringify(tags));
-
-            // Build query string with mbid if provided
-            const params = new URLSearchParams();
-            if (mbidInput) {
-                params.append('mbid', mbidInput);
+            if (!isReviewing) {
+                originalTags = JSON.parse(JSON.stringify(tags));
             }
-            const queryString = params.toString();
-            const url = `/songs/${songId}/scrape-tags${queryString ? `?${queryString}` : ''}`;
 
-            const response = await api.get<SongTags>(url);
-
-            // Merge labels/values from scraped results into current tags
-            // but don't save yet - let the user review
-            const scrapedTags = response.data;
-            tags = { ...tags, ...scrapedTags };
+            // Build query string
+            const params = new URLSearchParams();
+            const targetMbid = mbid || mbidInput;
+            if (targetMbid) params.append('mbid', targetMbid);
+            if (albumMbid) params.append('albumMbid', albumMbid);
+            
+            const response = await api.get<SongTags>(`/songs/${songId}/scrape-tags?${params.toString()}`);
+            const scrapedData = response.data;
+            
+            // In Svelte 5, updating the object via a spread of a snapshot is the safest way to ensure reactivity
+            // and avoid potential proxy-related merging issues.
+            const updatedTags = { ...$state.snapshot(tags), ...scrapedData };
+            
+            // If the scraper found a new cover, it will be in scrapedData.frontCover (base64).
+            // If it's null/empty, we should preserve the current one.
+            if (!scrapedData.frontCover && tags.frontCover) {
+                updatedTags.frontCover = tags.frontCover;
+            }
+            
+            tags = updatedTags;
             isReviewing = true;
-            toast.success(
-                'Metadata fetched from MusicBrainz. Review the changes below.',
-            );
+            candidates = []; // Clear candidates after selection
+            toast.success('Metadata fetched from MusicBrainz. Review changes below.');
         } catch (error) {
             console.error('Failed to scrape tags:', error);
             toast.error('Failed to fetch metadata from MusicBrainz');
@@ -138,6 +172,8 @@
             originalTags = null;
         }
         isReviewing = false;
+        editingField = null;
+        candidates = [];
     }
 
     async function saveAllTags() {
@@ -148,6 +184,7 @@
             await api.post(`/songs/${songId}/tags`, tags);
             originalTags = null;
             isReviewing = false;
+            editingField = null;
             toast.success('All tags saved successfully');
         } catch (error) {
             console.error('Failed to save all tags:', error);
@@ -182,7 +219,7 @@
 
     async function handleImageUpload(e: Event) {
         const file = (e.target as HTMLInputElement).files?.[0];
-        if (!file || !songId) return;
+        if (!file || !songId || !tags) return;
 
         // Maximum allowed image size: 10MB (must match backend limit)
         const MAX_IMAGE_SIZE = 10 * 1024 * 1024;
@@ -198,25 +235,28 @@
             return;
         }
 
-        uploadingImage = true;
-        const formData = new FormData();
-        formData.append('image', file);
-
-        try {
-            await api.post(`/songs/${songId}/cover`, formData, {
-                headers: {
-                    'Content-Type': 'multipart/form-data',
-                },
-            });
-            // Reload tags to get new frontCover URL
-            await fetchTags(songId);
-            toast.success('Cover art updated');
-        } catch (error) {
-            console.error('Failed to upload cover art:', error);
-            toast.error('Failed to update cover art');
-        } finally {
-            uploadingImage = false;
+        // Enter review mode instead of uploading immediately
+        if (!isReviewing) {
+            originalTags = JSON.parse(JSON.stringify(tags));
+            isReviewing = true;
         }
+
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            const result = event.target?.result as string;
+            if (result && tags) {
+                tags = { ...tags, frontCover: result };
+                toast.success('Cover art updated. Apply changes to save.');
+            }
+            // Clear the file input so it can be used again
+            if (e.target) {
+                (e.target as HTMLInputElement).value = '';
+            }
+        };
+        reader.onerror = () => {
+            toast.error('Failed to read image file');
+        };
+        reader.readAsDataURL(file);
     }
 
     function close() {
@@ -229,6 +269,28 @@
         const sec = Math.floor(seconds % 60);
         return `${min}:${sec.toString().padStart(2, '0')}`;
     }
+
+    function enterReviewMode() {
+        if (!isReviewing && tags) {
+            originalTags = JSON.parse(JSON.stringify(tags));
+            isReviewing = true;
+        }
+    }
+
+    function isFieldDifferent(field: keyof SongTags) {
+        if (!isReviewing || !originalTags || !tags) return false;
+
+        const val1 = originalTags[field];
+        const val2 = tags[field];
+
+        // If both are "unknown" (null, undefined, or empty string), they are NOT different
+        const isUnknown1 = val1 === null || val1 === undefined || val1 === '';
+        const isUnknown2 = val2 === null || val2 === undefined || val2 === '';
+
+        if (isUnknown1 && isUnknown2) return false;
+
+        return JSON.stringify(val1) !== JSON.stringify(val2);
+    }
 </script>
 
 {#snippet editableField(
@@ -237,58 +299,63 @@
     value: any,
     type: 'text' | 'number' = 'text',
 )}
-    {@const isChanged =
-        isReviewing &&
-        originalTags &&
-        JSON.stringify(originalTags[field]) !== JSON.stringify(tags?.[field])}
-    <div class="flex items-start gap-4 group/field min-h-[32px]">
-        <div class="w-24 text-xs text-gray-500 font-medium pt-1.5">{label}</div>
-        {#if editingField === field}
-            <div class="flex-1">
-                <input
-                    {type}
-                    bind:value={editValue}
-                    class="w-full text-sm font-semibold bg-white dark:bg-gray-800 border border-orange-500 rounded px-2 py-1 outline-none focus:ring-1 focus:ring-orange-500 dark:text-gray-200"
-                    onkeydown={(e) => {
-                        if (e.key === 'Enter') applyFieldEdit(field);
-                        if (e.key === 'Escape') editingField = null;
-                    }}
-                    onblur={() => applyFieldEdit(field)}
-                    disabled={saving}
-                />
-            </div>
-        {:else}
-            <div class="flex-1 flex flex-col relative group/actions">
-                <div class="flex items-center justify-between gap-2">
-                    <button
-                        class="text-left text-sm font-semibold dark:text-gray-200 hover:text-orange-600 cursor-pointer transition-colors py-1 group-hover/field:translate-x-1 break-all {isChanged
-                            ? 'text-blue-600 dark:text-blue-400'
-                            : ''}"
-                        onclick={() => startEditField(field, value)}
-                        title="Click to edit"
-                    >
-                        {value || 'Unknown'}
-                    </button>
+    {#if isReviewing || (value !== undefined && value !== null && value !== '')}
+        {@const isChanged = isFieldDifferent(field)}
+        <div class="flex items-start gap-4 group/field min-h-[32px]">
+            <div class="w-24 text-xs text-gray-500 font-medium pt-1.5">{label}</div>
+            {#if editingField === field}
+                <div class="flex-1">
+                    <input
+                        {type}
+                        bind:value={editValue}
+                        class="w-full text-sm font-semibold bg-white dark:bg-gray-800 border border-orange-500 rounded px-2 py-1 outline-none focus:ring-1 focus:ring-orange-500 dark:text-gray-200"
+                        onkeydown={(e) => {
+                            if (e.key === 'Enter') applyFieldEdit(field);
+                            if (e.key === 'Escape') editingField = null;
+                        }}
+                        onblur={() => applyFieldEdit(field)}
+                        disabled={saving}
+                    />
+                </div>
+            {:else}
+                <div class="flex-1 flex flex-col relative group/actions">
+                    <div class="flex items-center justify-between gap-2">
+                        {#if isReviewing}
+                            <button
+                                class="text-left text-sm font-semibold dark:text-gray-200 hover:text-orange-600 cursor-pointer transition-colors py-1 group-hover/field:translate-x-1 break-all {isChanged
+                                    ? 'text-blue-600 dark:text-blue-400'
+                                    : ''}"
+                                onclick={() => startEditField(field, value)}
+                                title="Click to edit"
+                            >
+                                {value || 'Unknown'}
+                            </button>
+                        {:else}
+                            <div class="text-left text-sm font-semibold dark:text-gray-200 py-1 break-all">
+                                {value || 'Unknown'}
+                            </div>
+                        {/if}
+                        {#if isChanged}
+                            <button 
+                                onclick={(e) => { e.stopPropagation(); revertField(field); }}
+                                class="p-1 text-gray-400 hover:text-orange-600 transition-colors opacity-0 group-hover/actions:opacity-100"
+                                title="Revert to original"
+                            >
+                                <RotateCcw size={14} />
+                            </button>
+                        {/if}
+                    </div>
                     {#if isChanged}
-                        <button 
-                            onclick={(e) => { e.stopPropagation(); revertField(field); }}
-                            class="p-1 text-gray-400 hover:text-orange-600 transition-colors opacity-0 group-hover/actions:opacity-100"
-                            title="Revert to original"
+                        <div
+                            class="text-[10px] text-gray-400 line-through truncate"
                         >
-                            <RotateCcw size={14} />
-                        </button>
+                            Was: {originalTags?.[field] || 'Unknown'}
+                        </div>
                     {/if}
                 </div>
-                {#if isChanged}
-                    <div
-                        class="text-[10px] text-gray-400 line-through truncate"
-                    >
-                        Was: {originalTags?.[field] || 'Unknown'}
-                    </div>
-                {/if}
-            </div>
-        {/if}
-    </div>
+            {/if}
+        </div>
+    {/if}
 {/snippet}
 
 {#snippet editableTextarea(
@@ -298,65 +365,70 @@
     icon: any,
     action?: Snippet,
 )}
-    {@const isChanged =
-        isReviewing &&
-        originalTags &&
-        JSON.stringify(originalTags[field]) !== JSON.stringify(tags?.[field])}
-    
-    {#snippet combinedAction()}
-        <div class="flex items-center gap-1">
-            {#if isChanged}
-                <button 
-                    onclick={(e) => { e.stopPropagation(); revertField(field); }}
-                    class="p-1 text-gray-400 hover:text-orange-600 transition-colors"
-                    title="Revert to original"
-                >
-                    <RotateCcw size={14} />
-                </button>
-            {/if}
-            {#if action}
-                {@render action()}
-            {/if}
-        </div>
-    {/snippet}
+    {#if isReviewing || (value !== undefined && value !== null && value !== '')}
+        {@const isChanged = isFieldDifferent(field)}
+        
+        {#snippet combinedAction()}
+            <div class="flex items-center gap-1">
+                {#if isChanged}
+                    <button 
+                        onclick={(e) => { e.stopPropagation(); revertField(field); }}
+                        class="p-1 text-gray-400 hover:text-orange-600 transition-colors"
+                        title="Revert to original"
+                    >
+                        <RotateCcw size={14} />
+                    </button>
+                {/if}
+                {#if action}
+                    {@render action()}
+                {/if}
+            </div>
+        {/snippet}
 
-    <DrawerSection title={label} {icon} action={combinedAction}>
-        {#if editingField === field}
-            <div class="space-y-2">
-                <textarea
-                    bind:value={editValue}
-                    class="w-full h-48 text-sm p-4 bg-white dark:bg-gray-800 border border-orange-500 rounded-xl outline-none focus:ring-1 focus:ring-orange-500 dark:text-gray-200"
-                    placeholder="Enter {label.toLowerCase()}..."
-                    onblur={() => applyFieldEdit(field)}
-                    disabled={saving}
-                ></textarea>
-            </div>
-        {:else}
-            <div
-                class="p-4 bg-gray-50 dark:bg-gray-900/40 rounded-xl text-sm leading-relaxed whitespace-pre-wrap text-gray-600 dark:text-gray-400 italic font-serif cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors {isChanged
-                    ? 'ring-1 ring-blue-500/50'
-                    : ''}"
-                role="button"
-                tabindex="0"
-                onclick={() => startEditField(field, value)}
-                onkeydown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
-                        startEditField(field, value);
-                    }
-                }}
-                title="Click to edit {label.toLowerCase()}"
-            >
-                {value || `No ${label.toLowerCase()} available. Click to add.`}
-            </div>
+        <DrawerSection title={label} {icon} action={combinedAction}>
+            {#if editingField === field}
+                <div class="space-y-2">
+                    <textarea
+                        bind:value={editValue}
+                        class="w-full h-48 text-sm p-4 bg-white dark:bg-gray-800 border border-orange-500 rounded-xl outline-none focus:ring-1 focus:ring-orange-500 dark:text-gray-200"
+                        placeholder="Enter {label.toLowerCase()}..."
+                        onblur={() => applyFieldEdit(field)}
+                        disabled={saving}
+                    ></textarea>
+                </div>
+            {:else if isReviewing}
+                <div
+                    class="p-4 bg-gray-50 dark:bg-gray-900/40 rounded-xl text-sm leading-relaxed whitespace-pre-wrap text-gray-600 dark:text-gray-400 italic font-serif cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors {isChanged
+                        ? 'ring-1 ring-blue-500/50'
+                        : ''}"
+                    role="button"
+                    tabindex="0"
+                    onclick={() => startEditField(field, value)}
+                    onkeydown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            startEditField(field, value);
+                        }
+                    }}
+                    title="Click to edit {label.toLowerCase()}"
+                >
+                    {value || `No ${label.toLowerCase()} available. Click to add.`}
+                </div>
+            {:else}
+                <div
+                    class="p-4 bg-gray-50 dark:bg-gray-900/40 rounded-xl text-sm leading-relaxed whitespace-pre-wrap text-gray-600 dark:text-gray-400 italic font-serif"
+                >
+                    {value || `No ${label.toLowerCase()} available.`}
+                </div>
+            {/if}
             {#if isChanged}
                 <div class="mt-2 px-4 py-2 bg-blue-50/50 dark:bg-blue-900/10 rounded-lg border border-blue-100/50 dark:border-blue-900/20">
                     <div class="text-[10px] text-blue-600 dark:text-blue-400 font-bold uppercase tracking-wider mb-1">Original Value</div>
                     <div class="text-xs text-gray-400 line-through whitespace-pre-wrap">{originalTags?.[field] || 'None'}</div>
                 </div>
             {/if}
-        {/if}
-    </DrawerSection>
+        </DrawerSection>
+    {/if}
 {/snippet}
 
 <Drawer bind:isOpen>
@@ -370,9 +442,21 @@
         {#snippet headerIcon()}
             <Music size={20} />
         {/snippet}
+        {#snippet headerAction()}
+            {#if !isReviewing}
+                <button
+                    onclick={enterReviewMode}
+                    class="p-1 text-gray-400 hover:text-orange-600 transition-colors"
+                    title="Enter Review Mode"
+                >
+                    <Edit2 size={16} />
+                </button>
+            {/if}
+        {/snippet}
         <DrawerHeader
             title={tags.title || 'Unknown Title'}
             icon={headerIcon}
+            action={headerAction}
             onClose={close}
         />
 
@@ -386,45 +470,62 @@
             />
 
             {#if tags.frontCover}
-                <button
-                    onclick={() => fileInput?.click()}
-                    disabled={uploadingImage}
-                    class="group/cover relative aspect-square w-full rounded-2xl overflow-hidden shadow-lg border border-gray-100 dark:border-gray-700 hover:border-orange-500 transition-all cursor-pointer"
-                >
-                    <img
-                        src={tags.frontCover}
-                        alt="Cover Art"
-                        class="w-full h-full object-cover group-hover/cover:scale-105 transition-transform duration-500"
-                    />
-                    <div
-                        class="absolute inset-0 bg-black/40 opacity-0 group-hover/cover:opacity-100 transition-opacity flex flex-col items-center justify-center text-white gap-2"
+                {@const isCoverChanged = isFieldDifferent('frontCover')}
+                <div class="space-y-2">
+                    <button
+                        onclick={() => isReviewing && fileInput?.click()}
+                        class="group/cover relative aspect-square w-full rounded-2xl overflow-hidden shadow-lg border border-gray-100 dark:border-gray-700 transition-all {isReviewing
+                            ? 'hover:border-orange-500 cursor-pointer'
+                            : 'cursor-default'} {isCoverChanged
+                            ? 'ring-4 ring-blue-500 ring-offset-4 dark:ring-offset-gray-900'
+                            : ''}"
                     >
-                        {#if uploadingImage}
+                        <img
+                            src={tags.frontCover}
+                            alt="Cover Art"
+                            class="w-full h-full object-cover {isReviewing
+                                ? 'group-hover/cover:scale-105'
+                                : ''} transition-transform duration-500"
+                        />
+                        {#if isReviewing}
                             <div
-                                class="animate-spin rounded-full h-8 w-8 border-b-2 border-white"
-                            ></div>
-                        {:else}
-                            <Upload size={32} />
-                            <span class="text-sm font-bold">Replace Cover</span>
+                                class="absolute inset-0 bg-black/40 opacity-0 group-hover/cover:opacity-100 transition-opacity flex flex-col items-center justify-center text-white gap-2"
+                            >
+                                <Upload size={32} />
+                                <span class="text-sm font-bold">Replace Cover</span>
+                            </div>
                         {/if}
-                    </div>
-                </button>
-            {:else}
-                <button
-                    onclick={() => fileInput?.click()}
-                    disabled={uploadingImage}
-                    class="aspect-square w-full rounded-2xl bg-gray-50 dark:bg-gray-800/50 border-2 border-dashed border-gray-200 dark:border-gray-700 flex flex-col items-center justify-center text-gray-400 hover:border-orange-500 hover:text-orange-500 transition-all cursor-pointer"
-                >
-                    {#if uploadingImage}
-                        <div
-                            class="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500"
-                        ></div>
-                    {:else}
-                        <Upload size={48} class="mb-2 opacity-20" />
-                        <span class="text-sm font-medium">Upload Cover Art</span
-                        >
+                    </button>
+                    {#if isCoverChanged}
+                        <div class="flex items-center justify-between gap-2 px-1">
+                            <span class="text-[10px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider">Cover Changed</span>
+                            <button 
+                                onclick={() => revertField('frontCover')}
+                                class="flex items-center gap-1.5 text-[10px] font-bold text-gray-400 hover:text-orange-600 transition-colors"
+                            >
+                                <RotateCcw size={12} />
+                                Revert Cover
+                            </button>
+                        </div>
                     {/if}
-                </button>
+                </div>
+            {:else}
+                <div
+                    class="aspect-square w-full rounded-2xl bg-gray-50 dark:bg-gray-800/50 border-2 border-dashed border-gray-200 dark:border-gray-700 flex flex-col items-center justify-center text-gray-400 transition-all"
+                >
+                    {#if isReviewing}
+                        <button
+                            onclick={() => fileInput?.click()}
+                            class="w-full h-full flex flex-col items-center justify-center hover:text-orange-500 transition-colors cursor-pointer"
+                        >
+                            <Upload size={48} class="mb-2 opacity-20" />
+                            <span class="text-sm font-medium">Upload Cover Art</span>
+                        </button>
+                    {:else}
+                        <Music size={48} class="opacity-10" />
+                        <span class="text-xs font-medium mt-2 opacity-40 uppercase tracking-widest">No Cover Art</span>
+                    {/if}
+                </div>
             {/if}
 
             <!-- MusicBrainz Scraper -->
@@ -432,8 +533,8 @@
                 <Search size={14} />
             {/snippet}
             <DrawerSection title="Metadata & Lyrics Lookup" icon={searchIcon}>
-                <div class="space-y-3">
-                    <p class="text-xs text-gray-500 mb-2">
+                <div class="space-y-4">
+                    <p class="text-xs text-gray-500">
                         Fetch metadata from MusicBrainz and lyrics from LRCLIB.
                         Review changes before applying.
                     </p>
@@ -442,26 +543,83 @@
                             <input
                                 type="text"
                                 bind:value={mbidInput}
-                                placeholder="Recording ID (optional)"
+                                placeholder="Recording ID or Search Query"
                                 class="w-full text-xs font-mono bg-gray-50 dark:bg-gray-900/40 border border-gray-100 dark:border-gray-700/50 rounded-lg px-3 py-2 outline-none focus:ring-1 focus:ring-orange-500"
+                                onkeydown={(e) => {
+                                    if (e.key === 'Enter') searchCandidates();
+                                }}
                             />
                         </div>
                         <button
-                            onclick={scrapeTags}
-                            disabled={scraping}
+                            onclick={searchCandidates}
+                            disabled={searching || scraping}
                             class="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors flex items-center gap-2 text-xs font-bold disabled:opacity-50"
                         >
-                            {#if scraping}
+                            {#if searching}
                                 <div
                                     class="animate-spin rounded-full h-3 w-3 border-b-2 border-white"
                                 ></div>
-                                Fetching...
+                                Searching...
                             {:else}
                                 <Search size={14} />
-                                Fetch Metadata
+                                Search MB
                             {/if}
                         </button>
                     </div>
+
+                    {#if candidates.length > 0}
+                        <div class="flex items-center justify-between mb-1">
+                            <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wider px-1">Search Results</span>
+                            <button 
+                                onclick={() => candidates = []}
+                                class="text-[10px] font-bold text-gray-400 hover:text-orange-600 transition-colors flex items-center gap-1 px-1"
+                            >
+                                <X size={12} />
+                                Clear Results
+                            </button>
+                        </div>
+                        <div class="bg-gray-50 dark:bg-gray-900/40 rounded-xl border border-gray-100 dark:border-gray-800 overflow-hidden divide-y divide-gray-100 dark:divide-gray-800">
+                            {#each candidates as candidate}
+                                <button
+                                    onclick={() => scrapeTags(candidate.mbid, candidate.albumMbid)}
+                                    disabled={scraping}
+                                    class="w-full text-left p-3 hover:bg-orange-50 dark:hover:bg-orange-900/20 transition-colors group flex items-start justify-between gap-4"
+                                >
+                                    <div class="flex items-start gap-3 min-w-0">
+                                        {#if candidate.albumMbid}
+                                            <div class="w-12 h-12 rounded-lg bg-gray-100 dark:bg-gray-800 flex-shrink-0 overflow-hidden border border-gray-100 dark:border-gray-700">
+                                                <img 
+                                                    src="https://coverartarchive.org/release/{candidate.albumMbid}/front-250" 
+                                                    alt="Cover Art"
+                                                    class="w-full h-full object-cover"
+                                                    onerror={(e) => (e.target as HTMLImageElement).style.display = 'none'}
+                                                />
+                                            </div>
+                                        {:else}
+                                            <div class="w-12 h-12 rounded-lg bg-gray-100 dark:bg-gray-800 flex-shrink-0 flex items-center justify-center">
+                                                <Music size={20} class="text-gray-400" />
+                                            </div>
+                                        {/if}
+                                        <div class="min-w-0 pt-0.5">
+                                            <div class="text-sm font-bold text-gray-900 dark:text-gray-100 truncate">
+                                                {candidate.title}
+                                            </div>
+                                            <div class="text-xs text-gray-500 truncate mt-0.5">
+                                                {candidate.artist}
+                                                {#if candidate.album}
+                                                    <span class="mx-1">•</span> {candidate.album}
+                                                {/if}
+                                                {#if candidate.year}
+                                                    <span class="mx-1">•</span> {candidate.year}
+                                                {/if}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <ChevronRight size={16} class="text-gray-300 group-hover:text-orange-500 transition-colors flex-shrink-0 mt-3" />
+                                </button>
+                            {/each}
+                        </div>
+                    {/if}
                 </div>
             </DrawerSection>
 
@@ -474,13 +632,11 @@
                     {@render editableField('Title', 'title', tags.title)}
                     {@render editableField('Artist', 'artist', tags.artist)}
                     {@render editableField('Album', 'album', tags.album)}
-                    {#if tags.albumArtist || editingField === 'albumArtist'}
-                        {@render editableField(
-                            'Album Artist',
-                            'albumArtist',
-                            tags.albumArtist,
-                        )}
-                    {/if}
+                    {@render editableField(
+                        'Album Artist',
+                        'albumArtist',
+                        tags.albumArtist,
+                    )}
                     {@render editableField('Genre', 'genre', tags.genre)}
                 </div>
             </DrawerSection>
@@ -522,7 +678,7 @@
                 <Layers size={14} />
             {/snippet}
 
-            {#if tags.composer || tags.conductor || tags.producer || tags.lyricist || tags.remixer || editingField}
+            {#if isReviewing || tags.composer || tags.conductor || tags.producer || tags.lyricist || tags.remixer || tags.arranger || tags.engineer || tags.mixer}
                 <DrawerSection title="Credits" icon={layersIcon}>
                     <div class="space-y-3 px-1">
                         {@render editableField(
@@ -569,49 +725,24 @@
             {#snippet fingerprintIcon()}
                 <Fingerprint size={14} />
             {/snippet}
-            <DrawerSection title="Identifiers" icon={fingerprintIcon}>
-                <div
-                    class="space-y-2 font-mono text-[10px] bg-gray-50 dark:bg-gray-900/40 p-4 rounded-xl border border-gray-100 dark:border-gray-700/50"
-                >
-                    {#if tags.isrc}<div class="flex justify-between gap-4">
-                            <span class="text-gray-500 flex-shrink-0">ISRC</span
-                            >
-                            <span
-                                class="text-gray-700 dark:text-gray-400 break-all text-right"
-                                >{tags.isrc}</span
-                            >
-                        </div>{/if}
-                    {#if tags.barcode}<div class="flex justify-between gap-4">
-                            <span class="text-gray-500 flex-shrink-0"
-                                >Barcode</span
-                            >
-                            <span
-                                class="text-gray-700 dark:text-gray-400 break-all text-right"
-                                >{tags.barcode}</span
-                            >
-                        </div>{/if}
-                    {#if tags.label}<div class="flex justify-between gap-4">
-                            <span class="text-gray-500 flex-shrink-0"
-                                >Label</span
-                            >
-                            <span
-                                class="text-gray-700 dark:text-gray-400 break-all text-right"
-                                >{tags.label}</span
-                            >
-                        </div>{/if}
-                    {#if tags.musicBrainzTrackId}<div
-                            class="flex justify-between gap-4"
-                        >
-                            <span class="text-gray-500 flex-shrink-0"
-                                >MB Track ID</span
-                            >
-                            <span
-                                class="text-gray-700 dark:text-gray-400 break-all text-right"
-                                >{tags.musicBrainzTrackId}</span
-                            >
-                        </div>{/if}
-                </div>
-            </DrawerSection>
+            {#if isReviewing || tags.isrc || tags.barcode || tags.label || tags.musicBrainzTrackId}
+                <DrawerSection title="Identifiers" icon={fingerprintIcon}>
+                    <div class="space-y-4">
+                        {@render editableField('ISRC', 'isrc', tags.isrc)}
+                        {@render editableField(
+                            'Barcode',
+                            'barcode',
+                            tags.barcode,
+                        )}
+                        {@render editableField('Label', 'label', tags.label)}
+                        {@render editableField(
+                            'MB Track ID',
+                            'musicBrainzTrackId',
+                            tags.musicBrainzTrackId,
+                        )}
+                    </div>
+                </DrawerSection>
+            {/if}
 
             {#snippet fileTextIcon()}
                 <FileText size={14} />

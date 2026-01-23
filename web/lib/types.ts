@@ -185,6 +185,15 @@ export interface SongTags {
     musicipPuid?: string;
 }
 
+export interface ScrapeCandidate {
+    mbid: string;
+    title: string;
+    artist: string;
+    album?: string;
+    albumMbid?: string;
+    year?: number;
+}
+
 export interface MusicFolder {
     id: number;
     name: string;
