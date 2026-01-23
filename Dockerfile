@@ -9,7 +9,7 @@ COPY bin/ /bin/
 # Final stage - minimal runtime image
 FROM debian:bookworm-slim
 
-# Install runtime dependencies (OpenSSL is usually needed for Rust apps)
+# Install runtime dependencies (ca-certificates is needed for HTTPS)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
