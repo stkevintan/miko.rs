@@ -49,13 +49,15 @@ pub async fn run_flusher(db: DatabaseConnection, mut rx: tokio::sync::mpsc::Rece
 
         let overdue = last_flush.elapsed() >= flush_interval || force_flush;
 
-        // Flush in order to respect foreign key constraints:
-        // 1. Artists and Genres (no dependencies)
-        // 2. Albums (no dependencies)
-        // 3. Songs (depends on Albums)
-        // 4. Relations (depend on their parent entities)
+        // Determine if songs or relations need to be flushed
+        let flush_songs = songs.len() >= 100 || (overdue && !songs.is_empty());
+        let flush_song_relations = song_relations.len() >= 100 || (overdue && !song_relations.is_empty());
+        let flush_album_relations = album_relations.len() >= 100 || (overdue && !album_relations.is_empty());
 
-        if artists.len() >= 100 || (overdue && !artists.is_empty()) {
+        // If we're about to flush songs or relations, ensure their dependencies are flushed first
+        let force_deps = flush_songs || flush_song_relations || flush_album_relations;
+
+        if artists.len() >= 100 || (overdue && !artists.is_empty()) || (force_deps && !artists.is_empty()) {
             let items = std::mem::take(&mut artists);
             if let Err(e) = artist::Entity::insert_many(items)
                 .on_conflict(
@@ -69,21 +71,7 @@ pub async fn run_flusher(db: DatabaseConnection, mut rx: tokio::sync::mpsc::Rece
                 log::error!("Failed to flush artists: {}", e);
             }
         }
-        if genres.len() >= 50 || (overdue && !genres.is_empty()) {
-            let items = std::mem::take(&mut genres);
-            if let Err(e) = genre::Entity::insert_many(items)
-                .on_conflict(
-                    sea_orm::sea_query::OnConflict::column(genre::Column::Name)
-                        .do_nothing()
-                        .to_owned(),
-                )
-                .exec_without_returning(&db)
-                .await
-            {
-                log::error!("Failed to flush genres: {}", e);
-            }
-        }
-        if albums.len() >= 100 || (overdue && !albums.is_empty()) {
+        if albums.len() >= 100 || (overdue && !albums.is_empty()) || (force_deps && !albums.is_empty()) {
             let items = std::mem::take(&mut albums);
             if let Err(e) = album::Entity::insert_many(items)
                 .on_conflict(
@@ -97,7 +85,21 @@ pub async fn run_flusher(db: DatabaseConnection, mut rx: tokio::sync::mpsc::Rece
                 log::error!("Failed to flush albums: {}", e);
             }
         }
-        if songs.len() >= 100 || (overdue && !songs.is_empty()) {
+        if genres.len() >= 50 || (overdue && !genres.is_empty()) || (force_deps && !genres.is_empty()) {
+            let items = std::mem::take(&mut genres);
+            if let Err(e) = genre::Entity::insert_many(items)
+                .on_conflict(
+                    sea_orm::sea_query::OnConflict::column(genre::Column::Name)
+                        .do_nothing()
+                        .to_owned(),
+                )
+                .exec_without_returning(&db)
+                .await
+            {
+                log::error!("Failed to flush genres: {}", e);
+            }
+        }
+        if flush_songs {
             let items = std::mem::take(&mut songs);
             if let Err(e) = child::Entity::insert_many(items)
                 .on_conflict(
@@ -124,7 +126,7 @@ pub async fn run_flusher(db: DatabaseConnection, mut rx: tokio::sync::mpsc::Rece
                 log::error!("Failed to flush songs: {}", e);
             }
         }
-        if song_relations.len() >= 100 || (overdue && !song_relations.is_empty()) {
+        if flush_song_relations {
             let relations = std::mem::take(&mut song_relations);
             let song_ids: Vec<String> = relations.iter().map(|r| r.song_id.clone()).collect();
 
@@ -215,7 +217,7 @@ pub async fn run_flusher(db: DatabaseConnection, mut rx: tokio::sync::mpsc::Rece
             }
         }
 
-        if album_relations.len() >= 100 || (overdue && !album_relations.is_empty()) {
+        if flush_album_relations {
             let relations = std::mem::take(&mut album_relations);
             let album_ids: Vec<String> = relations.iter().map(|r| r.album_id.clone()).collect();
 
