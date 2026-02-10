@@ -49,6 +49,12 @@ pub async fn run_flusher(db: DatabaseConnection, mut rx: tokio::sync::mpsc::Rece
 
         let overdue = last_flush.elapsed() >= flush_interval || force_flush;
 
+        // Flush in order to respect foreign key constraints:
+        // 1. Artists and Genres (no dependencies)
+        // 2. Albums (no dependencies)
+        // 3. Songs (depends on Albums)
+        // 4. Relations (depend on their parent entities)
+
         if artists.len() >= 100 || (overdue && !artists.is_empty()) {
             let items = std::mem::take(&mut artists);
             if let Err(e) = artist::Entity::insert_many(items)
@@ -63,20 +69,6 @@ pub async fn run_flusher(db: DatabaseConnection, mut rx: tokio::sync::mpsc::Rece
                 log::error!("Failed to flush artists: {}", e);
             }
         }
-        if albums.len() >= 100 || (overdue && !albums.is_empty()) {
-            let items = std::mem::take(&mut albums);
-            if let Err(e) = album::Entity::insert_many(items)
-                .on_conflict(
-                    sea_orm::sea_query::OnConflict::column(album::Column::Id)
-                        .update_columns([album::Column::Year])
-                        .to_owned(),
-                )
-                .exec_without_returning(&db)
-                .await
-            {
-                log::error!("Failed to flush albums: {}", e);
-            }
-        }
         if genres.len() >= 50 || (overdue && !genres.is_empty()) {
             let items = std::mem::take(&mut genres);
             if let Err(e) = genre::Entity::insert_many(items)
@@ -89,6 +81,20 @@ pub async fn run_flusher(db: DatabaseConnection, mut rx: tokio::sync::mpsc::Rece
                 .await
             {
                 log::error!("Failed to flush genres: {}", e);
+            }
+        }
+        if albums.len() >= 100 || (overdue && !albums.is_empty()) {
+            let items = std::mem::take(&mut albums);
+            if let Err(e) = album::Entity::insert_many(items)
+                .on_conflict(
+                    sea_orm::sea_query::OnConflict::column(album::Column::Id)
+                        .update_columns([album::Column::Year])
+                        .to_owned(),
+                )
+                .exec_without_returning(&db)
+                .await
+            {
+                log::error!("Failed to flush albums: {}", e);
             }
         }
         if songs.len() >= 100 || (overdue && !songs.is_empty()) {

@@ -1,8 +1,8 @@
 use poem::{handler, http::StatusCode, IntoResponse, web::Path, Body, Response, Route, get};
-use rust_embed::RustEmbed;
+use rust_embed::Embed;
 use mime_guess::from_path;
 
-#[derive(RustEmbed)]
+#[derive(Embed)]
 #[folder = "dist/"]
 pub struct Asset;
 
