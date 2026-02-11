@@ -5,7 +5,6 @@
 //! to verify that all rows (including foreign-key-dependent junction tables)
 //! are inserted correctly.
 
-use miko::config::Config;
 use miko::models::{
     album, album_artist, album_genre, artist, child, genre, lyrics, song_artist, song_genre,
 };
@@ -18,7 +17,6 @@ use migration::{Migrator, MigratorTrait};
 use sea_orm::{
     ColumnTrait, ConnectionTrait, Database, EntityTrait, PaginatorTrait, QueryFilter, Set,
 };
-use std::sync::Arc;
 use tokio::sync::mpsc;
 
 // ─── constants ─────────────────────────────────────────────────
