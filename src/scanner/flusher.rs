@@ -277,10 +277,9 @@ async fn flush_album_relations(db: &DatabaseConnection, buf: &mut Vec<AlbumRelat
             .exec(&txn)
             .await?;
         album_genre::Entity::delete_many()
-            .filter(album_genre::Column::AlbumId.is_in(album_ids))
+            .filter(album_genre::Column::AlbumId.is_in(&album_ids))
             .exec(&txn)
             .await?;
-            .filter(album_genre::Column::AlbumId.is_in(&album_ids))
         if !all_artists.is_empty() {
             for chunk in all_artists.chunks_into(CHUNK_SIZE) {
                 album_artist::Entity::insert_many(chunk)
