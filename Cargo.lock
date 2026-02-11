@@ -1763,7 +1763,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "miko-rs"
+name = "miko"
 version = "0.1.0"
 dependencies = [
  "aes-gcm",

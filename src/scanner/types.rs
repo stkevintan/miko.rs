@@ -22,4 +22,5 @@ pub enum UpsertMessage {
     AlbumRelations(Box<AlbumRelations>),
     Seen(String),
     Flush(tokio::sync::oneshot::Sender<()>),
+    Batch(Vec<UpsertMessage>),
 }
