@@ -1,6 +1,6 @@
-use poem::{handler, http::StatusCode, IntoResponse, web::Path, Body, Response, Route, get};
-use rust_embed::RustEmbed;
 use mime_guess::from_path;
+use poem::{get, handler, http::StatusCode, web::Path, Body, IntoResponse, Response, Route};
+use rust_embed::RustEmbed;
 
 #[derive(RustEmbed)]
 #[folder = "dist/"]

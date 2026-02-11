@@ -3,10 +3,7 @@ use crate::models::{
 };
 use crate::scanner::seen;
 use crate::scanner::types::{AlbumRelations, SongRelations, UpsertMessage};
-use sea_orm::{
-    ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set,
-    TransactionTrait,
-};
+use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set, TransactionTrait};
 use std::time::{Duration, Instant};
 
 /// Maximum rows per INSERT statement.
@@ -363,15 +360,26 @@ fn dispatch(
         UpsertMessage::Batch(items) => {
             for item in items {
                 dispatch(
-                    item, artists, albums, genres, songs, song_relations,
-                    album_relations, seen_ids, force_flush, flush_ack,
+                    item,
+                    artists,
+                    albums,
+                    genres,
+                    songs,
+                    song_relations,
+                    album_relations,
+                    seen_ids,
+                    force_flush,
+                    flush_ack,
                 );
             }
         }
     }
 }
 
-pub async fn run_flusher(db: DatabaseConnection, mut rx: tokio::sync::mpsc::Receiver<UpsertMessage>) {
+pub async fn run_flusher(
+    db: DatabaseConnection,
+    mut rx: tokio::sync::mpsc::Receiver<UpsertMessage>,
+) {
     let mut artists = Vec::new();
     let mut albums = Vec::new();
     let mut genres = Vec::new();
@@ -395,9 +403,16 @@ pub async fn run_flusher(db: DatabaseConnection, mut rx: tokio::sync::mpsc::Rece
 
         if let Some(m) = msg {
             dispatch(
-                m, &mut artists, &mut albums, &mut genres, &mut songs,
-                &mut song_relations, &mut album_relations, &mut seen_ids,
-                &mut force_flush, &mut flush_ack,
+                m,
+                &mut artists,
+                &mut albums,
+                &mut genres,
+                &mut songs,
+                &mut song_relations,
+                &mut album_relations,
+                &mut seen_ids,
+                &mut force_flush,
+                &mut flush_ack,
             );
         }
 
@@ -405,9 +420,16 @@ pub async fn run_flusher(db: DatabaseConnection, mut rx: tokio::sync::mpsc::Rece
         // This accumulates many messages per flush cycle, greatly reducing DB round-trips.
         while let Ok(m) = rx.try_recv() {
             dispatch(
-                m, &mut artists, &mut albums, &mut genres, &mut songs,
-                &mut song_relations, &mut album_relations, &mut seen_ids,
-                &mut force_flush, &mut flush_ack,
+                m,
+                &mut artists,
+                &mut albums,
+                &mut genres,
+                &mut songs,
+                &mut song_relations,
+                &mut album_relations,
+                &mut seen_ids,
+                &mut force_flush,
+                &mut flush_ack,
             );
         }
 

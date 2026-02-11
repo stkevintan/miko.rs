@@ -3,8 +3,7 @@ use crate::config::Config;
 use crate::models::user;
 use jsonwebtoken::{decode, DecodingKey, Validation};
 use poem::{
-    http::StatusCode, Endpoint, Error, IntoResponse, Middleware, Request, Response,
-    Result,
+    http::StatusCode, Endpoint, Error, IntoResponse, Middleware, Request, Response, Result,
 };
 use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter};
 use std::sync::Arc;

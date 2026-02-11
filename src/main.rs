@@ -1,14 +1,14 @@
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
+use chrono::Utc;
+use migration::{Migrator, MigratorTrait};
 use miko::config::Config;
 use miko::crypto;
 use miko::models::user;
 use miko::scanner::Scanner;
 use miko::service::Service;
 use miko::{api, subsonic};
-use chrono::Utc;
-use migration::{Migrator, MigratorTrait};
 use poem::{
     listener::TcpListener,
     middleware::{Cors, Tracing},
@@ -57,13 +57,13 @@ async fn init_default_user(
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
     env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
-    
+
     let mb_client = Arc::new(miko::service::musicbrainz::MusicBrainzClient::new(
         env!("CARGO_PKG_NAME"),
         env!("CARGO_PKG_VERSION"),
-        env!("CARGO_PKG_REPOSITORY")
+        env!("CARGO_PKG_REPOSITORY"),
     )?);
-    
+
     let config = Config::load()?;
     let config = Arc::new(config);
     config.validate()?;

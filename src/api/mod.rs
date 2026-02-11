@@ -9,12 +9,30 @@ pub fn create_route(subsonic_routes: Option<Route>) -> Route {
     let mut auth_routes: Route = Route::new()
         .at("/stats", get(handlers::system::get_stats))
         .at("/system", get(handlers::system::get_system_info))
-        .at("/folders", get(handlers::system::get_folders).post(handlers::system::create_folder))
-        .at("/folders/:id", post(handlers::system::update_folder).delete(handlers::system::delete_folder))
-        .at("/songs/:id/tags", get(handlers::library::get_song_tags).post(handlers::library::update_song_tags))
-        .at("/songs/:id/scrape-search", get(handlers::library::scrape_search))
-        .at("/songs/:id/scrape-tags", get(handlers::library::scrape_song_tags))
-        .at("/songs/:id/cover", post(handlers::library::update_song_cover))
+        .at(
+            "/folders",
+            get(handlers::system::get_folders).post(handlers::system::create_folder),
+        )
+        .at(
+            "/folders/:id",
+            post(handlers::system::update_folder).delete(handlers::system::delete_folder),
+        )
+        .at(
+            "/songs/:id/tags",
+            get(handlers::library::get_song_tags).post(handlers::library::update_song_tags),
+        )
+        .at(
+            "/songs/:id/scrape-search",
+            get(handlers::library::scrape_search),
+        )
+        .at(
+            "/songs/:id/scrape-tags",
+            get(handlers::library::scrape_song_tags),
+        )
+        .at(
+            "/songs/:id/cover",
+            post(handlers::library::update_song_cover),
+        )
         .at("/profile", post(handlers::user::update_profile));
 
     if let Some(subsonic_routes) = subsonic_routes {

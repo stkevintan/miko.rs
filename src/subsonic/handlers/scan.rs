@@ -1,7 +1,11 @@
-use poem::{handler, web::{Data, Query}, IntoResponse};
-use crate::subsonic::models::{SubsonicResponse, SubsonicResponseBody, ScanStatus};
-use crate::subsonic::common::{SubsonicParams, send_response, deserialize_optional_bool};
 use crate::scanner::Scanner;
+use crate::subsonic::common::{deserialize_optional_bool, send_response, SubsonicParams};
+use crate::subsonic::models::{ScanStatus, SubsonicResponse, SubsonicResponseBody};
+use poem::{
+    handler,
+    web::{Data, Query},
+    IntoResponse,
+};
 use serde::Deserialize;
 use std::sync::Arc;
 

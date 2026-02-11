@@ -33,12 +33,16 @@ pub async fn login(
             .into_response()
         }
         Err(e) => {
-            log::error!("Database error during login for user '{}': {}", req.username, e);
+            log::error!(
+                "Database error during login for user '{}': {}",
+                req.username,
+                e
+            );
             return Json(ErrorResponse {
                 error: "Database error".into(),
             })
             .with_status(StatusCode::INTERNAL_SERVER_ERROR)
-            .into_response()
+            .into_response();
         }
     };
 
@@ -71,12 +75,16 @@ pub async fn login(
     ) {
         Ok(t) => t,
         Err(e) => {
-            log::error!("Failed to generate JWT token for user '{}': {}", claims.sub, e);
+            log::error!(
+                "Failed to generate JWT token for user '{}': {}",
+                claims.sub,
+                e
+            );
             return Json(ErrorResponse {
                 error: "Failed to generate token".into(),
             })
             .with_status(StatusCode::INTERNAL_SERVER_ERROR)
-            .into_response()
+            .into_response();
         }
     };
 

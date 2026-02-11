@@ -1,7 +1,7 @@
-use crate::service::Service;
 use crate::models::user;
+use crate::service::Service;
 use crate::subsonic::{
-    common::{send_response, SubsonicParams, deserialize_vec},
+    common::{deserialize_vec, send_response, SubsonicParams},
     models::{Bookmark, Bookmarks, Child, PlayQueue, SubsonicResponse, SubsonicResponseBody},
 };
 use poem::{
@@ -184,13 +184,7 @@ pub async fn save_play_queue(
     let position = query.position.unwrap_or(0);
 
     match service
-        .save_play_queue(
-            username,
-            query.0.current,
-            position,
-            query.0.id,
-            client_name,
-        )
+        .save_play_queue(username, query.0.current, position, query.0.id, client_name)
         .await
     {
         Ok(_) => send_response(

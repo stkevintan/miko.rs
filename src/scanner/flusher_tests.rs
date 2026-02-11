@@ -107,8 +107,20 @@ fn new_buffers() -> (
 
 #[test]
 fn dispatch_routes_artist() {
-    let (mut artists, mut albums, mut genres, mut songs, mut sr, mut ar, mut seen, mut ff, mut fa) = new_buffers();
-    dispatch(make_artist("a1"), &mut artists, &mut albums, &mut genres, &mut songs, &mut sr, &mut ar, &mut seen, &mut ff, &mut fa);
+    let (mut artists, mut albums, mut genres, mut songs, mut sr, mut ar, mut seen, mut ff, mut fa) =
+        new_buffers();
+    dispatch(
+        make_artist("a1"),
+        &mut artists,
+        &mut albums,
+        &mut genres,
+        &mut songs,
+        &mut sr,
+        &mut ar,
+        &mut seen,
+        &mut ff,
+        &mut fa,
+    );
     assert_eq!(artists.len(), 1);
     assert_eq!(*artists[0].id.as_ref(), "a1");
     assert!(albums.is_empty());
@@ -116,56 +128,140 @@ fn dispatch_routes_artist() {
 
 #[test]
 fn dispatch_routes_genre() {
-    let (mut artists, mut albums, mut genres, mut songs, mut sr, mut ar, mut seen, mut ff, mut fa) = new_buffers();
-    dispatch(make_genre("rock"), &mut artists, &mut albums, &mut genres, &mut songs, &mut sr, &mut ar, &mut seen, &mut ff, &mut fa);
+    let (mut artists, mut albums, mut genres, mut songs, mut sr, mut ar, mut seen, mut ff, mut fa) =
+        new_buffers();
+    dispatch(
+        make_genre("rock"),
+        &mut artists,
+        &mut albums,
+        &mut genres,
+        &mut songs,
+        &mut sr,
+        &mut ar,
+        &mut seen,
+        &mut ff,
+        &mut fa,
+    );
     assert_eq!(genres.len(), 1);
     assert_eq!(*genres[0].name.as_ref(), "rock");
 }
 
 #[test]
 fn dispatch_routes_album() {
-    let (mut artists, mut albums, mut genres, mut songs, mut sr, mut ar, mut seen, mut ff, mut fa) = new_buffers();
-    dispatch(make_album("al1"), &mut artists, &mut albums, &mut genres, &mut songs, &mut sr, &mut ar, &mut seen, &mut ff, &mut fa);
+    let (mut artists, mut albums, mut genres, mut songs, mut sr, mut ar, mut seen, mut ff, mut fa) =
+        new_buffers();
+    dispatch(
+        make_album("al1"),
+        &mut artists,
+        &mut albums,
+        &mut genres,
+        &mut songs,
+        &mut sr,
+        &mut ar,
+        &mut seen,
+        &mut ff,
+        &mut fa,
+    );
     assert_eq!(albums.len(), 1);
     assert_eq!(*albums[0].id.as_ref(), "al1");
 }
 
 #[test]
 fn dispatch_routes_song() {
-    let (mut artists, mut albums, mut genres, mut songs, mut sr, mut ar, mut seen, mut ff, mut fa) = new_buffers();
-    dispatch(make_song("s1", "/music/a.mp3", false), &mut artists, &mut albums, &mut genres, &mut songs, &mut sr, &mut ar, &mut seen, &mut ff, &mut fa);
+    let (mut artists, mut albums, mut genres, mut songs, mut sr, mut ar, mut seen, mut ff, mut fa) =
+        new_buffers();
+    dispatch(
+        make_song("s1", "/music/a.mp3", false),
+        &mut artists,
+        &mut albums,
+        &mut genres,
+        &mut songs,
+        &mut sr,
+        &mut ar,
+        &mut seen,
+        &mut ff,
+        &mut fa,
+    );
     assert_eq!(songs.len(), 1);
     assert_eq!(*songs[0].id.as_ref(), "s1");
 }
 
 #[test]
 fn dispatch_routes_seen() {
-    let (mut artists, mut albums, mut genres, mut songs, mut sr, mut ar, mut seen, mut ff, mut fa) = new_buffers();
-    dispatch(UpsertMessage::Seen("id1".into()), &mut artists, &mut albums, &mut genres, &mut songs, &mut sr, &mut ar, &mut seen, &mut ff, &mut fa);
+    let (mut artists, mut albums, mut genres, mut songs, mut sr, mut ar, mut seen, mut ff, mut fa) =
+        new_buffers();
+    dispatch(
+        UpsertMessage::Seen("id1".into()),
+        &mut artists,
+        &mut albums,
+        &mut genres,
+        &mut songs,
+        &mut sr,
+        &mut ar,
+        &mut seen,
+        &mut ff,
+        &mut fa,
+    );
     assert_eq!(seen, vec!["id1".to_string()]);
 }
 
 #[test]
 fn dispatch_routes_song_relations() {
-    let (mut artists, mut albums, mut genres, mut songs, mut sr, mut ar, mut seen, mut ff, mut fa) = new_buffers();
-    dispatch(make_song_relations("s1"), &mut artists, &mut albums, &mut genres, &mut songs, &mut sr, &mut ar, &mut seen, &mut ff, &mut fa);
+    let (mut artists, mut albums, mut genres, mut songs, mut sr, mut ar, mut seen, mut ff, mut fa) =
+        new_buffers();
+    dispatch(
+        make_song_relations("s1"),
+        &mut artists,
+        &mut albums,
+        &mut genres,
+        &mut songs,
+        &mut sr,
+        &mut ar,
+        &mut seen,
+        &mut ff,
+        &mut fa,
+    );
     assert_eq!(sr.len(), 1);
     assert_eq!(sr[0].song_id, "s1");
 }
 
 #[test]
 fn dispatch_routes_album_relations() {
-    let (mut artists, mut albums, mut genres, mut songs, mut sr, mut ar, mut seen, mut ff, mut fa) = new_buffers();
-    dispatch(make_album_relations("al1"), &mut artists, &mut albums, &mut genres, &mut songs, &mut sr, &mut ar, &mut seen, &mut ff, &mut fa);
+    let (mut artists, mut albums, mut genres, mut songs, mut sr, mut ar, mut seen, mut ff, mut fa) =
+        new_buffers();
+    dispatch(
+        make_album_relations("al1"),
+        &mut artists,
+        &mut albums,
+        &mut genres,
+        &mut songs,
+        &mut sr,
+        &mut ar,
+        &mut seen,
+        &mut ff,
+        &mut fa,
+    );
     assert_eq!(ar.len(), 1);
     assert_eq!(ar[0].album_id, "al1");
 }
 
 #[test]
 fn dispatch_flush_sets_flag() {
-    let (mut artists, mut albums, mut genres, mut songs, mut sr, mut ar, mut seen, mut ff, mut fa) = new_buffers();
+    let (mut artists, mut albums, mut genres, mut songs, mut sr, mut ar, mut seen, mut ff, mut fa) =
+        new_buffers();
     let (tx, _rx) = tokio::sync::oneshot::channel();
-    dispatch(UpsertMessage::Flush(tx), &mut artists, &mut albums, &mut genres, &mut songs, &mut sr, &mut ar, &mut seen, &mut ff, &mut fa);
+    dispatch(
+        UpsertMessage::Flush(tx),
+        &mut artists,
+        &mut albums,
+        &mut genres,
+        &mut songs,
+        &mut sr,
+        &mut ar,
+        &mut seen,
+        &mut ff,
+        &mut fa,
+    );
     assert!(ff);
     assert!(fa.is_some());
 }
@@ -174,7 +270,8 @@ fn dispatch_flush_sets_flag() {
 
 #[test]
 fn dispatch_batch_flattens_messages() {
-    let (mut artists, mut albums, mut genres, mut songs, mut sr, mut ar, mut seen, mut ff, mut fa) = new_buffers();
+    let (mut artists, mut albums, mut genres, mut songs, mut sr, mut ar, mut seen, mut ff, mut fa) =
+        new_buffers();
     let batch = UpsertMessage::Batch(vec![
         make_artist("a1"),
         make_genre("rock"),
@@ -184,7 +281,18 @@ fn dispatch_batch_flattens_messages() {
         make_album_relations("al1"),
         UpsertMessage::Seen("id1".into()),
     ]);
-    dispatch(batch, &mut artists, &mut albums, &mut genres, &mut songs, &mut sr, &mut ar, &mut seen, &mut ff, &mut fa);
+    dispatch(
+        batch,
+        &mut artists,
+        &mut albums,
+        &mut genres,
+        &mut songs,
+        &mut sr,
+        &mut ar,
+        &mut seen,
+        &mut ff,
+        &mut fa,
+    );
     assert_eq!(artists.len(), 1);
     assert_eq!(genres.len(), 1);
     assert_eq!(albums.len(), 1);
@@ -196,10 +304,22 @@ fn dispatch_batch_flattens_messages() {
 
 #[test]
 fn dispatch_nested_batch() {
-    let (mut artists, mut albums, mut genres, mut songs, mut sr, mut ar, mut seen, mut ff, mut fa) = new_buffers();
+    let (mut artists, mut albums, mut genres, mut songs, mut sr, mut ar, mut seen, mut ff, mut fa) =
+        new_buffers();
     let inner = UpsertMessage::Batch(vec![make_artist("a1"), make_artist("a2")]);
     let outer = UpsertMessage::Batch(vec![inner, make_artist("a3")]);
-    dispatch(outer, &mut artists, &mut albums, &mut genres, &mut songs, &mut sr, &mut ar, &mut seen, &mut ff, &mut fa);
+    dispatch(
+        outer,
+        &mut artists,
+        &mut albums,
+        &mut genres,
+        &mut songs,
+        &mut sr,
+        &mut ar,
+        &mut seen,
+        &mut ff,
+        &mut fa,
+    );
     assert_eq!(artists.len(), 3);
 }
 
@@ -261,11 +381,14 @@ fn sort_directories_by_path_depth() {
     sort_songs_for_insert(&mut items);
 
     let paths: Vec<&str> = items.iter().map(|i| i.path.as_ref().as_str()).collect();
-    assert_eq!(paths, vec![
-        "/music/Artist",
-        "/music/Artist/Album",
-        "/music/Artist/Album/Disc1",
-    ]);
+    assert_eq!(
+        paths,
+        vec![
+            "/music/Artist",
+            "/music/Artist/Album",
+            "/music/Artist/Album/Disc1",
+        ]
+    );
 }
 
 #[test]
@@ -325,12 +448,32 @@ fn should_flush(
 
 #[test]
 fn no_flush_when_empty_and_not_overdue() {
-    assert!(!should_flush(&[], &[], &[], &[], &[], &[], &[], false, false));
+    assert!(!should_flush(
+        &[],
+        &[],
+        &[],
+        &[],
+        &[],
+        &[],
+        &[],
+        false,
+        false
+    ));
 }
 
 #[test]
 fn no_flush_when_overdue_but_empty() {
-    assert!(!should_flush(&[], &[], &[], &[], &[], &[], &[], true, false));
+    assert!(!should_flush(
+        &[],
+        &[],
+        &[],
+        &[],
+        &[],
+        &[],
+        &[],
+        true,
+        false
+    ));
 }
 
 #[test]
@@ -348,59 +491,125 @@ fn flush_when_overdue_with_data() {
         average_rating: Set(0.0),
         ..Default::default()
     }];
-    assert!(should_flush(&artists, &[], &[], &[], &[], &[], &[], true, false));
+    assert!(should_flush(
+        &artists,
+        &[],
+        &[],
+        &[],
+        &[],
+        &[],
+        &[],
+        true,
+        false
+    ));
 }
 
 #[test]
 fn flush_when_artist_threshold_reached() {
-    let artists: Vec<_> = (0..100).map(|i| artist::ActiveModel {
-        id: Set(format!("a{}", i)),
-        name: Set(format!("Artist {}", i)),
-        artist_image_url: Set(None),
-        user_rating: Set(0),
-        average_rating: Set(0.0),
-        ..Default::default()
-    }).collect();
-    assert!(should_flush(&artists, &[], &[], &[], &[], &[], &[], false, false));
+    let artists: Vec<_> = (0..100)
+        .map(|i| artist::ActiveModel {
+            id: Set(format!("a{}", i)),
+            name: Set(format!("Artist {}", i)),
+            artist_image_url: Set(None),
+            user_rating: Set(0),
+            average_rating: Set(0.0),
+            ..Default::default()
+        })
+        .collect();
+    assert!(should_flush(
+        &artists,
+        &[],
+        &[],
+        &[],
+        &[],
+        &[],
+        &[],
+        false,
+        false
+    ));
 }
 
 #[test]
 fn flush_when_genre_threshold_reached() {
-    let genres: Vec<_> = (0..50).map(|i| genre::ActiveModel {
-        name: Set(format!("Genre {}", i)),
-    }).collect();
-    assert!(should_flush(&[], &genres, &[], &[], &[], &[], &[], false, false));
+    let genres: Vec<_> = (0..50)
+        .map(|i| genre::ActiveModel {
+            name: Set(format!("Genre {}", i)),
+        })
+        .collect();
+    assert!(should_flush(
+        &[],
+        &genres,
+        &[],
+        &[],
+        &[],
+        &[],
+        &[],
+        false,
+        false
+    ));
 }
 
 #[test]
 fn flush_when_song_threshold_reached() {
-    let songs: Vec<_> = (0..100).map(|i| make_child_active(
-        &format!("s{}", i),
-        &format!("/music/{}.mp3", i),
+    let songs: Vec<_> = (0..100)
+        .map(|i| make_child_active(&format!("s{}", i), &format!("/music/{}.mp3", i), false))
+        .collect();
+    assert!(should_flush(
+        &[],
+        &[],
+        &[],
+        &songs,
+        &[],
+        &[],
+        &[],
         false,
-    )).collect();
-    assert!(should_flush(&[], &[], &[], &songs, &[], &[], &[], false, false));
+        false
+    ));
 }
 
 #[test]
 fn flush_when_seen_threshold_reached() {
     let seen: Vec<String> = (0..500).map(|i| format!("id{}", i)).collect();
-    assert!(should_flush(&[], &[], &[], &[], &[], &[], &seen, false, false));
+    assert!(should_flush(
+        &[],
+        &[],
+        &[],
+        &[],
+        &[],
+        &[],
+        &seen,
+        false,
+        false
+    ));
 }
 
 #[test]
 fn no_flush_below_all_thresholds_not_overdue() {
-    let artists: Vec<_> = (0..99).map(|i| artist::ActiveModel {
-        id: Set(format!("a{}", i)),
-        name: Set(format!("Artist {}", i)),
-        artist_image_url: Set(None),
-        user_rating: Set(0),
-        average_rating: Set(0.0),
-        ..Default::default()
-    }).collect();
-    let genres: Vec<_> = (0..49).map(|i| genre::ActiveModel {
-        name: Set(format!("Genre {}", i)),
-    }).collect();
+    let artists: Vec<_> = (0..99)
+        .map(|i| artist::ActiveModel {
+            id: Set(format!("a{}", i)),
+            name: Set(format!("Artist {}", i)),
+            artist_image_url: Set(None),
+            user_rating: Set(0),
+            average_rating: Set(0.0),
+            ..Default::default()
+        })
+        .collect();
+    let genres: Vec<_> = (0..49)
+        .map(|i| genre::ActiveModel {
+            name: Set(format!("Genre {}", i)),
+        })
+        .collect();
     // Below all thresholds and not overdue → no flush
-    assert!(!should_flush(&artists, &genres, &[], &[], &[], &[], &[], false, false));
+    assert!(!should_flush(
+        &artists,
+        &genres,
+        &[],
+        &[],
+        &[],
+        &[],
+        &[],
+        false,
+        false
+    ));
 }

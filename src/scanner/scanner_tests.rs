@@ -187,15 +187,27 @@ async fn build_album_dependencies_come_before_relations() {
     );
 
     // The Album message must appear before AlbumRelations
-    let album_pos = batch.iter().position(|m| matches!(m, UpsertMessage::Album(_))).unwrap();
-    let rel_pos = batch.iter().position(|m| matches!(m, UpsertMessage::AlbumRelations(_))).unwrap();
+    let album_pos = batch
+        .iter()
+        .position(|m| matches!(m, UpsertMessage::Album(_)))
+        .unwrap();
+    let rel_pos = batch
+        .iter()
+        .position(|m| matches!(m, UpsertMessage::AlbumRelations(_)))
+        .unwrap();
     assert!(album_pos < rel_pos, "Album must be before AlbumRelations");
 
     // Artist must appear before AlbumRelations
-    let artist_pos = batch.iter().position(|m| matches!(m, UpsertMessage::Artist(_))).unwrap();
+    let artist_pos = batch
+        .iter()
+        .position(|m| matches!(m, UpsertMessage::Artist(_)))
+        .unwrap();
     assert!(artist_pos < rel_pos, "Artist must be before AlbumRelations");
 
     // Genre must appear before AlbumRelations
-    let genre_pos = batch.iter().position(|m| matches!(m, UpsertMessage::Genre(_))).unwrap();
+    let genre_pos = batch
+        .iter()
+        .position(|m| matches!(m, UpsertMessage::Genre(_)))
+        .unwrap();
     assert!(genre_pos < rel_pos, "Genre must be before AlbumRelations");
 }

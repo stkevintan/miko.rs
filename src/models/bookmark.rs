@@ -1,7 +1,7 @@
+use super::child::ChildWithMetadata;
 use sea_orm::entity::prelude::*;
 use sea_orm::FromQueryResult;
 use serde::{Deserialize, Serialize};
-use super::child::ChildWithMetadata;
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Serialize, Deserialize)]
 #[sea_orm(table_name = "bookmark")]

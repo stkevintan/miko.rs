@@ -42,14 +42,8 @@ pub struct ScrapeCandidate {
 }
 
 impl ScrapeService {
-    pub fn new(
-        db: DatabaseConnection,
-        mb_client: Arc<MusicBrainzClient>,
-    ) -> Self {
-        Self {
-            db,
-            mb_client,
-        }
+    pub fn new(db: DatabaseConnection, mb_client: Arc<MusicBrainzClient>) -> Self {
+        Self { db, mb_client }
     }
 
     pub async fn search_recording_candidates(
@@ -100,7 +94,12 @@ impl ScrapeService {
                 let artist = r
                     .artist_credit
                     .as_ref()
-                    .map(|ac| ac.iter().map(|a| a.name.clone()).collect::<Vec<_>>().join(", "))
+                    .map(|ac| {
+                        ac.iter()
+                            .map(|a| a.name.clone())
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    })
                     .unwrap_or_default();
 
                 let album = r
@@ -152,7 +151,11 @@ impl ScrapeService {
 
         let path = std::path::Path::new(&song.path);
         let mut tags = SongTags::from_file(path).unwrap_or_else(|e| {
-            warn!("Failed to read tags from {}: {}. Proceeding with empty tags.", path.display(), e);
+            warn!(
+                "Failed to read tags from {}: {}. Proceeding with empty tags.",
+                path.display(),
+                e
+            );
             Default::default()
         });
 
@@ -212,10 +215,7 @@ impl ScrapeService {
             // Try 1: Title + Artist + Album
             let mut query1 = String::new();
             if !search_title.is_empty() {
-                query1.push_str(&format!(
-                    "recording:\"{}\"",
-                    escape_lucene(&search_title)
-                ));
+                query1.push_str(&format!("recording:\"{}\"", escape_lucene(&search_title)));
             }
             if let Some(ref a) = search_artist {
                 if !query1.is_empty() {

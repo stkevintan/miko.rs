@@ -15,7 +15,9 @@ use miko::scanner::types::{AlbumRelations, SongRelations, UpsertMessage};
 use miko::scanner::utils;
 
 use migration::{Migrator, MigratorTrait};
-use sea_orm::{ColumnTrait, ConnectionTrait, Database, EntityTrait, PaginatorTrait, QueryFilter, Set};
+use sea_orm::{
+    ColumnTrait, ConnectionTrait, Database, EntityTrait, PaginatorTrait, QueryFilter, Set,
+};
 use std::sync::Arc;
 use tokio::sync::mpsc;
 
@@ -23,7 +25,7 @@ use tokio::sync::mpsc;
 
 const NUM_ARTISTS: usize = 40;
 const NUM_ALBUMS_PER_ARTIST: usize = 5; // 40 × 5 = 200 albums
-const NUM_SONGS_PER_ALBUM: usize = 10;  // 200 × 10 = 2000 songs
+const NUM_SONGS_PER_ALBUM: usize = 10; // 200 × 10 = 2000 songs
 const NUM_GENRES: usize = 10;
 
 // ─── helpers ───────────────────────────────────────────────────
@@ -382,8 +384,9 @@ async fn flusher_handles_2000_songs_without_fk_errors() {
 
     // Count lyrics: every 3rd track per album = 4 per album × 200 = 800
     let lyrics_count: u64 = lyrics::Entity::find().count(&db).await.unwrap();
-    let expected_lyrics =
-        NUM_ARTISTS * NUM_ALBUMS_PER_ARTIST * (0..NUM_SONGS_PER_ALBUM).filter(|t| t % 3 == 0).count();
+    let expected_lyrics = NUM_ARTISTS
+        * NUM_ALBUMS_PER_ARTIST
+        * (0..NUM_SONGS_PER_ALBUM).filter(|t| t % 3 == 0).count();
     assert_eq!(lyrics_count, expected_lyrics as u64);
 
     // Count seen IDs: should match total children
@@ -665,12 +668,16 @@ async fn flusher_handles_2000_songs_then_prune_removes_missing() {
         "DELETE FROM artists \
          WHERE NOT EXISTS (SELECT 1 FROM song_artists WHERE song_artists.artist_id = artists.id) \
          AND NOT EXISTS (SELECT 1 FROM album_artists WHERE album_artists.artist_id = artists.id)",
-    ).await.unwrap();
+    )
+    .await
+    .unwrap();
     db.execute_unprepared(
         "DELETE FROM genres \
          WHERE NOT EXISTS (SELECT 1 FROM album_genres WHERE album_genres.genre_name = genres.name) \
          AND NOT EXISTS (SELECT 1 FROM song_genres WHERE song_genres.genre_name = genres.name)",
-    ).await.unwrap();
+    )
+    .await
+    .unwrap();
 
     // --- Phase 4: Verify pruned state ---
     let half_songs = half_artists * NUM_ALBUMS_PER_ARTIST * NUM_SONGS_PER_ALBUM;

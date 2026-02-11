@@ -1,5 +1,5 @@
-use poem::Response;
 use crate::subsonic::models::SubsonicResponse;
+use poem::Response;
 use serde::{Deserialize, Deserializer};
 
 pub fn deserialize_vec<'de, D, T>(deserializer: D) -> Result<Vec<T>, D::Error>
@@ -86,14 +86,17 @@ impl Default for SubsonicParams {
 
 pub fn send_response(resp: SubsonicResponse, format: &Option<String>) -> Response {
     let is_json = format.as_deref() == Some("json");
-    
+
     if is_json {
         match serde_json::to_value(&resp) {
             Ok(mut val) => {
                 clean_json_attributes(&mut val);
                 Response::builder()
                     .header("content-type", "application/json")
-                    .body(serde_json::to_string(&serde_json::json!({ "subsonic-response": val })).unwrap())
+                    .body(
+                        serde_json::to_string(&serde_json::json!({ "subsonic-response": val }))
+                            .unwrap(),
+                    )
             }
             Err(e) => {
                 log::error!("Failed to serialize SubsonicResponse to JSON: {}", e);

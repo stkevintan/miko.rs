@@ -1,13 +1,11 @@
-use crate::models::artist::{ArtistWithStats};
-use crate::models::album::{AlbumWithStats};
-use crate::models::child::{ChildWithMetadata};
+use crate::models::album::AlbumWithStats;
+use crate::models::artist::ArtistWithStats;
+use crate::models::child::ChildWithMetadata;
 use crate::models::queries::{self};
+use crate::models::{album, album_artist, album_genre, artist, child, song_artist, song_genre};
 use crate::service::Service;
-use crate::models::{album, album_artist, artist, child, song_artist, album_genre, song_genre};
-use sea_orm::{
-    ColumnTrait, DbErr, JoinType, Order, QueryFilter, QueryOrder, QuerySelect,
-};
 use sea_orm::sea_query::{Expr, ExprTrait, Query};
+use sea_orm::{ColumnTrait, DbErr, JoinType, Order, QueryFilter, QueryOrder, QuerySelect};
 use serde::Deserialize;
 
 #[derive(Deserialize, Debug, Default, Clone)]
@@ -80,7 +78,10 @@ impl Service {
             .await
     }
 
-    pub async fn get_artists(&self, ignored_articles: &str) -> Result<Vec<(String, Vec<ArtistWithStats>)>, DbErr> {
+    pub async fn get_artists(
+        &self,
+        ignored_articles: &str,
+    ) -> Result<Vec<(String, Vec<ArtistWithStats>)>, DbErr> {
         let artists = queries::artist_with_stats_query()
             .into_model::<ArtistWithStats>()
             .all(&self.db)
@@ -93,7 +94,10 @@ impl Service {
         ))
     }
 
-    pub async fn get_artist(&self, id: &str) -> Result<(ArtistWithStats, Vec<AlbumWithStats>), DbErr> {
+    pub async fn get_artist(
+        &self,
+        id: &str,
+    ) -> Result<(ArtistWithStats, Vec<AlbumWithStats>), DbErr> {
         let artist = queries::artist_with_stats_query()
             .filter(artist::Column::Id.eq(id))
             .into_model::<ArtistWithStats>()
@@ -106,21 +110,27 @@ impl Service {
         Ok((artist, albums))
     }
 
-    pub async fn get_albums_by_artist(&self, artist_id: &str) -> Result<Vec<AlbumWithStats>, DbErr> {
+    pub async fn get_albums_by_artist(
+        &self,
+        artist_id: &str,
+    ) -> Result<Vec<AlbumWithStats>, DbErr> {
         queries::album_with_stats_query()
             .filter(
-                album_artist::Column::ArtistId.eq(artist_id).or(album::Column::Id.in_subquery(
-                    Query::select()
-                        .column(child::Column::AlbumId)
-                        .from(child::Entity)
-                        .join(
-                            JoinType::InnerJoin,
-                            song_artist::Entity,
-                            Expr::col(song_artist::Column::SongId).eq(Expr::col(child::Column::Id)),
-                        )
-                        .and_where(song_artist::Column::ArtistId.eq(artist_id))
-                        .to_owned(),
-                )),
+                album_artist::Column::ArtistId
+                    .eq(artist_id)
+                    .or(album::Column::Id.in_subquery(
+                        Query::select()
+                            .column(child::Column::AlbumId)
+                            .from(child::Entity)
+                            .join(
+                                JoinType::InnerJoin,
+                                song_artist::Entity,
+                                Expr::col(song_artist::Column::SongId)
+                                    .eq(Expr::col(child::Column::Id)),
+                            )
+                            .and_where(song_artist::Column::ArtistId.eq(artist_id))
+                            .to_owned(),
+                    )),
             )
             .order_by_desc(album::Column::Year)
             .order_by_asc(album::Column::Name)
@@ -129,7 +139,10 @@ impl Service {
             .await
     }
 
-    pub async fn get_album(&self, id: &str) -> Result<(AlbumWithStats, Vec<ChildWithMetadata>), DbErr> {
+    pub async fn get_album(
+        &self,
+        id: &str,
+    ) -> Result<(AlbumWithStats, Vec<ChildWithMetadata>), DbErr> {
         let album = self.get_album_with_stats(id).await?;
 
         let songs = queries::song_with_metadata_query()
@@ -169,8 +182,7 @@ impl Service {
     ) -> Result<Vec<ChildWithMetadata>, sea_orm::DbErr> {
         let size = opts.size.unwrap_or(10);
 
-        let mut query = queries::song_with_metadata_query()
-            .filter(child::Column::IsDir.eq(false));
+        let mut query = queries::song_with_metadata_query().filter(child::Column::IsDir.eq(false));
 
         if let Some(folder_id) = opts.music_folder_id {
             query = query.filter(child::Column::MusicFolderId.eq(folder_id));
@@ -253,7 +265,14 @@ impl Service {
     pub async fn get_starred_items(
         &self,
         folder_id: Option<i32>,
-    ) -> Result<(Vec<ArtistWithStats>, Vec<AlbumWithStats>, Vec<ChildWithMetadata>), sea_orm::DbErr> {
+    ) -> Result<
+        (
+            Vec<ArtistWithStats>,
+            Vec<AlbumWithStats>,
+            Vec<ChildWithMetadata>,
+        ),
+        sea_orm::DbErr,
+    > {
         // Artists
         let mut artist_query = queries::artist_with_stats_query()
             .filter(artist::Column::Starred.is_not_null())
@@ -282,13 +301,14 @@ impl Service {
             .await?;
 
         // Albums
-        let albums = self.get_albums(AlbumListOptions {
-            r#type: Some("starred".to_string()),
-            size: Some(100000),
-            music_folder_id: folder_id,
-            ..Default::default()
-        })
-        .await?;
+        let albums = self
+            .get_albums(AlbumListOptions {
+                r#type: Some("starred".to_string()),
+                size: Some(100000),
+                music_folder_id: folder_id,
+                ..Default::default()
+            })
+            .await?;
 
         // Songs
         let mut song_query = queries::song_with_metadata_query()
@@ -298,7 +318,10 @@ impl Service {
         if let Some(f_id) = folder_id {
             song_query = song_query.filter(child::Column::MusicFolderId.eq(f_id));
         }
-        let songs = song_query.into_model::<ChildWithMetadata>().all(&self.db).await?;
+        let songs = song_query
+            .into_model::<ChildWithMetadata>()
+            .all(&self.db)
+            .await?;
 
         Ok((artists, albums, songs))
     }

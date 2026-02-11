@@ -1,10 +1,10 @@
-use serde::Deserialize;
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
+use base64::{engine::general_purpose, Engine as _};
+use governor::{DefaultDirectRateLimiter, Quota, RateLimiter};
 use log::{debug, warn};
-use std::time::Duration;
-use governor::{Quota, RateLimiter, DefaultDirectRateLimiter};
+use serde::Deserialize;
 use std::num::NonZeroU32;
-use base64::{Engine as _, engine::general_purpose};
+use std::time::Duration;
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct MBArtist {
@@ -105,7 +105,7 @@ pub struct MusicBrainzClient {
 impl MusicBrainzClient {
     pub fn new(app_name: &str, version: &str, contact: &str) -> Result<Self> {
         let user_agent = format!("{}/{} ( {} )", app_name, version, contact);
-        
+
         // MusicBrainz allows 1 request per second
         let quota = Quota::per_second(NonZeroU32::MIN);
         let rate_limiter = RateLimiter::direct(quota);
@@ -126,33 +126,52 @@ impl MusicBrainzClient {
 
         while attempts < max_attempts {
             attempts += 1;
-            
+
             // Wait for rate limiter
             self.rate_limiter.until_ready().await;
 
-            debug!("MusicBrainz Request (Attempt {}/{}): {}", attempts, max_attempts, url);
+            debug!(
+                "MusicBrainz Request (Attempt {}/{}): {}",
+                attempts, max_attempts, url
+            );
 
-            match self.client.get(url)
+            match self
+                .client
+                .get(url)
                 .header("User-Agent", &self.user_agent)
                 .send()
-                .await 
+                .await
             {
                 Ok(response) => {
                     let status = response.status();
                     if status.is_success() {
                         return Ok(response.json().await?);
-                    } else if status == reqwest::StatusCode::TOO_MANY_REQUESTS || status.is_server_error() {
-                        warn!("MusicBrainz error {}: {}. Retrying in {}s...", status, url, attempts * 2);
+                    } else if status == reqwest::StatusCode::TOO_MANY_REQUESTS
+                        || status.is_server_error()
+                    {
+                        warn!(
+                            "MusicBrainz error {}: {}. Retrying in {}s...",
+                            status,
+                            url,
+                            attempts * 2
+                        );
                         // Exponential backoff
                         tokio::time::sleep(Duration::from_secs(attempts * 2)).await;
                         last_error = anyhow!("MusicBrainz returned status: {}", status);
                         continue;
                     } else {
-                        return Err(anyhow!("MusicBrainz request failed with status: {}", status));
+                        return Err(anyhow!(
+                            "MusicBrainz request failed with status: {}",
+                            status
+                        ));
                     }
                 }
                 Err(e) => {
-                    warn!("Network error connecting to MusicBrainz: {}. Retrying in {}s...", e, attempts * 2);
+                    warn!(
+                        "Network error connecting to MusicBrainz: {}. Retrying in {}s...",
+                        e,
+                        attempts * 2
+                    );
                     tokio::time::sleep(Duration::from_secs(attempts * 2)).await;
                     last_error = anyhow::Error::from(e);
                     continue;
@@ -164,9 +183,11 @@ impl MusicBrainzClient {
     }
 
     pub async fn search_recording(&self, lucene_query: &str) -> Result<Vec<MBRecording>> {
-        let url = format!("https://musicbrainz.org/ws/2/recording?query={}&fmt=json", 
-            urlencoding::encode(lucene_query));
-        
+        let url = format!(
+            "https://musicbrainz.org/ws/2/recording?query={}&fmt=json",
+            urlencoding::encode(lucene_query)
+        );
+
         let result: MBSearchResponse = self.request_with_retry(&url).await?;
         Ok(result.recordings)
     }
@@ -174,18 +195,22 @@ impl MusicBrainzClient {
     pub async fn fetch_recording(&self, mbid: &str) -> Result<MBRecording> {
         let url = format!("https://musicbrainz.org/ws/2/recording/{}?inc=artist-credits+releases+genres+isrcs+media+release-groups&fmt=json", 
             urlencoding::encode(mbid));
-        
+
         self.request_with_retry(&url).await
     }
 
     pub async fn fetch_cover_art(&self, release_mbid: &str) -> Result<Option<String>> {
-        let url = format!("https://coverartarchive.org/release/{}/front", 
-            urlencoding::encode(release_mbid));
-        
+        let url = format!(
+            "https://coverartarchive.org/release/{}/front",
+            urlencoding::encode(release_mbid)
+        );
+
         debug!("Fetching cover art from CAA for release: {}", release_mbid);
-        
+
         // CAA is not rate-limited by the same 1rps rules as MB, but we still use the client
-        let response = self.client.get(&url)
+        let response = self
+            .client
+            .get(&url)
             .header("User-Agent", &self.user_agent)
             .send()
             .await?;
@@ -195,10 +220,14 @@ impl MusicBrainzClient {
         }
 
         if !response.status().is_success() {
-            return Err(anyhow!("CAA request failed with status: {}", response.status()));
+            return Err(anyhow!(
+                "CAA request failed with status: {}",
+                response.status()
+            ));
         }
 
-        let mime_type = response.headers()
+        let mime_type = response
+            .headers()
             .get(reqwest::header::CONTENT_TYPE)
             .and_then(|h| h.to_str().ok())
             .unwrap_or("image/jpeg")
@@ -206,7 +235,7 @@ impl MusicBrainzClient {
 
         let bytes = response.bytes().await?;
         let base64_image = general_purpose::STANDARD.encode(bytes);
-        
+
         Ok(Some(format!("data:{};base64,{}", mime_type, base64_image)))
     }
 }

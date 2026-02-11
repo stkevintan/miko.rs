@@ -1,5 +1,5 @@
-use crate::service::Service;
 use crate::service::library::AlbumListOptions;
+use crate::service::Service;
 use crate::subsonic::{
     common::{send_response, SubsonicParams},
     models::{

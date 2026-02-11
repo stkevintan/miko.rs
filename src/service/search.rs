@@ -5,9 +5,7 @@ use crate::models::queries::{self};
 use crate::models::{album, artist, child, song_artist};
 use crate::service::Service;
 use sea_orm::sea_query::{Expr, Query};
-use sea_orm::{
-    ColumnTrait, DbErr, JoinType, PaginatorTrait, QueryFilter, QuerySelect,
-};
+use sea_orm::{ColumnTrait, DbErr, JoinType, PaginatorTrait, QueryFilter, QuerySelect};
 use serde::Deserialize;
 
 #[derive(Debug, Default, Deserialize)]

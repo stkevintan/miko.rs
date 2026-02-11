@@ -1,17 +1,15 @@
 use crate::config::Config;
 use crate::crypto::encrypt;
-use crate::models::{user, music_folder};
-use crate::subsonic::common::{send_response, SubsonicParams, deserialize_optional_bool};
-use crate::subsonic::models::{
-    SubsonicResponse, SubsonicResponseBody, User, Users,
-};
+use crate::models::{music_folder, user};
+use crate::subsonic::common::{deserialize_optional_bool, send_response, SubsonicParams};
+use crate::subsonic::models::{SubsonicResponse, SubsonicResponseBody, User, Users};
 use poem::{
     handler,
     web::{Data, Query},
     IntoResponse,
 };
+use sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait, IntoActiveModel, Set};
 use serde::Deserialize;
-use sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait, Set, IntoActiveModel};
 use std::sync::Arc;
 
 #[derive(Deserialize)]
@@ -52,7 +50,10 @@ pub async fn get_users(
 ) -> impl IntoResponse {
     if !current_user.admin_role {
         return send_response(
-            SubsonicResponse::new_error(40, "The user is not authorized for the given operation.".into()),
+            SubsonicResponse::new_error(
+                40,
+                "The user is not authorized for the given operation.".into(),
+            ),
             &params.f,
         );
     }
@@ -96,7 +97,10 @@ pub async fn get_user(
 
     if !current_user.admin_role && current_user.username != *username {
         return send_response(
-            SubsonicResponse::new_error(40, "The user is not authorized for the given operation.".into()),
+            SubsonicResponse::new_error(
+                40,
+                "The user is not authorized for the given operation.".into(),
+            ),
             &params.f,
         );
     }
@@ -126,9 +130,7 @@ pub async fn get_user(
     };
 
     send_response(
-        SubsonicResponse::new_ok(SubsonicResponseBody::User(User::from_db(
-            user, folders,
-        ))),
+        SubsonicResponse::new_ok(SubsonicResponseBody::User(User::from_db(user, folders))),
         &params.f,
     )
 }
@@ -143,21 +145,25 @@ pub async fn create_user(
 ) -> impl IntoResponse {
     if !current_user.admin_role {
         return send_response(
-            SubsonicResponse::new_error(40, "The user is not authorized for the given operation.".into()),
+            SubsonicResponse::new_error(
+                40,
+                "The user is not authorized for the given operation.".into(),
+            ),
             &params.f,
         );
     }
 
-    let encrypted_password = match encrypt(&query.password, config.server.password_secret.as_bytes()) {
-        Ok(p) => p,
-        Err(e) => {
-            log::error!("Encryption error: {}", e);
-            return send_response(
-                SubsonicResponse::new_error(0, "Encryption error".into()),
-                &params.f,
-            );
-        }
-    };
+    let encrypted_password =
+        match encrypt(&query.password, config.server.password_secret.as_bytes()) {
+            Ok(p) => p,
+            Err(e) => {
+                log::error!("Encryption error: {}", e);
+                return send_response(
+                    SubsonicResponse::new_error(0, "Encryption error".into()),
+                    &params.f,
+                );
+            }
+        };
 
     let user = user::ActiveModel {
         username: Set(query.username.clone()),
@@ -181,7 +187,10 @@ pub async fn create_user(
     };
 
     match user.insert(*db).await {
-        Ok(_) => send_response(SubsonicResponse::new_ok(SubsonicResponseBody::None), &params.f),
+        Ok(_) => send_response(
+            SubsonicResponse::new_ok(SubsonicResponseBody::None),
+            &params.f,
+        ),
         Err(e) => {
             log::error!("Database error: {}", e);
             send_response(
@@ -202,12 +211,18 @@ pub async fn update_user(
 ) -> impl IntoResponse {
     if !current_user.admin_role {
         return send_response(
-            SubsonicResponse::new_error(40, "The user is not authorized for the given operation.".into()),
+            SubsonicResponse::new_error(
+                40,
+                "The user is not authorized for the given operation.".into(),
+            ),
             &params.f,
         );
     }
 
-    let user = match user::Entity::find_by_id(query.username.clone()).one(*db).await {
+    let user = match user::Entity::find_by_id(query.username.clone())
+        .one(*db)
+        .await
+    {
         Ok(Some(u)) => u,
         Ok(None) => {
             return send_response(
@@ -242,7 +257,11 @@ pub async fn update_user(
     }
 
     if let Some(email) = &query.email {
-        user_active.email = Set(if email.is_empty() { None } else { Some(email.clone()) });
+        user_active.email = Set(if email.is_empty() {
+            None
+        } else {
+            Some(email.clone())
+        });
     }
 
     if let Some(admin_role) = query.admin_role {
@@ -252,7 +271,10 @@ pub async fn update_user(
     user_active.updated_at = Set(chrono::Utc::now());
 
     match user_active.update(*db).await {
-        Ok(_) => send_response(SubsonicResponse::new_ok(SubsonicResponseBody::None), &params.f),
+        Ok(_) => send_response(
+            SubsonicResponse::new_ok(SubsonicResponseBody::None),
+            &params.f,
+        ),
         Err(e) => {
             log::error!("Database error: {}", e);
             send_response(
@@ -272,7 +294,10 @@ pub async fn delete_user(
 ) -> impl IntoResponse {
     if !current_user.admin_role {
         return send_response(
-            SubsonicResponse::new_error(40, "The user is not authorized for the given operation.".into()),
+            SubsonicResponse::new_error(
+                40,
+                "The user is not authorized for the given operation.".into(),
+            ),
             &params.f,
         );
     }
@@ -288,7 +313,10 @@ pub async fn delete_user(
         .exec(*db)
         .await
     {
-        Ok(_) => send_response(SubsonicResponse::new_ok(SubsonicResponseBody::None), &params.f),
+        Ok(_) => send_response(
+            SubsonicResponse::new_ok(SubsonicResponseBody::None),
+            &params.f,
+        ),
         Err(e) => {
             log::error!("Database error: {}", e);
             send_response(

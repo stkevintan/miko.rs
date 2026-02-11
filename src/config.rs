@@ -1,6 +1,6 @@
+use dotenvy::dotenv;
 use serde::Deserialize;
 use std::env;
-use dotenvy::dotenv;
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct Config {
@@ -35,9 +35,8 @@ impl Config {
             env::var(key).unwrap_or_else(|_| default.unwrap_or_default().to_string())
         };
 
-        let read_path = |key: &str, default: Option<&str>| -> String {
-            norm_path(&read_val(key, default))
-        };
+        let read_path =
+            |key: &str, default: Option<&str>| -> String { norm_path(&read_val(key, default)) };
 
         Ok(Config {
             server: ServerConfig {
@@ -50,7 +49,10 @@ impl Config {
             },
             subsonic: SubsonicConfig {
                 data_dir: read_path("SUBSONIC_DATA_DIR", Some("./data")),
-                ignored_articles: read_val("SUBSONIC_IGNORED_ARTICLES", Some("The El La Los Las Le Les")),
+                ignored_articles: read_val(
+                    "SUBSONIC_IGNORED_ARTICLES",
+                    Some("The El La Los Las Le Les"),
+                ),
             },
         })
     }

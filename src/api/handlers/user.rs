@@ -36,7 +36,11 @@ pub async fn update_profile(
     let mut changed = false;
 
     // 2. Update email if provided
-    let new_email = req.email.as_deref().filter(|s| !s.is_empty()).map(String::from);
+    let new_email = req
+        .email
+        .as_deref()
+        .filter(|s| !s.is_empty())
+        .map(String::from);
     if user.email != new_email {
         user_active.email = Set(new_email);
         changed = true;
@@ -45,17 +49,22 @@ pub async fn update_profile(
     // 3. Update password if new_password is not blank
     if let Some(new_pwd) = &req.new_password {
         if !new_pwd.trim().is_empty() {
-            let encrypted_password = match encrypt(new_pwd, config.server.password_secret.as_bytes()) {
-                Ok(p) => p,
-                Err(e) => {
-                    log::error!("Failed to encrypt password for user '{}': {}", user.username, e);
-                    return Json(ErrorResponse {
-                        error: "Encryption error".into(),
-                    })
-                    .with_status(StatusCode::INTERNAL_SERVER_ERROR)
-                    .into_response();
-                }
-            };
+            let encrypted_password =
+                match encrypt(new_pwd, config.server.password_secret.as_bytes()) {
+                    Ok(p) => p,
+                    Err(e) => {
+                        log::error!(
+                            "Failed to encrypt password for user '{}': {}",
+                            user.username,
+                            e
+                        );
+                        return Json(ErrorResponse {
+                            error: "Encryption error".into(),
+                        })
+                        .with_status(StatusCode::INTERNAL_SERVER_ERROR)
+                        .into_response();
+                    }
+                };
             user_active.password = Set(encrypted_password);
             changed = true;
         }
@@ -70,7 +79,11 @@ pub async fn update_profile(
     match user_active.update(*db).await {
         Ok(_) => StatusCode::OK.into_response(),
         Err(e) => {
-            log::error!("Failed to update profile for user '{}': {}", user.username, e);
+            log::error!(
+                "Failed to update profile for user '{}': {}",
+                user.username,
+                e
+            );
             Json(ErrorResponse {
                 error: "Database error".into(),
             })
