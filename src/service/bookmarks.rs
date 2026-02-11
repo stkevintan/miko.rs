@@ -1,15 +1,19 @@
-use crate::models::bookmark::{BookmarkWithMetadata};
-use crate::models::child::{ChildWithMetadata};
+use crate::models::bookmark::BookmarkWithMetadata;
+use crate::models::child::ChildWithMetadata;
 use crate::models::queries::{self};
-use crate::service::Service;
 use crate::models::{bookmark, child, play_queue, play_queue_song};
+use crate::service::Service;
 use chrono::Utc;
 use sea_orm::{
-    ColumnTrait, DbErr, EntityTrait, JoinType, QueryFilter, QueryOrder, QuerySelect, RelationTrait, Set, TransactionError, TransactionTrait,
+    ColumnTrait, DbErr, EntityTrait, JoinType, QueryFilter, QueryOrder, QuerySelect, RelationTrait,
+    Set, TransactionError, TransactionTrait,
 };
 
 impl Service {
-    pub async fn get_bookmarks(&self, username: &str) -> Result<Vec<(bookmark::Model, ChildWithMetadata)>, DbErr> {
+    pub async fn get_bookmarks(
+        &self,
+        username: &str,
+    ) -> Result<Vec<(bookmark::Model, ChildWithMetadata)>, DbErr> {
         let results = queries::song_with_metadata_query()
             .join(JoinType::InnerJoin, child::Relation::Bookmarks.def())
             .filter(bookmark::Column::Username.eq(username))
@@ -24,10 +28,7 @@ impl Service {
             .all(&self.db)
             .await?;
 
-        Ok(results
-            .into_iter()
-            .map(|r| r.into())
-            .collect())
+        Ok(results.into_iter().map(|r| r.into()).collect())
     }
 
     pub async fn create_bookmark(
@@ -75,7 +76,10 @@ impl Service {
         Ok(())
     }
 
-    pub async fn get_play_queue(&self, username: &str) -> Result<Option<(play_queue::Model, Vec<ChildWithMetadata>)>, DbErr> {
+    pub async fn get_play_queue(
+        &self,
+        username: &str,
+    ) -> Result<Option<(play_queue::Model, Vec<ChildWithMetadata>)>, DbErr> {
         let queue = play_queue::Entity::find_by_id(username)
             .one(&self.db)
             .await?;
@@ -138,14 +142,16 @@ impl Service {
                         .await?;
 
                     if !song_ids.is_empty() {
-                           let entries = song_ids.into_iter().enumerate().map(|(i, sid)| {
+                        let entries = song_ids.into_iter().enumerate().map(|(i, sid)| {
                             play_queue_song::ActiveModel {
                                 username: Set(username.clone()),
                                 song_id: Set(sid),
                                 index: Set(i as i32),
                             }
                         });
-                        play_queue_song::Entity::insert_many(entries).exec(txn).await?;
+                        play_queue_song::Entity::insert_many(entries)
+                            .exec(txn)
+                            .await?;
                     }
 
                     Ok(())

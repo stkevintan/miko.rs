@@ -1,6 +1,6 @@
 use crate::models::user;
-use crate::service::Service;
 use crate::service::playlists::UpdatePlaylistOptions;
+use crate::service::Service;
 use crate::subsonic::common::{
     deserialize_optional_bool, deserialize_vec, send_response, SubsonicParams,
 };

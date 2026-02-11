@@ -1,11 +1,21 @@
-use poem::{handler, web::{Data, Json, Query, Path}, http::StatusCode};
-use sea_orm::{DatabaseConnection, EntityTrait, PaginatorTrait, ColumnTrait, QueryFilter, QuerySelect, ActiveModelTrait, Set, IntoActiveModel};
-use crate::models::{child, album, artist, genre, music_folder, user};
 use crate::api::models::{CreateFolderRequest, UpdateFolderRequest};
-use serde::{Serialize, Deserialize};
-use sysinfo::System;
-use std::{collections::{HashMap, HashSet}, sync::Mutex};
+use crate::models::{album, artist, child, genre, music_folder, user};
 use once_cell::sync::Lazy;
+use poem::{
+    handler,
+    http::StatusCode,
+    web::{Data, Json, Path, Query},
+};
+use sea_orm::{
+    ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, IntoActiveModel,
+    PaginatorTrait, QueryFilter, QuerySelect, Set,
+};
+use serde::{Deserialize, Serialize};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Mutex,
+};
+use sysinfo::System;
 
 static SYS: Lazy<Mutex<System>> = Lazy::new(|| {
     let mut sys = System::new_all();
@@ -50,7 +60,9 @@ pub async fn get_stats(
     db: Data<&DatabaseConnection>,
     query: Query<StatsQuery>,
 ) -> Result<Json<Stats>, poem::Error> {
-    let field_set: HashSet<&str> = query.fields.as_deref()
+    let field_set: HashSet<&str> = query
+        .fields
+        .as_deref()
         .map(|f| f.split(',').collect())
         .unwrap_or_default();
     let fetch_all = field_set.is_empty();
@@ -116,16 +128,16 @@ pub async fn get_system_info() -> Result<Json<SystemInfo>, poem::Error> {
         })?;
 
         sys.refresh_processes(sysinfo::ProcessesToUpdate::Some(&[pid]), true);
-        
+
         let (cpu, mem) = if let Some(proc) = sys.process(pid) {
             (proc.cpu_usage(), proc.memory())
         } else {
             (0.0, 0)
         };
-        
+
         (cpu, mem, sys.total_memory())
     };
-    
+
     Ok(Json(SystemInfo {
         cpu_usage,
         memory_usage,
@@ -137,13 +149,10 @@ pub async fn get_system_info() -> Result<Json<SystemInfo>, poem::Error> {
 pub async fn get_folders(
     db: Data<&DatabaseConnection>,
 ) -> Result<Json<Vec<FolderInfo>>, poem::Error> {
-    let folders = music_folder::Entity::find()
-        .all(*db)
-        .await
-        .map_err(|e| {
-            log::error!("Failed to fetch music folders: {}", e);
-            poem::Error::from_status(poem::http::StatusCode::INTERNAL_SERVER_ERROR)
-        })?;
+    let folders = music_folder::Entity::find().all(*db).await.map_err(|e| {
+        log::error!("Failed to fetch music folders: {}", e);
+        poem::Error::from_status(poem::http::StatusCode::INTERNAL_SERVER_ERROR)
+    })?;
 
     // Optimization: Fetch all song counts in a single query to avoid N+1 problem
     let counts = child::Entity::find()
@@ -174,7 +183,7 @@ pub async fn get_folders(
             }
         })
         .collect();
-    
+
     Ok(Json(folder_infos))
 }
 

@@ -89,10 +89,8 @@ impl Scanner {
         let parent_id = utils::get_parent_id(&task.path, task.folder.id, &task.folder.path)
             .filter(|s| !s.is_empty());
 
-        self.inner
-            .upsert_tx
-            .send(UpsertMessage::Seen(id.clone()))
-            .await?;
+        let mut batch = Vec::new();
+        batch.push(UpsertMessage::Seen(id.clone()));
 
         if task.is_dir {
             let active_child: child::ActiveModel = child::ActiveModel {
@@ -120,9 +118,10 @@ impl Scanner {
                 play_count: Set(0),
                 ..Default::default()
             };
+            batch.push(UpsertMessage::Song(Box::new(active_child)));
             self.inner
                 .upsert_tx
-                .send(UpsertMessage::Song(Box::new(active_child)))
+                .send(UpsertMessage::Batch(batch))
                 .await?;
             return Ok(());
         }
@@ -138,6 +137,10 @@ impl Scanner {
 
             if let Some(created) = existing {
                 if task.mod_time <= created {
+                    self.inner
+                        .upsert_tx
+                        .send(UpsertMessage::Batch(batch))
+                        .await?;
                     return Ok(());
                 }
             }
@@ -209,7 +212,7 @@ impl Scanner {
                 .collect();
 
             for a_name in &filtered_artists {
-                let a_id = self.ensure_artist(a_name).await?;
+                let a_id = self.build_artist(a_name, &mut batch);
                 relations.artists.push(a_id);
             }
             let mut album_artists_list: Vec<&str> = t
@@ -223,15 +226,14 @@ impl Scanner {
             }
 
             if !t.album.trim().is_empty() {
-                let album_id = self
-                    .ensure_album(
-                        &t.album,
-                        &album_artists_list,
-                        t.year.unwrap_or(0),
-                        &t.genres.iter().map(|g| g.as_str()).collect::<Vec<&str>>(),
-                        task.mod_time,
-                    )
-                    .await?;
+                let album_id = self.build_album(
+                    &t.album,
+                    &album_artists_list,
+                    t.year.unwrap_or(0),
+                    &t.genres.iter().map(|g| g.as_str()).collect::<Vec<&str>>(),
+                    task.mod_time,
+                    &mut batch,
+                );
                 active_child.album_id = Set(Some(album_id.clone()));
             }
 
@@ -244,7 +246,7 @@ impl Scanner {
                 .collect();
 
             for g_name in &filtered_genres {
-                let g_name = self.ensure_genre(g_name).await?;
+                let g_name = self.build_genre(g_name, &mut batch);
                 relations.genres.push(g_name);
             }
 
@@ -266,14 +268,12 @@ impl Scanner {
             }
         }
 
-        self.inner
-            .upsert_tx
-            .send(UpsertMessage::Song(Box::new(active_child)))
-            .await?;
+        batch.push(UpsertMessage::Song(Box::new(active_child)));
+        batch.push(UpsertMessage::SongRelations(Box::new(relations)));
 
         self.inner
             .upsert_tx
-            .send(UpsertMessage::SongRelations(Box::new(relations)))
+            .send(UpsertMessage::Batch(batch))
             .await?;
 
         self.inner.scan_count.fetch_add(1, Ordering::SeqCst);
@@ -281,7 +281,7 @@ impl Scanner {
         Ok(())
     }
 
-    async fn ensure_artist(&self, name: &str) -> Result<String, anyhow::Error> {
+    fn build_artist(&self, name: &str, batch: &mut Vec<UpsertMessage>) -> String {
         let id = utils::generate_artist_id(name);
         let obj = artist::ActiveModel {
             id: Set(id.clone()),
@@ -291,33 +291,28 @@ impl Scanner {
             average_rating: Set(0.0),
             ..Default::default()
         };
-        self.inner
-            .upsert_tx
-            .send(UpsertMessage::Artist(Box::new(obj)))
-            .await?;
-        Ok(id)
+        batch.push(UpsertMessage::Artist(Box::new(obj)));
+        id
     }
 
-    async fn ensure_genre(&self, name: &str) -> Result<String, anyhow::Error> {
+    fn build_genre(&self, name: &str, batch: &mut Vec<UpsertMessage>) -> String {
         let name = name.trim();
         let obj = genre::ActiveModel {
             name: Set(name.to_string()),
         };
-        self.inner
-            .upsert_tx
-            .send(UpsertMessage::Genre(Box::new(obj)))
-            .await?;
-        Ok(name.to_string())
+        batch.push(UpsertMessage::Genre(Box::new(obj)));
+        name.to_string()
     }
 
-    async fn ensure_album(
+    fn build_album(
         &self,
         name: &str,
         artist_names: &[&str],
         year: i32,
         genres: &[&str],
         created: chrono::DateTime<chrono::Utc>,
-    ) -> Result<String, anyhow::Error> {
+        batch: &mut Vec<UpsertMessage>,
+    ) -> String {
         let artist_name = artist_names.join("; ");
         let id = utils::generate_album_id(&artist_name, name);
 
@@ -330,10 +325,7 @@ impl Scanner {
             average_rating: Set(0.0),
             ..Default::default()
         };
-        self.inner
-            .upsert_tx
-            .send(UpsertMessage::Album(Box::new(obj)))
-            .await?;
+        batch.push(UpsertMessage::Album(Box::new(obj)));
 
         let mut relations = AlbumRelations {
             album_id: id.clone(),
@@ -342,22 +334,40 @@ impl Scanner {
         };
 
         for &a_name in artist_names {
-            relations.artists.push(self.ensure_artist(a_name).await?);
+            relations.artists.push(self.build_artist(a_name, batch));
         }
 
         for &g_name in genres {
             let g_name = g_name.trim();
             if !g_name.is_empty() {
-                relations.genres.push(self.ensure_genre(g_name).await?);
+                relations.genres.push(self.build_genre(g_name, batch));
             }
         }
 
-        self.inner
-            .upsert_tx
-            .send(UpsertMessage::AlbumRelations(Box::new(relations)))
-            .await?;
+        batch.push(UpsertMessage::AlbumRelations(Box::new(relations)));
 
-        Ok(id)
+        id
+    }
+
+    #[cfg(test)]
+    pub fn build_artist_test(&self, name: &str, batch: &mut Vec<UpsertMessage>) -> String {
+        self.build_artist(name, batch)
+    }
+    #[cfg(test)]
+    pub fn build_genre_test(&self, name: &str, batch: &mut Vec<UpsertMessage>) -> String {
+        self.build_genre(name, batch)
+    }
+    #[cfg(test)]
+    pub fn build_album_test(
+        &self,
+        name: &str,
+        artist_names: &[&str],
+        year: i32,
+        genres: &[&str],
+        created: chrono::DateTime<chrono::Utc>,
+        batch: &mut Vec<UpsertMessage>,
+    ) -> String {
+        self.build_album(name, artist_names, year, genres, created, batch)
     }
 
     pub async fn scan_all(&self, incremental: bool) -> Result<(), anyhow::Error> {
@@ -478,3 +488,7 @@ impl Scanner {
         Ok(())
     }
 }
+
+#[cfg(test)]
+#[path = "scanner_tests.rs"]
+mod tests;

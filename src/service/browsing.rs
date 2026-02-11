@@ -2,8 +2,8 @@ use crate::models::{album_genre, artist, child, genre, queries, song_artist, son
 use crate::service::Service;
 use sea_orm::sea_query::Expr;
 use sea_orm::{
-    ColumnTrait, DbErr, EntityTrait, JoinType, PaginatorTrait, QueryFilter, QueryOrder, QuerySelect,
-    QueryTrait, RelationTrait,
+    ColumnTrait, DbErr, EntityTrait, JoinType, PaginatorTrait, QueryFilter, QueryOrder,
+    QuerySelect, QueryTrait, RelationTrait,
 };
 
 pub struct DirectoryWithChildren {

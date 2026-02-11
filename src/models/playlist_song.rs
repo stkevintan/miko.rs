@@ -1,7 +1,7 @@
+use super::child::ChildWithMetadata;
+use super::playlist::PlaylistWithStats;
 use sea_orm::entity::prelude::*;
 use serde::{Deserialize, Serialize};
-use super::playlist::PlaylistWithStats;
-use super::child::ChildWithMetadata;
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Serialize, Deserialize)]
 #[sea_orm(table_name = "playlist_songs")]

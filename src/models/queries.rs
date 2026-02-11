@@ -1,6 +1,8 @@
-use crate::models::{artist, child, album, song_artist, album_artist, album_genre, lyrics};
-use sea_orm::{FromQueryResult, JoinType, QuerySelect, RelationTrait, ColumnTrait, EntityTrait, QueryFilter};
+use crate::models::{album, album_artist, album_genre, artist, child, lyrics, song_artist};
 use sea_orm::sea_query::Expr;
+use sea_orm::{
+    ColumnTrait, EntityTrait, FromQueryResult, JoinType, QueryFilter, QuerySelect, RelationTrait,
+};
 
 #[derive(Debug, FromQueryResult, Clone)]
 pub struct LyricsWithMetadata {
@@ -70,8 +72,14 @@ pub fn album_with_stats_query() -> sea_orm::Select<album::Entity> {
         .column_as(Expr::cust("COALESCE(SUM(duration), 0)"), "duration")
         .column_as(Expr::cust("COALESCE(SUM(play_count), 0)"), "play_count")
         .column_as(child::Column::LastPlayed.max(), "last_played")
-        .column_as(Expr::cust("GROUP_CONCAT(DISTINCT artists.id || '[:]' || artists.name)"), "artists")
-        .column_as(Expr::cust("GROUP_CONCAT(DISTINCT album_genres.genre_name)"), "genre")
+        .column_as(
+            Expr::cust("GROUP_CONCAT(DISTINCT artists.id || '[:]' || artists.name)"),
+            "artists",
+        )
+        .column_as(
+            Expr::cust("GROUP_CONCAT(DISTINCT album_genres.genre_name)"),
+            "genre",
+        )
         .join_rev(
             JoinType::LeftJoin,
             child::Entity::belongs_to(album::Entity)

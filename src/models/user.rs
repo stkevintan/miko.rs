@@ -11,7 +11,7 @@ pub struct Model {
     pub created_at: DateTimeUtc,
     pub updated_at: DateTimeUtc,
     pub deleted_at: Option<DateTimeUtc>,
-    
+
     // Subsonic Settings
     #[sea_orm(default_value = true)]
     pub scrobbling_enabled: bool,

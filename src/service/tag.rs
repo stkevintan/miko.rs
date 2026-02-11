@@ -1,10 +1,10 @@
-use serde::{Deserialize, Serialize};
-use lofty::prelude::*;
-use lofty::tag::{Accessor, ItemKey};
-use lofty::probe::Probe;
-use base64::{Engine as _, engine::general_purpose};
-use std::path::Path;
 use anyhow::Result;
+use base64::{engine::general_purpose, Engine as _};
+use lofty::prelude::*;
+use lofty::probe::Probe;
+use lofty::tag::{Accessor, ItemKey};
+use serde::{Deserialize, Serialize};
+use std::path::Path;
 
 #[derive(Serialize, Deserialize, Default, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -72,11 +72,15 @@ impl SongTags {
         let probe = Probe::open(path)?;
         let tagged_file = probe.read()?;
         let properties = tagged_file.properties();
-        
+
         let mut tags = Self {
             duration: properties.duration().as_secs() as u32,
             bit_rate: properties.audio_bitrate().unwrap_or(0),
-            format: path.extension().and_then(|s| s.to_str()).unwrap_or("unknown").to_string(),
+            format: path
+                .extension()
+                .and_then(|s| s.to_str())
+                .unwrap_or("unknown")
+                .to_string(),
             ..Default::default()
         };
 
@@ -100,16 +104,23 @@ impl SongTags {
 
         // Helper for multi-value tags
         let get_all = |key: ItemKey| -> Option<Vec<String>> {
-            let items: Vec<String> = tag.get_items(&key)
+            let items: Vec<String> = tag
+                .get_items(&key)
                 .filter_map(|i| i.value().text())
                 .map(|s| s.to_string())
                 .collect();
-            if items.is_empty() { None } else { Some(items) }
+            if items.is_empty() {
+                None
+            } else {
+                Some(items)
+            }
         };
 
         // Helper for single string tags
         let get_one = |key: ItemKey| -> Option<String> {
-            tag.get(&key).and_then(|i| i.value().text()).map(|s| s.to_string())
+            tag.get(&key)
+                .and_then(|i| i.value().text())
+                .map(|s| s.to_string())
         };
 
         // Multi-value support
@@ -165,7 +176,10 @@ impl SongTags {
         for picture in tag.pictures() {
             if picture.pic_type() == lofty::picture::PictureType::CoverFront {
                 let base64_data = general_purpose::STANDARD.encode(picture.data());
-                let mime_type = picture.mime_type().map(|m| m.as_str()).unwrap_or("image/jpeg");
+                let mime_type = picture
+                    .mime_type()
+                    .map(|m| m.as_str())
+                    .unwrap_or("image/jpeg");
                 self.front_cover = Some(format!("data:{};base64,{}", mime_type, base64_data));
                 break;
             }

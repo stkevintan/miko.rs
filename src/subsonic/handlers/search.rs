@@ -1,5 +1,5 @@
 use crate::service::search::SearchOptions;
-use crate::service::{Service};
+use crate::service::Service;
 use crate::subsonic::{
     common::{send_response, SubsonicParams},
     models::{
@@ -94,9 +94,7 @@ pub async fn search2(
                     artist: artists.into_iter().map(Artist::from).collect(),
                     album: albums
                         .into_iter()
-                        .map(|a| {
-                            Child::from_album_stats(a)
-                        })
+                        .map(|a| Child::from_album_stats(a))
                         .collect(),
                     song: songs.into_iter().map(Child::from).collect(),
                 }));

@@ -1,18 +1,17 @@
-use crate::models::playlist::{PlaylistWithStats};
-use crate::models::playlist_song::{PlaylistWithSongs};
-use crate::models::child::{ChildWithMetadata};
+use crate::models::child::ChildWithMetadata;
+use crate::models::playlist::PlaylistWithStats;
+use crate::models::playlist_song::PlaylistWithSongs;
 use crate::models::queries::{self};
-use crate::service::Service;
 use crate::models::{child, playlist, playlist_song};
-use sea_orm::{
-    ActiveModelTrait, ColumnTrait, DbErr, EntityTrait,
-    QueryFilter, QuerySelect, TransactionTrait, Set, TransactionError,
-    JoinType, QueryOrder,
-};
+use crate::service::Service;
+use chrono::Utc;
 use sea_orm::sea_query::Expr;
+use sea_orm::{
+    ActiveModelTrait, ColumnTrait, DbErr, EntityTrait, JoinType, QueryFilter, QueryOrder,
+    QuerySelect, Set, TransactionError, TransactionTrait,
+};
 use serde::Deserialize;
 use std::collections::HashSet;
-use chrono::Utc;
 
 #[derive(Debug, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -110,7 +109,8 @@ impl Service {
                             .all(txn)
                             .await?;
 
-                        let mut song_ids: Vec<String> = songs.into_iter().map(|s| s.song_id).collect();
+                        let mut song_ids: Vec<String> =
+                            songs.into_iter().map(|s| s.song_id).collect();
 
                         if !opts.song_indices_to_remove.is_empty() {
                             let to_remove: HashSet<usize> = opts

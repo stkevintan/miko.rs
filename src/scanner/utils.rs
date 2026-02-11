@@ -1,9 +1,11 @@
-use md5;
 use crate::config::Config;
+use md5;
 use std::path::{Path, PathBuf};
 
 pub fn get_cover_cache_dir(cfg: &Config) -> PathBuf {
-    Path::new(&cfg.subsonic.data_dir).join("cache").join("covers")
+    Path::new(&cfg.subsonic.data_dir)
+        .join("cache")
+        .join("covers")
 }
 
 pub fn generate_id(path: &str, folder_id: i32, folder_path: &str) -> String {
@@ -32,12 +34,12 @@ pub fn get_parent_id(path: &str, folder_id: i32, folder_path: &str) -> Option<St
     let path_obj = Path::new(path);
     let parent = path_obj.parent()?;
     let parent_str = parent.to_string_lossy().replace('\\', "/");
-    
+
     // Ensure we don't go above folder_path
     if !parent_str.starts_with(folder_path) && parent_str != folder_path {
         return None;
     }
-    
+
     Some(generate_id(&parent_str, folder_id, folder_path))
 }
 

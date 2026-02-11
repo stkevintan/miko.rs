@@ -1,13 +1,13 @@
-use sea_orm::{DatabaseConnection};
+use sea_orm::DatabaseConnection;
 
-pub mod library;
-pub mod browsing;
-pub mod search;
-pub mod playlists;
 pub mod bookmarks;
-pub mod scrape;
-pub mod tag;
+pub mod browsing;
+pub mod library;
 pub mod musicbrainz;
+pub mod playlists;
+pub mod scrape;
+pub mod search;
+pub mod tag;
 pub mod utils;
 
 pub struct Service {

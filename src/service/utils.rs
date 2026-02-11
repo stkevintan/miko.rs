@@ -1,8 +1,7 @@
 use once_cell::sync::Lazy;
 use regex::Regex;
 
-static LYRICS_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"^\[(\d+):(\d+)\.(\d+)\](.*)$").unwrap());
+static LYRICS_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^\[(\d+):(\d+)\.(\d+)\](.*)$").unwrap());
 
 pub fn strip_articles(name: &str, articles: &[&str]) -> String {
     let upper_name = name.to_uppercase();
@@ -24,7 +23,8 @@ where
     F: Fn(&T) -> &str,
 {
     let articles: Vec<&str> = ignored_articles.split_whitespace().collect();
-    let mut index_map: std::collections::BTreeMap<String, Vec<T>> = std::collections::BTreeMap::new();
+    let mut index_map: std::collections::BTreeMap<String, Vec<T>> =
+        std::collections::BTreeMap::new();
 
     for item in items {
         let name = get_name(&item);
@@ -45,11 +45,7 @@ where
 
     let mut result: Vec<(String, Vec<T>)> = index_map.into_iter().collect();
     for (_, group) in &mut result {
-        group.sort_by(|a, b| {
-            get_name(a)
-                .to_lowercase()
-                .cmp(&get_name(b).to_lowercase())
-        });
+        group.sort_by(|a, b| get_name(a).to_lowercase().cmp(&get_name(b).to_lowercase()));
     }
 
     result

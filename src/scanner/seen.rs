@@ -23,7 +23,10 @@ impl SeenTracker {
         Ok(())
     }
 
-    pub async fn insert_batch(db: &DatabaseConnection, ids: Vec<String>) -> Result<(), anyhow::Error> {
+    pub async fn insert_batch(
+        db: &DatabaseConnection,
+        ids: Vec<String>,
+    ) -> Result<(), anyhow::Error> {
         if ids.is_empty() {
             return Ok(());
         }

@@ -1,13 +1,14 @@
-use crate::models::queries::{self, FolderPathInfo};
 use crate::config::Config;
+use crate::models::queries::{self, FolderPathInfo};
 use crate::models::{artist, child, music_folder};
 use crate::scanner::utils::get_cover_cache_dir;
+use crate::service::utils::parse_lrc;
 use crate::subsonic::common::{send_response, SubsonicParams};
 use crate::subsonic::models::{
     Lyrics, LyricsLine, LyricsList, StructuredLyrics, SubsonicResponse, SubsonicResponseBody,
 };
-use crate::service::utils::parse_lrc;
 
+use path_clean::PathClean;
 use poem::{
     handler,
     http::StatusCode,
@@ -18,7 +19,6 @@ use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, QuerySe
 use serde::Deserialize;
 use std::path::Path;
 use std::sync::Arc;
-use path_clean::PathClean;
 
 #[derive(Deserialize)]
 pub struct IdQuery {
@@ -195,10 +195,7 @@ pub async fn get_cover_art(
     let cover_art = if id.starts_with("al-") || id.starts_with("ar-") {
         id.to_string()
     } else {
-        match child::Entity::find_by_id(id.to_string())
-            .one(*db)
-            .await
-        {
+        match child::Entity::find_by_id(id.to_string()).one(*db).await {
             Ok(Some(s)) => {
                 if let Some(aid) = s.album_id {
                     format!("al-{}", aid)
@@ -377,7 +374,7 @@ pub async fn get_avatar(
     if let Some(path) = found_path {
         return match file_req.create_response(&path, false, false) {
             Ok(resp) => resp.into_response(),
-             Err(e) => {
+            Err(e) => {
                 log::error!("Failed to serve avatar: {:?}", e);
                 StatusCode::INTERNAL_SERVER_ERROR.into_response()
             }

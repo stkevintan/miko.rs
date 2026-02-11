@@ -1,7 +1,7 @@
-use crate::service::Service;
 use crate::config::Config;
 use crate::models::music_folder;
 use crate::scanner::Scanner;
+use crate::service::Service;
 use crate::subsonic::{
     common::{send_response, SubsonicParams},
     models::{
@@ -81,22 +81,24 @@ pub async fn get_music_folders(
              AND c.is_dir = 0) as song_count
         FROM music_folders mf
     "#;
-    
-    let stats_map: std::collections::HashMap<i32, MusicFolderStats> = match MusicFolderStats::find_by_statement(
-        Statement::from_string((*db).get_database_backend(), sql.to_owned())
-    )
-    .all(*db)
-    .await
-    {
-        Ok(stats) => stats.into_iter().map(|s| (s.id, s)).collect(),
-        Err(e) => {
-            log::error!("Failed to fetch music folder stats: {:?}", e);
-            return send_response(
-                SubsonicResponse::new_error(0, "Failed to fetch music folder stats".into()),
-                &params.f,
-            );
-        }
-    };
+
+    let stats_map: std::collections::HashMap<i32, MusicFolderStats> =
+        match MusicFolderStats::find_by_statement(Statement::from_string(
+            (*db).get_database_backend(),
+            sql.to_owned(),
+        ))
+        .all(*db)
+        .await
+        {
+            Ok(stats) => stats.into_iter().map(|s| (s.id, s)).collect(),
+            Err(e) => {
+                log::error!("Failed to fetch music folder stats: {:?}", e);
+                return send_response(
+                    SubsonicResponse::new_error(0, "Failed to fetch music folder stats".into()),
+                    &params.f,
+                );
+            }
+        };
 
     let music_folders = folders
         .into_iter()
@@ -377,7 +379,8 @@ pub async fn get_similar_songs(
     params: Data<&SubsonicParams>,
     _query: Query<IdQuery>,
 ) -> impl IntoResponse {
-    let resp = SubsonicResponse::new_ok(SubsonicResponseBody::SimilarSongs(SimilarSongs::default()));
+    let resp =
+        SubsonicResponse::new_ok(SubsonicResponseBody::SimilarSongs(SimilarSongs::default()));
     send_response(resp, &params.f)
 }
 
@@ -386,7 +389,8 @@ pub async fn get_similar_songs2(
     params: Data<&SubsonicParams>,
     _query: Query<IdQuery>,
 ) -> impl IntoResponse {
-    let resp = SubsonicResponse::new_ok(SubsonicResponseBody::SimilarSongs2(SimilarSongs2::default()));
+    let resp =
+        SubsonicResponse::new_ok(SubsonicResponseBody::SimilarSongs2(SimilarSongs2::default()));
     send_response(resp, &params.f)
 }
 

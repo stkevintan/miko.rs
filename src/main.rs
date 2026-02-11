@@ -1,20 +1,14 @@
-mod api;
-mod config;
-mod crypto;
-mod models;
-mod scanner;
-mod service;
-mod subsonic;
-
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
-use crate::config::Config;
-use crate::models::user;
-use crate::scanner::Scanner;
-use crate::service::Service;
 use chrono::Utc;
 use migration::{Migrator, MigratorTrait};
+use miko::config::Config;
+use miko::crypto;
+use miko::models::user;
+use miko::scanner::Scanner;
+use miko::service::Service;
+use miko::{api, subsonic};
 use poem::{
     listener::TcpListener,
     middleware::{Cors, Tracing},
@@ -63,13 +57,13 @@ async fn init_default_user(
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
     env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
-    
-    let mb_client = Arc::new(crate::service::musicbrainz::MusicBrainzClient::new(
+
+    let mb_client = Arc::new(miko::service::musicbrainz::MusicBrainzClient::new(
         env!("CARGO_PKG_NAME"),
         env!("CARGO_PKG_VERSION"),
-        env!("CARGO_PKG_REPOSITORY")
+        env!("CARGO_PKG_REPOSITORY"),
     )?);
-    
+
     let config = Config::load()?;
     let config = Arc::new(config);
     config.validate()?;

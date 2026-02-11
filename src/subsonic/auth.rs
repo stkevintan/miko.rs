@@ -1,5 +1,5 @@
-use md5;
 use crate::crypto::decrypt;
+use md5;
 
 pub fn decrypt_password(stored_password: &str, secret: &[u8]) -> String {
     match decrypt(stored_password, secret) {
