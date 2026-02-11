@@ -99,7 +99,7 @@ pub async fn run_flusher(db: DatabaseConnection, mut rx: tokio::sync::mpsc::Rece
                 log::error!("Failed to flush genres: {}", e);
             }
         }
-        if flush_songs {
+        if flush_songs || (force_deps && !songs.is_empty()) {
             let items = std::mem::take(&mut songs);
             if let Err(e) = child::Entity::insert_many(items)
                 .on_conflict(
