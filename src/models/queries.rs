@@ -146,10 +146,8 @@ pub fn album_with_stats_query(username: &str) -> sea_orm::Select<album::Entity> 
             "starred",
         )
         .column_as(
-            Expr::expr(
-                Expr::col((user_rating::Entity, user_rating::Column::Rating)).max(),
-            )
-            .if_null(0),
+            Expr::expr(Expr::col((user_rating::Entity, user_rating::Column::Rating)).max())
+                .if_null(0),
             "user_rating",
         )
         .column_as(child::Column::Id.count(), "song_count")
