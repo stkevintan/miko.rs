@@ -1,7 +1,7 @@
 <script lang="ts">
     import { Router } from 'sv-router';
     import Toast from './components/ui/Toast.svelte';
-    import './router'
+    import './router';
 </script>
 
 <Router />

@@ -33,7 +33,6 @@ api.interceptors.response.use(
     },
 );
 
-
 api.interceptors.response.use(
     (response) => {
         const contentType = response.headers['content-type'];

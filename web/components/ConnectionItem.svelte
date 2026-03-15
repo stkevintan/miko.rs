@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { Music } from "lucide-svelte";
+    import { Music } from 'lucide-svelte';
 
     interface Props {
         name: string;
@@ -19,11 +19,15 @@
         connected = false,
     }: Props = $props();
 
-    let title = $derived(connected ? `${name}: ${username}` : `${name}: Disconnected`);
+    let title = $derived(
+        connected ? `${name}: ${username}` : `${name}: Disconnected`,
+    );
 </script>
 
 <div
-    class="flex items-center gap-2.5 group cursor-pointer {connected ? '' : 'opacity-40 grayscale hover:opacity-100 hover:grayscale-0'} transition-all"
+    class="flex items-center gap-2.5 group cursor-pointer {connected
+        ? ''
+        : 'opacity-40 grayscale hover:opacity-100 hover:grayscale-0'} transition-all"
     {title}
 >
     <div class="relative">
@@ -48,7 +52,9 @@
     </div>
     <div class="min-w-0 hidden @[500px]:block">
         <p
-            class="text-[11px] font-bold leading-tight truncate {connected ? 'text-gray-900 dark:text-white' : 'text-gray-400 dark:text-gray-500'}"
+            class="text-[11px] font-bold leading-tight truncate {connected
+                ? 'text-gray-900 dark:text-white'
+                : 'text-gray-400 dark:text-gray-500'}"
         >
             {connected ? username : 'Sign in'}
         </p>

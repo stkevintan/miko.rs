@@ -26,7 +26,6 @@
         >
             {currentTitle}
         </h2>
-        
 
         {#if route.pathname === '/library/albums'}
             <AlbumSort />

@@ -32,6 +32,12 @@ jobs:
       - name: Install frontend dependencies
         run: pnpm install
 
+      - name: Check formatting
+        run: cargo fmt -- --check
+
+      - name: Check frontend formatting
+        run: pnpm format:check
+
       - name: Build frontend
         run: pnpm build
 
@@ -45,9 +51,6 @@ jobs:
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-cargo-
-
-      - name: Check formatting
-        run: cargo fmt -- --check
 
       - name: Clippy
         run: cargo clippy -- -D warnings

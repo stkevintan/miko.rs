@@ -1,11 +1,11 @@
 <script lang="ts">
     import type { Snippet } from 'svelte';
 
-    let { 
-        title, 
-        icon: IconSnippet, 
+    let {
+        title,
+        icon: IconSnippet,
         children,
-        action: ActionSnippet
+        action: ActionSnippet,
     }: {
         title: string;
         icon?: Snippet;
@@ -15,7 +15,9 @@
 </script>
 
 <section>
-    <h4 class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+    <h4
+        class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4 flex items-center gap-2"
+    >
         {#if IconSnippet}
             <span class="flex-shrink-0">
                 {@render IconSnippet()}

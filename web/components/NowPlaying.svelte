@@ -14,7 +14,9 @@
             const data = res.data.nowPlaying;
             if (data && data.entry) {
                 // Handle both single object and array of objects
-                sessions = Array.isArray(data.entry) ? data.entry : [data.entry];
+                sessions = Array.isArray(data.entry)
+                    ? data.entry
+                    : [data.entry];
             } else {
                 sessions = [];
             }

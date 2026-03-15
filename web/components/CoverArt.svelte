@@ -2,7 +2,7 @@
     import { Music } from 'lucide-svelte';
     import { getCoverArtUrl } from '../lib/api';
 
-    type IconComponent = typeof import('lucide-svelte')['Music'];
+    type IconComponent = (typeof import('lucide-svelte'))['Music'];
 
     /**
      * CoverArt component for displaying music imagery with fallbacks.

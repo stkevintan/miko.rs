@@ -55,13 +55,22 @@
     ];
 
     function handleLinkClick() {
-        if (typeof window !== 'undefined' && window.innerWidth < 1024 && isOpen && onToggle) {
+        if (
+            typeof window !== 'undefined' &&
+            window.innerWidth < 1024 &&
+            isOpen &&
+            onToggle
+        ) {
             onToggle();
         }
     }
 
     $effect(() => {
-        if (typeof window !== 'undefined' && isOpen && window.innerWidth < 1024) {
+        if (
+            typeof window !== 'undefined' &&
+            isOpen &&
+            window.innerWidth < 1024
+        ) {
             document.body.style.overflow = 'hidden';
             return () => {
                 document.body.style.overflow = '';
@@ -146,9 +155,15 @@
                 >
                     <Library
                         size={20}
-                        class={isActive2('/library') ? 'text-orange-600' : 'text-gray-500'}
+                        class={isActive2('/library')
+                            ? 'text-orange-600'
+                            : 'text-gray-500'}
                     />
-                    <span class="ms-3 transition-opacity duration-300 flex-1 text-left {isOpen ? 'opacity-100' : 'opacity-0 lg:hidden'}">
+                    <span
+                        class="ms-3 transition-opacity duration-300 flex-1 text-left {isOpen
+                            ? 'opacity-100'
+                            : 'opacity-0 lg:hidden'}"
+                    >
                         Library
                     </span>
                     {#if isOpen}
@@ -167,7 +182,9 @@
                                 href={subItem.path}
                                 onclick={handleLinkClick}
                                 class="flex items-center p-2 text-sm text-gray-600 rounded-lg dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 group
-                                    {isActive2(subItem.path) ? 'text-orange-600 bg-orange-50 dark:bg-gray-700 font-medium' : ''}"
+                                    {isActive2(subItem.path)
+                                    ? 'text-orange-600 bg-orange-50 dark:bg-gray-700 font-medium'
+                                    : ''}"
                             >
                                 <subItem.icon size={16} class="me-3" />
                                 {subItem.name}
@@ -183,13 +200,21 @@
                     href="/folders"
                     onclick={handleLinkClick}
                     class="flex items-center w-full p-2 text-gray-900 rounded-lg dark:text-white hover:bg-gray-100 dark:hover:bg-gray-700 group
-                        {isActive2('/folders') ? 'text-orange-600 bg-orange-50 dark:bg-gray-700 font-medium' : ''}"
+                        {isActive2('/folders')
+                        ? 'text-orange-600 bg-orange-50 dark:bg-gray-700 font-medium'
+                        : ''}"
                 >
                     <Folder
                         size={20}
-                        class={isActive2('/folders') ? 'text-orange-600' : 'text-gray-500'}
+                        class={isActive2('/folders')
+                            ? 'text-orange-600'
+                            : 'text-gray-500'}
                     />
-                    <span class="ms-3 transition-opacity duration-300 flex-1 text-left {isOpen ? 'opacity-100' : 'opacity-0 lg:hidden'}">
+                    <span
+                        class="ms-3 transition-opacity duration-300 flex-1 text-left {isOpen
+                            ? 'opacity-100'
+                            : 'opacity-0 lg:hidden'}"
+                    >
                         Folders
                     </span>
                 </a>

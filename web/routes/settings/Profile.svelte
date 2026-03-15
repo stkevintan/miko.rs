@@ -26,15 +26,15 @@
             toast.error('Please enter your current password to save changes.');
             return;
         }
-        
+
         try {
             await api.post('/profile', {
                 email,
                 current_password: currentPassword,
-                new_password: newPassword || undefined
+                new_password: newPassword || undefined,
             });
             toast.add('Profile updated successfully', 'success');
-            
+
             // Refresh local user data
             if (authStore.user) {
                 authStore.user.email = email;
@@ -51,7 +51,9 @@
 </script>
 
 <div class="flex items-center mb-4 gap-6">
-    <h2 class="mr-auto text-sm font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+    <h2
+        class="mr-auto text-sm font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400"
+    >
         Profile
     </h2>
 </div>
@@ -64,13 +66,22 @@
             handleSave();
         }}
     >
-        <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-6">Account Settings</h3>
-        
+        <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-6">
+            Account Settings
+        </h3>
+
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
             <div class="space-y-4">
-                <h4 class="text-sm font-medium text-gray-400 uppercase tracking-wider">General</h4>
+                <h4
+                    class="text-sm font-medium text-gray-400 uppercase tracking-wider"
+                >
+                    General
+                </h4>
                 <div>
-                    <label for="username" class="block text-sm font-medium text-gray-600 dark:text-gray-300 mb-2">
+                    <label
+                        for="username"
+                        class="block text-sm font-medium text-gray-600 dark:text-gray-300 mb-2"
+                    >
                         Username
                     </label>
                     <input
@@ -82,7 +93,10 @@
                     />
                 </div>
                 <div>
-                    <label for="email" class="block text-sm font-medium text-gray-600 dark:text-gray-300 mb-2">
+                    <label
+                        for="email"
+                        class="block text-sm font-medium text-gray-600 dark:text-gray-300 mb-2"
+                    >
                         Email Address
                     </label>
                     <input
@@ -96,9 +110,16 @@
             </div>
 
             <div class="space-y-4">
-                <h4 class="text-sm font-medium text-gray-400 uppercase tracking-wider">Security</h4>
+                <h4
+                    class="text-sm font-medium text-gray-400 uppercase tracking-wider"
+                >
+                    Security
+                </h4>
                 <div>
-                    <label for="newPassword" class="block text-sm font-medium text-gray-600 dark:text-gray-300 mb-2">
+                    <label
+                        for="newPassword"
+                        class="block text-sm font-medium text-gray-600 dark:text-gray-300 mb-2"
+                    >
                         New password (leave blank to keep current)
                     </label>
                     <input
@@ -109,7 +130,10 @@
                     />
                 </div>
                 <div>
-                    <label for="confirmPassword" class="block text-sm font-medium text-gray-600 dark:text-gray-300 mb-2">
+                    <label
+                        for="confirmPassword"
+                        class="block text-sm font-medium text-gray-600 dark:text-gray-300 mb-2"
+                    >
                         Confirm new password
                     </label>
                     <input
@@ -125,7 +149,10 @@
         <div class="pt-6 border-t border-gray-100 dark:border-gray-800">
             <div class="max-w-xs space-y-4">
                 <div>
-                    <label for="currentPassword" class="block text-sm font-medium text-gray-900 dark:text-white mb-2">
+                    <label
+                        for="currentPassword"
+                        class="block text-sm font-medium text-gray-900 dark:text-white mb-2"
+                    >
                         Confirm changes with current password
                     </label>
                     <input

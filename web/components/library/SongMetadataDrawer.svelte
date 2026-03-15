@@ -111,10 +111,12 @@
             const targetMbid = mbid || mbidInput;
             if (targetMbid) params.append('mbid', targetMbid);
             if (albumMbid) params.append('albumMbid', albumMbid);
-            
-            const response = await api.get<SongTags>(`/songs/${songId}/scrape-tags?${params.toString()}`);
+
+            const response = await api.get<SongTags>(
+                `/songs/${songId}/scrape-tags?${params.toString()}`,
+            );
             const scrapedData = response.data;
-            
+
             // In Svelte 5, updating the object via a spread of a snapshot is the safest way to ensure reactivity
             // and avoid potential proxy-related merging issues.
             const currentSnapshot = $state.snapshot(tags);
@@ -137,11 +139,13 @@
                     updatedTags[k] = newVal as never;
                 }
             }
-            
+
             tags = updatedTags;
             isReviewing = true;
             candidates = []; // Clear candidates after selection
-            toast.success('Metadata fetched from MusicBrainz. Review changes below.');
+            toast.success(
+                'Metadata fetched from MusicBrainz. Review changes below.',
+            );
         } catch (error) {
             console.error('Failed to scrape tags:', error);
             toast.error('Failed to fetch metadata from MusicBrainz');
@@ -295,7 +299,9 @@
     {#if isReviewing || (value !== undefined && value !== null && value !== '')}
         {@const isChanged = isFieldDifferent(field)}
         <div class="flex items-start gap-4 group/field min-h-[32px]">
-            <div class="w-24 text-xs text-gray-500 font-medium pt-1.5">{label}</div>
+            <div class="w-24 text-xs text-gray-500 font-medium pt-1.5">
+                {label}
+            </div>
             {#if editingField === field}
                 <div class="flex-1">
                     <input
@@ -324,13 +330,18 @@
                                 {value || 'Unknown'}
                             </button>
                         {:else}
-                            <div class="text-left text-sm font-semibold dark:text-gray-200 py-1 break-all">
+                            <div
+                                class="text-left text-sm font-semibold dark:text-gray-200 py-1 break-all"
+                            >
                                 {value || 'Unknown'}
                             </div>
                         {/if}
                         {#if isChanged}
-                            <button 
-                                onclick={(e) => { e.stopPropagation(); revertField(field); }}
+                            <button
+                                onclick={(e) => {
+                                    e.stopPropagation();
+                                    revertField(field);
+                                }}
                                 class="p-1 text-gray-400 hover:text-orange-600 transition-colors opacity-0 group-hover/actions:opacity-100"
                                 title="Revert to original"
                             >
@@ -360,12 +371,15 @@
 )}
     {#if isReviewing || (value !== undefined && value !== null && value !== '')}
         {@const isChanged = isFieldDifferent(field)}
-        
+
         {#snippet combinedAction()}
             <div class="flex items-center gap-1">
                 {#if isChanged}
-                    <button 
-                        onclick={(e) => { e.stopPropagation(); revertField(field); }}
+                    <button
+                        onclick={(e) => {
+                            e.stopPropagation();
+                            revertField(field);
+                        }}
                         class="p-1 text-gray-400 hover:text-orange-600 transition-colors"
                         title="Revert to original"
                     >
@@ -405,7 +419,8 @@
                     }}
                     title="Click to edit {label.toLowerCase()}"
                 >
-                    {value || `No ${label.toLowerCase()} available. Click to add.`}
+                    {value ||
+                        `No ${label.toLowerCase()} available. Click to add.`}
                 </div>
             {:else}
                 <div
@@ -415,9 +430,19 @@
                 </div>
             {/if}
             {#if isChanged}
-                <div class="mt-2 px-4 py-2 bg-blue-50/50 dark:bg-blue-900/10 rounded-lg border border-blue-100/50 dark:border-blue-900/20">
-                    <div class="text-[10px] text-blue-600 dark:text-blue-400 font-bold uppercase tracking-wider mb-1">Original Value</div>
-                    <div class="text-xs text-gray-400 line-through whitespace-pre-wrap">{originalTags?.[field] || 'None'}</div>
+                <div
+                    class="mt-2 px-4 py-2 bg-blue-50/50 dark:bg-blue-900/10 rounded-lg border border-blue-100/50 dark:border-blue-900/20"
+                >
+                    <div
+                        class="text-[10px] text-blue-600 dark:text-blue-400 font-bold uppercase tracking-wider mb-1"
+                    >
+                        Original Value
+                    </div>
+                    <div
+                        class="text-xs text-gray-400 line-through whitespace-pre-wrap"
+                    >
+                        {originalTags?.[field] || 'None'}
+                    </div>
                 </div>
             {/if}
         </DrawerSection>
@@ -485,14 +510,21 @@
                                 class="absolute inset-0 bg-black/40 opacity-0 group-hover/cover:opacity-100 transition-opacity flex flex-col items-center justify-center text-white gap-2"
                             >
                                 <Upload size={32} />
-                                <span class="text-sm font-bold">Replace Cover</span>
+                                <span class="text-sm font-bold"
+                                    >Replace Cover</span
+                                >
                             </div>
                         {/if}
                     </button>
                     {#if isCoverChanged}
-                        <div class="flex items-center justify-between gap-2 px-1">
-                            <span class="text-[10px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider">Cover Changed</span>
-                            <button 
+                        <div
+                            class="flex items-center justify-between gap-2 px-1"
+                        >
+                            <span
+                                class="text-[10px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider"
+                                >Cover Changed</span
+                            >
+                            <button
                                 onclick={() => revertField('frontCover')}
                                 class="flex items-center gap-1.5 text-[10px] font-bold text-gray-400 hover:text-orange-600 transition-colors"
                             >
@@ -512,11 +544,16 @@
                             class="w-full h-full flex flex-col items-center justify-center hover:text-orange-500 transition-colors cursor-pointer"
                         >
                             <Upload size={48} class="mb-2 opacity-20" />
-                            <span class="text-sm font-medium">Upload Cover Art</span>
+                            <span class="text-sm font-medium"
+                                >Upload Cover Art</span
+                            >
                         </button>
                     {:else}
                         <Music size={48} class="opacity-10" />
-                        <span class="text-xs font-medium mt-2 opacity-40 uppercase tracking-widest">No Cover Art</span>
+                        <span
+                            class="text-xs font-medium mt-2 opacity-40 uppercase tracking-widest"
+                            >No Cover Art</span
+                        >
                     {/if}
                 </div>
             {/if}
@@ -528,8 +565,8 @@
             <DrawerSection title="Metadata Lookup" icon={searchIcon}>
                 <div class="space-y-4">
                     <p class="text-xs text-gray-500">
-                        Fetch metadata from MusicBrainz.
-                        Review changes before applying.
+                        Fetch metadata from MusicBrainz. Review changes before
+                        applying.
                     </p>
                     <div class="flex gap-2">
                         <div class="relative flex-1">
@@ -562,53 +599,82 @@
 
                     {#if candidates.length > 0}
                         <div class="flex items-center justify-between mb-1">
-                            <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wider px-1">Search Results</span>
-                            <button 
-                                onclick={() => candidates = []}
+                            <span
+                                class="text-[10px] font-bold text-gray-400 uppercase tracking-wider px-1"
+                                >Search Results</span
+                            >
+                            <button
+                                onclick={() => (candidates = [])}
                                 class="text-[10px] font-bold text-gray-400 hover:text-orange-600 transition-colors flex items-center gap-1 px-1"
                             >
                                 <X size={12} />
                                 Clear Results
                             </button>
                         </div>
-                        <div class="bg-gray-50 dark:bg-gray-900/40 rounded-xl border border-gray-100 dark:border-gray-800 overflow-hidden divide-y divide-gray-100 dark:divide-gray-800">
+                        <div
+                            class="bg-gray-50 dark:bg-gray-900/40 rounded-xl border border-gray-100 dark:border-gray-800 overflow-hidden divide-y divide-gray-100 dark:divide-gray-800"
+                        >
                             {#each candidates as candidate}
                                 <button
-                                    onclick={() => scrapeTags(candidate.mbid, candidate.albumMbid)}
+                                    onclick={() =>
+                                        scrapeTags(
+                                            candidate.mbid,
+                                            candidate.albumMbid,
+                                        )}
                                     disabled={scraping}
                                     class="w-full text-left p-3 hover:bg-orange-50 dark:hover:bg-orange-900/20 transition-colors group flex items-start justify-between gap-4"
                                 >
                                     <div class="flex items-start gap-3 min-w-0">
                                         {#if candidate.albumMbid}
-                                            <div class="w-12 h-12 rounded-lg bg-gray-100 dark:bg-gray-800 flex-shrink-0 overflow-hidden border border-gray-100 dark:border-gray-700">
-                                                <img 
-                                                    src="https://coverartarchive.org/release/{candidate.albumMbid}/front-250" 
+                                            <div
+                                                class="w-12 h-12 rounded-lg bg-gray-100 dark:bg-gray-800 flex-shrink-0 overflow-hidden border border-gray-100 dark:border-gray-700"
+                                            >
+                                                <img
+                                                    src="https://coverartarchive.org/release/{candidate.albumMbid}/front-250"
                                                     alt="Cover Art"
                                                     class="w-full h-full object-cover"
-                                                    onerror={(e) => (e.target as HTMLImageElement).style.display = 'none'}
+                                                    onerror={(e) =>
+                                                        ((
+                                                            e.target as HTMLImageElement
+                                                        ).style.display =
+                                                            'none')}
                                                 />
                                             </div>
                                         {:else}
-                                            <div class="w-12 h-12 rounded-lg bg-gray-100 dark:bg-gray-800 flex-shrink-0 flex items-center justify-center">
-                                                <Music size={20} class="text-gray-400" />
+                                            <div
+                                                class="w-12 h-12 rounded-lg bg-gray-100 dark:bg-gray-800 flex-shrink-0 flex items-center justify-center"
+                                            >
+                                                <Music
+                                                    size={20}
+                                                    class="text-gray-400"
+                                                />
                                             </div>
                                         {/if}
                                         <div class="min-w-0 pt-0.5">
-                                            <div class="text-sm font-bold text-gray-900 dark:text-gray-100 truncate">
+                                            <div
+                                                class="text-sm font-bold text-gray-900 dark:text-gray-100 truncate"
+                                            >
                                                 {candidate.title}
                                             </div>
-                                            <div class="text-xs text-gray-500 truncate mt-0.5">
+                                            <div
+                                                class="text-xs text-gray-500 truncate mt-0.5"
+                                            >
                                                 {candidate.artist}
                                                 {#if candidate.album}
-                                                    <span class="mx-1">•</span> {candidate.album}
+                                                    <span class="mx-1">•</span>
+                                                    {candidate.album}
                                                 {/if}
                                                 {#if candidate.year}
-                                                    <span class="mx-1">•</span> {candidate.year}
+                                                    <span class="mx-1">•</span>
+                                                    {candidate.year}
                                                 {/if}
                                             </div>
                                         </div>
                                     </div>
-                                    <ChevronRight size={16} class="text-gray-300 group-hover:text-orange-500 transition-colors flex-shrink-0 mt-3" />
+                                    <ChevronRight
+                                        size={16}
+                                        class="text-gray-300 group-hover:text-orange-500 transition-colors flex-shrink-0 mt-3"
+                                    />
                                 </button>
                             {/each}
                         </div>
@@ -760,14 +826,18 @@
 
         <!-- Sticky action bar for review mode -->
         {#if isReviewing}
-            <div class="p-4 border-t border-gray-100 dark:border-gray-800 bg-white/95 dark:bg-gray-900/95 backdrop-blur-md flex gap-3 shadow-[0_-10px_20px_-5px_rgba(0,0,0,0.05)] mt-auto">
+            <div
+                class="p-4 border-t border-gray-100 dark:border-gray-800 bg-white/95 dark:bg-gray-900/95 backdrop-blur-md flex gap-3 shadow-[0_-10px_20px_-5px_rgba(0,0,0,0.05)] mt-auto"
+            >
                 <button
                     onclick={saveAllTags}
                     disabled={saving}
                     class="flex-1 px-4 py-2 bg-green-600 text-white rounded-xl hover:bg-green-700 active:scale-[0.98] transition-all flex items-center justify-center gap-2 text-sm font-bold shadow-lg shadow-green-600/20 disabled:opacity-50 disabled:active:scale-100"
                 >
                     {#if saving}
-                        <div class="animate-spin rounded-full h-4 w-4 border-2 border-white/20 border-b-white"></div>
+                        <div
+                            class="animate-spin rounded-full h-4 w-4 border-2 border-white/20 border-b-white"
+                        ></div>
                         <span>Saving...</span>
                     {:else}
                         <Check size={18} />

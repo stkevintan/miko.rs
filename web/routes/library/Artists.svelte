@@ -141,7 +141,9 @@
 
             {#snippet emptyState()}
                 <User class="text-gray-300 mb-4" size={48} />
-                <p class="text-gray-500 text-lg font-medium">No artists found</p>
+                <p class="text-gray-500 text-lg font-medium">
+                    No artists found
+                </p>
                 <p class="text-gray-400 text-sm mt-1">
                     Try a different search query
                 </p>
@@ -172,7 +174,9 @@
             {/snippet}
 
             {#snippet item(artist)}
-                <div class="flex flex-col items-center text-center w-full min-w-0">
+                <div
+                    class="flex flex-col items-center text-center w-full min-w-0"
+                >
                     <div
                         class="w-full aspect-square rounded-full overflow-hidden shadow-md border-2 border-transparent group-hover:border-orange-500/20 transition-all duration-500 group-hover:scale-[1.02]"
                     >
@@ -190,7 +194,9 @@
                         >
                             {artist.name}
                         </div>
-                        <div class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                        <div
+                            class="mt-1 text-xs text-gray-500 dark:text-gray-400"
+                        >
                             {artist.albumCount ?? '—'} albums
                             <span class="mx-1">•</span>
                             {artist.averageRating?.toFixed(1) ?? '—'}

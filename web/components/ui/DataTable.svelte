@@ -334,7 +334,11 @@
             {#each data as item}
                 <tr
                     onclick={() => onRowClick?.(item)}
-                    class="group transition-colors cursor-default {onRowClick ? 'cursor-pointer' : ''} {striped ? 'odd:bg-white even:bg-gray-50/50 dark:odd:bg-gray-900 dark:even:bg-gray-800/30' : ''} hover:bg-orange-50/30 dark:hover:bg-orange-500/5"
+                    class="group transition-colors cursor-default {onRowClick
+                        ? 'cursor-pointer'
+                        : ''} {striped
+                        ? 'odd:bg-white even:bg-gray-50/50 dark:odd:bg-gray-900 dark:even:bg-gray-800/30'
+                        : ''} hover:bg-orange-50/30 dark:hover:bg-orange-500/5"
                 >
                     {@render row(item)}
                 </tr>

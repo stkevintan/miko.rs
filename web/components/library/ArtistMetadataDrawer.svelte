@@ -1,6 +1,10 @@
 <script lang="ts">
     import { Music, User, Info, Disc } from 'lucide-svelte';
-    import type { ArtistWithAlbums, Song, SubsonicResponse } from '../../lib/types';
+    import type {
+        ArtistWithAlbums,
+        Song,
+        SubsonicResponse,
+    } from '../../lib/types';
     import { api } from '../../lib/api';
     import Drawer from '../ui/Drawer.svelte';
     import DrawerHeader from '../ui/DrawerHeader.svelte';
@@ -8,7 +12,10 @@
     import MetaTile from '../ui/MetaTile.svelte';
     import CoverArt from '../CoverArt.svelte';
 
-    let { isOpen = $bindable(false), artistId }: {
+    let {
+        isOpen = $bindable(false),
+        artistId,
+    }: {
         isOpen: boolean;
         artistId: string | null;
     } = $props();
@@ -30,7 +37,7 @@
         loading = true;
         try {
             const response = await api.get<SubsonicResponse>('/getArtist', {
-                params: { id }
+                params: { id },
             });
             if (response.data.status === 'ok' && response.data.artist) {
                 artist = response.data.artist;
@@ -51,13 +58,13 @@
                     query: name,
                     songCount: 20,
                     albumCount: 0,
-                    artistCount: 0
-                }
+                    artistCount: 0,
+                },
             });
             if (response.data.searchResult3?.song) {
                 // Filter to ensure we only get songs by this exact artist if possible
-                songs = response.data.searchResult3.song.filter(s => 
-                    s.artist?.toLowerCase().includes(name.toLowerCase())
+                songs = response.data.searchResult3.song.filter((s) =>
+                    s.artist?.toLowerCase().includes(name.toLowerCase()),
                 );
             }
         } catch (error) {
@@ -80,14 +87,16 @@
 <Drawer bind:isOpen width="550px">
     {#if loading}
         <div class="h-full flex items-center justify-center">
-            <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-600"></div>
+            <div
+                class="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-600"
+            ></div>
         </div>
     {:else if artist}
         {#snippet headerIcon()}
             <User size={20} />
         {/snippet}
-        <DrawerHeader 
-            title={artist.name} 
+        <DrawerHeader
+            title={artist.name}
             subtitle="Artist Overview"
             icon={headerIcon}
             onClose={close}
@@ -100,8 +109,14 @@
             {/snippet}
             <DrawerSection title="Statistics" icon={infoIcon}>
                 <div class="grid grid-cols-2 gap-3">
-                    <MetaTile label="Albums" value={artist.albumCount || artist.album?.length || 0} />
-                    <MetaTile label="Rating" value={artist.averageRating?.toFixed(1) || 'No rating'} />
+                    <MetaTile
+                        label="Albums"
+                        value={artist.albumCount || artist.album?.length || 0}
+                    />
+                    <MetaTile
+                        label="Rating"
+                        value={artist.averageRating?.toFixed(1) || 'No rating'}
+                    />
                 </div>
             </DrawerSection>
 
@@ -113,7 +128,9 @@
                 <DrawerSection title="Songs" icon={musicIcon}>
                     <div class="space-y-1">
                         {#each songs as song}
-                            <div class="group flex items-center gap-3 p-2 hover:bg-gray-50 dark:hover:bg-gray-700/30 rounded-lg transition-colors cursor-default">
+                            <div
+                                class="group flex items-center gap-3 p-2 hover:bg-gray-50 dark:hover:bg-gray-700/30 rounded-lg transition-colors cursor-default"
+                            >
                                 <CoverArt
                                     id={song.coverArt}
                                     size={14}
@@ -122,10 +139,20 @@
                                     icon={Music}
                                 />
                                 <div class="flex-1 min-w-0">
-                                    <div class="text-xs font-medium dark:text-gray-200 truncate">{song.title}</div>
-                                    <div class="text-[10px] text-gray-500 truncate">{song.album}</div>
+                                    <div
+                                        class="text-xs font-medium dark:text-gray-200 truncate"
+                                    >
+                                        {song.title}
+                                    </div>
+                                    <div
+                                        class="text-[10px] text-gray-500 truncate"
+                                    >
+                                        {song.album}
+                                    </div>
                                 </div>
-                                <span class="text-[10px] text-gray-400 font-mono">
+                                <span
+                                    class="text-[10px] text-gray-400 font-mono"
+                                >
                                     {formatSongDuration(song.duration)}
                                 </span>
                             </div>
@@ -142,7 +169,9 @@
                 <DrawerSection title="Albums" icon={discIcon}>
                     <div class="grid grid-cols-2 gap-4">
                         {#each artist.album as album}
-                            <div class="flex items-start gap-3 p-2 hover:bg-gray-50 dark:hover:bg-gray-700/30 rounded-xl transition-all group">
+                            <div
+                                class="flex items-start gap-3 p-2 hover:bg-gray-50 dark:hover:bg-gray-700/30 rounded-xl transition-all group"
+                            >
                                 <CoverArt
                                     id={album.coverArt}
                                     size={20}
@@ -151,10 +180,14 @@
                                     icon={Disc}
                                 />
                                 <div class="min-w-0 pt-1">
-                                    <div class="text-xs font-bold text-gray-900 dark:text-white truncate">
+                                    <div
+                                        class="text-xs font-bold text-gray-900 dark:text-white truncate"
+                                    >
                                         {album.name}
                                     </div>
-                                    <div class="text-[10px] text-gray-400 line-clamp-1">
+                                    <div
+                                        class="text-[10px] text-gray-400 line-clamp-1"
+                                    >
                                         {album.year || '—'} • {album.songCount} tracks
                                     </div>
                                 </div>
