@@ -198,6 +198,7 @@ pub async fn set_rating(
     query: Query<SetRatingQuery>,
 ) -> impl IntoResponse {
     use crate::models::{album, artist, child, user_rating};
+    use sea_orm::QuerySelect;
 
     if query.rating < 0 || query.rating > 5 {
         return send_response(
@@ -208,30 +209,18 @@ pub async fn set_rating(
 
     let username = &user.username;
 
-    // Determine item_type by checking which entity the id belongs to
-    let item_type = if child::Entity::find_by_id(&query.id)
-        .one(db.0)
-        .await
-        .ok()
-        .flatten()
-        .is_some()
-    {
+    // Determine item_type by checking all entities concurrently
+    let (song_check, album_check, artist_check) = tokio::join!(
+        child::Entity::find_by_id(&query.id).select_only().column(child::Column::Id).into_tuple::<String>().one(db.0),
+        album::Entity::find_by_id(&query.id).select_only().column(album::Column::Id).into_tuple::<String>().one(db.0),
+        artist::Entity::find_by_id(&query.id).select_only().column(artist::Column::Id).into_tuple::<String>().one(db.0),
+    );
+
+    let item_type = if song_check.ok().flatten().is_some() {
         "song"
-    } else if album::Entity::find_by_id(&query.id)
-        .one(db.0)
-        .await
-        .ok()
-        .flatten()
-        .is_some()
-    {
+    } else if album_check.ok().flatten().is_some() {
         "album"
-    } else if artist::Entity::find_by_id(&query.id)
-        .one(db.0)
-        .await
-        .ok()
-        .flatten()
-        .is_some()
-    {
+    } else if artist_check.ok().flatten().is_some() {
         "artist"
     } else {
         return send_response(
