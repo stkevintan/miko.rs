@@ -94,5 +94,10 @@ fn expand_path(path: &str) -> String {
     let home = env::var("HOME")
         .or_else(|_| env::var("USERPROFILE"))
         .unwrap_or_else(|_| ".".to_string());
-    path.replacen('~', &home, 1).replace("$HOME", &home)
+    let path = if path == "~" || path.starts_with("~/") || path.starts_with("~\\") {
+        format!("{}{}", home, &path[1..])
+    } else {
+        path.to_string()
+    };
+    path.replace("$HOME", &home)
 }

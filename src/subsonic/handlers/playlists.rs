@@ -148,8 +148,10 @@ pub async fn create_playlist(
         }
         Err(e) => {
             log::error!("Failed to get playlist after create: {}", e);
-            // Still return ok since the playlist was created
-            let resp = SubsonicResponse::new_ok(SubsonicResponseBody::None);
+            let resp = SubsonicResponse::new_error(
+                0,
+                "Playlist was created but failed to retrieve it".to_string(),
+            );
             send_response(resp, &params.f)
         }
     }
