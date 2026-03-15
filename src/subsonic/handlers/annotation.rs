@@ -211,9 +211,21 @@ pub async fn set_rating(
 
     // Determine item_type by checking all entities concurrently
     let (song_check, album_check, artist_check) = tokio::join!(
-        child::Entity::find_by_id(&query.id).select_only().column(child::Column::Id).into_tuple::<String>().one(db.0),
-        album::Entity::find_by_id(&query.id).select_only().column(album::Column::Id).into_tuple::<String>().one(db.0),
-        artist::Entity::find_by_id(&query.id).select_only().column(artist::Column::Id).into_tuple::<String>().one(db.0),
+        child::Entity::find_by_id(&query.id)
+            .select_only()
+            .column(child::Column::Id)
+            .into_tuple::<String>()
+            .one(db.0),
+        album::Entity::find_by_id(&query.id)
+            .select_only()
+            .column(album::Column::Id)
+            .into_tuple::<String>()
+            .one(db.0),
+        artist::Entity::find_by_id(&query.id)
+            .select_only()
+            .column(artist::Column::Id)
+            .into_tuple::<String>()
+            .one(db.0),
     );
 
     let item_type = if song_check.ok().flatten().is_some() {
