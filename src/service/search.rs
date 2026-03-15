@@ -38,12 +38,12 @@ impl Service {
         let search_query = format!("%{}%", clean_query);
 
         // Artists
-        let mut artist_query =
-            queries::artist_with_stats_query(username).filter(artist::Column::Name.like(&search_query));
+        let mut artist_query = queries::artist_with_stats_query(username)
+            .filter(artist::Column::Name.like(&search_query));
 
         // Albums
-        let mut album_query =
-            queries::album_with_stats_query(username).filter(album::Column::Name.like(&search_query));
+        let mut album_query = queries::album_with_stats_query(username)
+            .filter(album::Column::Name.like(&search_query));
 
         let mut song_query = queries::song_with_metadata_query(username)
             .filter(child::Column::IsDir.eq(false))

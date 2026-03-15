@@ -126,7 +126,9 @@ async fn remove_stars_deletes_matching() {
 
     let remaining = user_star::Entity::find().all(&db).await.unwrap();
     assert_eq!(remaining.len(), 3);
-    assert!(!remaining.iter().any(|s| s.item_id == "song1" && s.item_type == "song"));
+    assert!(!remaining
+        .iter()
+        .any(|s| s.item_id == "song1" && s.item_type == "song"));
 }
 
 #[tokio::test]
@@ -161,13 +163,25 @@ async fn remove_stars_does_not_affect_other_users() {
     .unwrap();
 
     // Both users star the same song
-    let q1 = StarQuery { id: vec!["song1".into()], album_id: vec![], artist_id: vec![] };
+    let q1 = StarQuery {
+        id: vec!["song1".into()],
+        album_id: vec![],
+        artist_id: vec![],
+    };
     insert_stars(&db, "testuser", q1).await.unwrap();
-    let q2 = StarQuery { id: vec!["song1".into()], album_id: vec![], artist_id: vec![] };
+    let q2 = StarQuery {
+        id: vec!["song1".into()],
+        album_id: vec![],
+        artist_id: vec![],
+    };
     insert_stars(&db, "otheruser", q2).await.unwrap();
 
     // Remove testuser's star
-    let rm = StarQuery { id: vec!["song1".into()], album_id: vec![], artist_id: vec![] };
+    let rm = StarQuery {
+        id: vec!["song1".into()],
+        album_id: vec![],
+        artist_id: vec![],
+    };
     remove_stars(&db, "testuser", rm).await.unwrap();
 
     let remaining = user_star::Entity::find().all(&db).await.unwrap();
@@ -179,11 +193,19 @@ async fn remove_stars_does_not_affect_other_users() {
 async fn remove_stars_empty_query_is_noop() {
     let db = setup_db().await;
 
-    let q = StarQuery { id: vec!["song1".into()], album_id: vec![], artist_id: vec![] };
+    let q = StarQuery {
+        id: vec!["song1".into()],
+        album_id: vec![],
+        artist_id: vec![],
+    };
     insert_stars(&db, "testuser", q).await.unwrap();
 
     // Remove with empty lists — should not delete anything
-    let empty = StarQuery { id: vec![], album_id: vec![], artist_id: vec![] };
+    let empty = StarQuery {
+        id: vec![],
+        album_id: vec![],
+        artist_id: vec![],
+    };
     remove_stars(&db, "testuser", empty).await.unwrap();
 
     assert_eq!(user_star::Entity::find().all(&db).await.unwrap().len(), 1);

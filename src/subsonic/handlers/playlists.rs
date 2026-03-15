@@ -99,7 +99,10 @@ pub async fn create_playlist(
             comment: None,
             public: None,
         };
-        if let Err(e) = service.replace_playlist_songs(pid, username, song_ids, opts).await {
+        if let Err(e) = service
+            .replace_playlist_songs(pid, username, song_ids, opts)
+            .await
+        {
             log::error!("Failed to update playlist: {}", e);
             return send_response(
                 SubsonicResponse::new_error(0, format!("Failed to update playlist: {}", e)),
@@ -117,7 +120,10 @@ pub async fn create_playlist(
                 );
             }
         };
-        match service.create_playlist(name, username.clone(), song_ids).await {
+        match service
+            .create_playlist(name, username.clone(), song_ids)
+            .await
+        {
             Ok(id) => id,
             Err(e) => {
                 log::error!("Failed to create playlist: {}", e);
@@ -132,9 +138,8 @@ pub async fn create_playlist(
     // Return the created/updated playlist per Subsonic API 1.14.0+
     match service.get_playlist(playlist_id, username).await {
         Ok(Some(playlist)) => {
-            let resp = SubsonicResponse::new_ok(SubsonicResponseBody::Playlist(
-                Playlist::from(playlist),
-            ));
+            let resp =
+                SubsonicResponse::new_ok(SubsonicResponseBody::Playlist(Playlist::from(playlist)));
             send_response(resp, &params.f)
         }
         Ok(None) => {

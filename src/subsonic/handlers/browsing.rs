@@ -178,7 +178,10 @@ pub async fn get_music_directory(
     let offset = query.offset.unwrap_or(0);
     let count = query.count.unwrap_or(0);
 
-    match service.get_directory(id, offset, count, &user.username).await {
+    match service
+        .get_directory(id, offset, count, &user.username)
+        .await
+    {
         Ok(data) => {
             let resp = SubsonicResponse::new_ok(SubsonicResponseBody::Directory(Directory {
                 id: data.dir.id,
@@ -235,7 +238,10 @@ pub async fn get_artists(
     user: Data<&Arc<user::Model>>,
     params: Data<&SubsonicParams>,
 ) -> impl IntoResponse {
-    match service.get_artists(&config.subsonic.ignored_articles, &user.username).await {
+    match service
+        .get_artists(&config.subsonic.ignored_articles, &user.username)
+        .await
+    {
         Ok(indexes) => {
             let index_vec: Vec<IndexID3> = indexes
                 .into_iter()
@@ -407,7 +413,10 @@ pub async fn get_top_songs(
     query: Query<ArtistQuery>,
 ) -> impl IntoResponse {
     let count = query.count.unwrap_or(50);
-    let songs = match service.get_top_songs(&query.artist, count, &user.username).await {
+    let songs = match service
+        .get_top_songs(&query.artist, count, &user.username)
+        .await
+    {
         Ok(songs) => songs,
         Err(_) => {
             return send_response(

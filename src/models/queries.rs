@@ -93,8 +93,14 @@ pub fn album_with_stats_query(username: &str) -> sea_orm::Select<album::Entity> 
     album::Entity::find()
         .select_only()
         .columns(album::Column::iter())
-        .column_as(starred_subquery(username, "albums", "id", "album"), "starred")
-        .column_as(rating_subquery(username, "albums", "id", "album"), "user_rating")
+        .column_as(
+            starred_subquery(username, "albums", "id", "album"),
+            "starred",
+        )
+        .column_as(
+            rating_subquery(username, "albums", "id", "album"),
+            "user_rating",
+        )
         .column_as(child::Column::Id.count(), "song_count")
         .column_as(Expr::cust("COALESCE(SUM(duration), 0)"), "duration")
         .column_as(Expr::cust("COALESCE(SUM(play_count), 0)"), "play_count")

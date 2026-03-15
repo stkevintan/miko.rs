@@ -1,6 +1,6 @@
+use crate::models::user;
 use crate::service::library::AlbumListOptions;
 use crate::service::Service;
-use crate::models::user;
 use crate::subsonic::{
     common::{send_response, SubsonicParams},
     models::{
@@ -96,7 +96,10 @@ pub async fn get_random_songs(
     params: Data<&SubsonicParams>,
     list_params: Query<AlbumListOptions>,
 ) -> impl IntoResponse {
-    let songs = match service.get_random_songs(list_params.0, &user.username).await {
+    let songs = match service
+        .get_random_songs(list_params.0, &user.username)
+        .await
+    {
         Ok(s) => s,
         Err(e) => {
             log::error!("Database error: {}", e);
@@ -156,7 +159,10 @@ pub async fn get_starred(
 ) -> impl IntoResponse {
     let music_folder_id = query.music_folder_id;
 
-    let (artists, albums, songs) = match service.get_starred_items(music_folder_id, &user.username).await {
+    let (artists, albums, songs) = match service
+        .get_starred_items(music_folder_id, &user.username)
+        .await
+    {
         Ok(res) => res,
         Err(e) => {
             log::error!("Database error: {}", e);
@@ -185,7 +191,10 @@ pub async fn get_starred2(
 ) -> impl IntoResponse {
     let music_folder_id = query.music_folder_id;
 
-    let (artists, albums, songs) = match service.get_starred_items(music_folder_id, &user.username).await {
+    let (artists, albums, songs) = match service
+        .get_starred_items(music_folder_id, &user.username)
+        .await
+    {
         Ok(res) => res,
         Err(e) => {
             log::error!("Database error: {}", e);

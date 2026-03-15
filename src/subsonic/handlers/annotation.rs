@@ -209,11 +209,29 @@ pub async fn set_rating(
     let username = &user.username;
 
     // Determine item_type by checking which entity the id belongs to
-    let item_type = if child::Entity::find_by_id(&query.id).one(db.0).await.ok().flatten().is_some() {
+    let item_type = if child::Entity::find_by_id(&query.id)
+        .one(db.0)
+        .await
+        .ok()
+        .flatten()
+        .is_some()
+    {
         "song"
-    } else if album::Entity::find_by_id(&query.id).one(db.0).await.ok().flatten().is_some() {
+    } else if album::Entity::find_by_id(&query.id)
+        .one(db.0)
+        .await
+        .ok()
+        .flatten()
+        .is_some()
+    {
         "album"
-    } else if artist::Entity::find_by_id(&query.id).one(db.0).await.ok().flatten().is_some() {
+    } else if artist::Entity::find_by_id(&query.id)
+        .one(db.0)
+        .await
+        .ok()
+        .flatten()
+        .is_some()
+    {
         "artist"
     } else {
         return send_response(

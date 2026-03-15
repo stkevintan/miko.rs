@@ -167,7 +167,11 @@ impl Service {
         Ok((album, songs))
     }
 
-    async fn get_album_with_stats(&self, id: &str, username: &str) -> Result<AlbumWithStats, DbErr> {
+    async fn get_album_with_stats(
+        &self,
+        id: &str,
+        username: &str,
+    ) -> Result<AlbumWithStats, DbErr> {
         queries::album_with_stats_query(username)
             .filter(album::Column::Id.eq(id))
             .into_model::<AlbumWithStats>()
@@ -193,7 +197,8 @@ impl Service {
     ) -> Result<Vec<ChildWithMetadata>, sea_orm::DbErr> {
         let size = opts.size.unwrap_or(10);
 
-        let mut query = queries::song_with_metadata_query(username).filter(child::Column::IsDir.eq(false));
+        let mut query =
+            queries::song_with_metadata_query(username).filter(child::Column::IsDir.eq(false));
 
         if let Some(folder_id) = opts.music_folder_id {
             query = query.filter(child::Column::MusicFolderId.eq(folder_id));
@@ -321,12 +326,15 @@ impl Service {
 
         // Albums
         let albums = self
-            .get_albums(AlbumListOptions {
-                r#type: Some("starred".to_string()),
-                size: Some(100000),
-                music_folder_id: folder_id,
-                ..Default::default()
-            }, username)
+            .get_albums(
+                AlbumListOptions {
+                    r#type: Some("starred".to_string()),
+                    size: Some(100000),
+                    music_folder_id: folder_id,
+                    ..Default::default()
+                },
+                username,
+            )
             .await?;
 
         // Songs

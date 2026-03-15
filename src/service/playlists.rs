@@ -272,7 +272,11 @@ impl Service {
         query.into_model::<PlaylistWithStats>().all(&self.db).await
     }
 
-    pub async fn get_playlist(&self, id: i32, username: &str) -> Result<Option<PlaylistWithSongs>, DbErr> {
+    pub async fn get_playlist(
+        &self,
+        id: i32,
+        username: &str,
+    ) -> Result<Option<PlaylistWithSongs>, DbErr> {
         let playlist = playlist::Entity::find()
             .filter(playlist::Column::Id.eq(id))
             .column_as(playlist_song::Column::SongId.count(), "song_count")
