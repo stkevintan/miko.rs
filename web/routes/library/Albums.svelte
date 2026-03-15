@@ -195,7 +195,9 @@
             {/snippet}
 
             {#snippet item(album)}
-                <div class="flex flex-col items-center text-center w-full min-w-0">
+                <div
+                    class="flex flex-col items-center text-center w-full min-w-0"
+                >
                     <CoverArt
                         id={album.coverArt}
                         alt={album.name}

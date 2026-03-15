@@ -1,0 +1,18 @@
+#!/bin/sh
+# Run cargo fmt and stage any reformatted files
+cargo fmt -- --check
+if [ $? -ne 0 ]; then
+    echo "Running cargo fmt..."
+    cargo fmt
+    echo "Code was reformatted. Please review and re-stage the changes."
+    exit 1
+fi
+
+# Run prettier on frontend files
+pnpm format:check
+if [ $? -ne 0 ]; then
+    echo "Running prettier..."
+    pnpm format
+    echo "Frontend code was reformatted. Please review and re-stage the changes."
+    exit 1
+fi

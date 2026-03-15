@@ -104,9 +104,9 @@
         </div>
     </div>
 {:else}
-        <div class="flex items-center justify-center h-64">
-            <div
-                class="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-600"
-            ></div>
-        </div>
-    {/if}
+    <div class="flex items-center justify-center h-64">
+        <div
+            class="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-600"
+        ></div>
+    </div>
+{/if}

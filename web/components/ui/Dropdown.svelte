@@ -29,9 +29,10 @@
             const viewportWidth = window.innerWidth;
             const dropdownWidth = 192; // w-48 is 12rem = 192px
 
-            const fitsMiddle = rect.left + rect.width / 2 - dropdownWidth / 2 >= 0 && 
-                               rect.left + rect.width / 2 + dropdownWidth / 2 <= viewportWidth;
-            
+            const fitsMiddle =
+                rect.left + rect.width / 2 - dropdownWidth / 2 >= 0 &&
+                rect.left + rect.width / 2 + dropdownWidth / 2 <= viewportWidth;
+
             if (fitsMiddle) {
                 calculatedAlign = 'middle';
             } else if (rect.left + rect.width / 2 > viewportWidth / 2) {
@@ -59,11 +60,11 @@
     }
 </script>
 
-<div 
+<div
     bind:this={containerEl}
-    class="relative group" 
-    role="group" 
-    onmouseenter={open} 
+    class="relative group"
+    role="group"
+    onmouseenter={open}
     onmouseleave={close}
 >
     <!-- Trigger -->
@@ -103,7 +104,8 @@
                 role="menu"
                 tabindex="-1"
                 onclick={close}
-                onkeydown={(e) => (e.key === 'Escape' || e.key === 'Enter') && close()}
+                onkeydown={(e) =>
+                    (e.key === 'Escape' || e.key === 'Enter') && close()}
             >
                 {@render content()}
             </div>

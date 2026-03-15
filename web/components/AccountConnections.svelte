@@ -19,8 +19,12 @@
                 class="w-16 h-16 rounded-2xl bg-gray-200 dark:bg-gray-700 mr-4 shrink-0"
             ></div>
             <div class="flex-1 space-y-3">
-                <div class="h-5 w-24 bg-gray-200 dark:bg-gray-700 rounded"></div>
-                <div class="h-4 w-32 bg-gray-200 dark:bg-gray-700 rounded"></div>
+                <div
+                    class="h-5 w-24 bg-gray-200 dark:bg-gray-700 rounded"
+                ></div>
+                <div
+                    class="h-4 w-32 bg-gray-200 dark:bg-gray-700 rounded"
+                ></div>
             </div>
         </div>
     </div>
@@ -34,7 +38,9 @@
         <div
             class="flex-1 flex flex-row flex-wrap items-center justify-start w-full gap-8"
         >
-            <div class="flex items-center min-w-[280px] overflow-hidden mr-auto">
+            <div
+                class="flex items-center min-w-[280px] overflow-hidden mr-auto"
+            >
                 <div
                     class="w-20 h-20 rounded-3xl bg-gradient-to-br from-green-400 to-blue-500 flex items-center justify-center text-white text-3xl font-bold mr-5 shrink-0 shadow-lg"
                 >

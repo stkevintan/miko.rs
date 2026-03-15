@@ -9,10 +9,30 @@
     });
 
     const tabs = [
-        { label: 'Profile', path: '/settings/profile', icon: User, adminOnly: false },
-        { label: 'Folders', path: '/settings/folders', icon: Folder, adminOnly: false },
-        { label: 'Connections', path: '/settings/connections', icon: Plug, adminOnly: false },
-        { label: 'Users', path: '/settings/users', icon: Users, adminOnly: true },
+        {
+            label: 'Profile',
+            path: '/settings/profile',
+            icon: User,
+            adminOnly: false,
+        },
+        {
+            label: 'Folders',
+            path: '/settings/folders',
+            icon: Folder,
+            adminOnly: false,
+        },
+        {
+            label: 'Connections',
+            path: '/settings/connections',
+            icon: Plug,
+            adminOnly: false,
+        },
+        {
+            label: 'Users',
+            path: '/settings/users',
+            icon: Users,
+            adminOnly: true,
+        },
     ];
 
     const isActive = (path: string) => (route.pathname || '').startsWith(path);

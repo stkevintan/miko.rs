@@ -12,6 +12,7 @@
     }
 }
 
-button, [role="button"] {
+button,
+[role='button'] {
     cursor: pointer;
 }

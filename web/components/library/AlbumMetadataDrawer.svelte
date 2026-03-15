@@ -7,7 +7,10 @@
     import DrawerSection from '../ui/DrawerSection.svelte';
     import MetaTile from '../ui/MetaTile.svelte';
 
-    let { isOpen = $bindable(false), albumId }: {
+    let {
+        isOpen = $bindable(false),
+        albumId,
+    }: {
         isOpen: boolean;
         albumId: string | null;
     } = $props();
@@ -27,7 +30,7 @@
         loading = true;
         try {
             const response = await api.get<SubsonicResponse>('/getAlbum', {
-                params: { id }
+                params: { id },
             });
             if (response.data.status === 'ok' && response.data.album) {
                 album = response.data.album;
@@ -48,7 +51,7 @@
         const hours = Math.floor(seconds / 3600);
         const mins = Math.floor((seconds % 3600) / 60);
         const secs = Math.floor(seconds % 60);
-        
+
         if (hours > 0) {
             return `${hours}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
         }
@@ -65,7 +68,7 @@
         if (!album || !album.song) return [];
         const artists = new Set<string>();
         if (album.artist) artists.add(album.artist);
-        album.song.forEach(s => {
+        album.song.forEach((s) => {
             if (s.artist) artists.add(s.artist);
         });
         return Array.from(artists);
@@ -75,14 +78,16 @@
 <Drawer bind:isOpen width="500px">
     {#if loading}
         <div class="h-full flex items-center justify-center">
-            <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-600"></div>
+            <div
+                class="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-600"
+            ></div>
         </div>
     {:else if album}
         {#snippet headerIcon()}
             <Disc size={20} />
         {/snippet}
-        <DrawerHeader 
-            title={album.name} 
+        <DrawerHeader
+            title={album.name}
             subtitle={album.artist || 'Unknown Artist'}
             icon={headerIcon}
             onClose={close}
@@ -95,8 +100,14 @@
             {/snippet}
             <DrawerSection title="Album Metadata" icon={infoIcon}>
                 <div class="grid grid-cols-2 gap-3">
-                    <MetaTile label="Total Songs" value="{album.songCount} tracks" />
-                    <MetaTile label="Duration" value={formatDuration(album.duration)} />
+                    <MetaTile
+                        label="Total Songs"
+                        value="{album.songCount} tracks"
+                    />
+                    <MetaTile
+                        label="Duration"
+                        value={formatDuration(album.duration)}
+                    />
                     <MetaTile label="Year" value={album.year || 'Unknown'} />
                     <MetaTile label="Genre" value={album.genre || 'None'} />
                 </div>
@@ -109,12 +120,20 @@
             <DrawerSection title="Tracks" icon={musicIcon}>
                 <div class="space-y-1">
                     {#each album.song as song}
-                        <div class="group flex items-center gap-3 p-2 hover:bg-gray-50 dark:hover:bg-gray-700/30 rounded-lg transition-colors">
-                            <span class="w-6 text-xs text-gray-400 text-center font-mono">
+                        <div
+                            class="group flex items-center gap-3 p-2 hover:bg-gray-50 dark:hover:bg-gray-700/30 rounded-lg transition-colors"
+                        >
+                            <span
+                                class="w-6 text-xs text-gray-400 text-center font-mono"
+                            >
                                 {song.track || '-'}
                             </span>
                             <div class="flex-1 min-w-0">
-                                <div class="text-sm font-medium dark:text-gray-200 truncate">{song.title}</div>
+                                <div
+                                    class="text-sm font-medium dark:text-gray-200 truncate"
+                                >
+                                    {song.title}
+                                </div>
                             </div>
                             <span class="text-xs text-gray-500 font-mono">
                                 {formatSongDuration(song.duration)}
@@ -126,18 +145,20 @@
 
             <!-- Artists -->
             {#if uniqueArtists().length > 0}
-            {#snippet userIcon()}
-                <User size={14} />
-            {/snippet}
-            <DrawerSection title="Artists Involved" icon={userIcon}>
-                <div class="flex flex-wrap gap-2">
-                    {#each uniqueArtists() as artist}
-                        <span class="px-3 py-1 bg-gray-100 dark:bg-gray-700 rounded-full text-xs font-medium dark:text-gray-300">
-                            {artist}
-                        </span>
-                    {/each}
-                </div>
-            </DrawerSection>
+                {#snippet userIcon()}
+                    <User size={14} />
+                {/snippet}
+                <DrawerSection title="Artists Involved" icon={userIcon}>
+                    <div class="flex flex-wrap gap-2">
+                        {#each uniqueArtists() as artist}
+                            <span
+                                class="px-3 py-1 bg-gray-100 dark:bg-gray-700 rounded-full text-xs font-medium dark:text-gray-300"
+                            >
+                                {artist}
+                            </span>
+                        {/each}
+                    </div>
+                </DrawerSection>
             {/if}
         </div>
     {/if}

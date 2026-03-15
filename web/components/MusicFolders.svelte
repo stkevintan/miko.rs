@@ -85,8 +85,15 @@
                 onclick={() => navigate('/settings/folders')}
                 class="flex flex-col items-center justify-center py-12 text-center text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-700/30 rounded-xl border border-dashed border-gray-200 dark:border-gray-600 h-full w-full hover:bg-gray-100 dark:hover:bg-gray-700/50 hover:border-orange-300 dark:hover:border-orange-500/50 transition-all group"
             >
-                <Folder size={32} class="mb-3 opacity-20 group-hover:opacity-40 group-hover:scale-110 transition-all" />
-                <p class="text-sm font-medium group-hover:text-orange-600 dark:group-hover:text-orange-400 transition-colors">No music folders configured</p>
+                <Folder
+                    size={32}
+                    class="mb-3 opacity-20 group-hover:opacity-40 group-hover:scale-110 transition-all"
+                />
+                <p
+                    class="text-sm font-medium group-hover:text-orange-600 dark:group-hover:text-orange-400 transition-colors"
+                >
+                    No music folders configured
+                </p>
                 <p class="text-xs opacity-60 mt-1 px-4">
                     Add folders in settings to start scanning your library.
                 </p>

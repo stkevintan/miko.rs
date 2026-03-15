@@ -9,6 +9,8 @@
     }
 </script>
 
-<div class="text-right tabular-nums text-sm font-medium text-gray-500 dark:text-gray-400">
+<div
+    class="text-right tabular-nums text-sm font-medium text-gray-500 dark:text-gray-400"
+>
     {formatDuration(duration)}
 </div>
