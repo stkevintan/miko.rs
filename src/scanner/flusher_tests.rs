@@ -3,6 +3,10 @@ use crate::models::{album, artist, child, genre};
 use crate::scanner::types::{AlbumRelations, SongRelations, UpsertMessage};
 use sea_orm::Set;
 
+// Re-export for do_flush_cycle tests
+use migration::{Migrator, MigratorTrait};
+use sea_orm::{ConnectionTrait, Database, EntityTrait, PaginatorTrait};
+
 // ─── helpers ───────────────────────────────────────────────────
 
 fn make_artist(id: &str) -> UpsertMessage {
@@ -605,4 +609,479 @@ fn no_flush_below_all_thresholds_not_overdue() {
         false,
         false
     ));
+}
+
+// ─── do_flush_cycle DB tests ───────────────────────────────────
+
+async fn test_db() -> sea_orm::DatabaseConnection {
+    let mut opt = sea_orm::ConnectOptions::new("sqlite::memory:".to_string());
+    opt.max_connections(1);
+    let db = Database::connect(opt).await.unwrap();
+    db.execute_unprepared("PRAGMA foreign_keys = ON")
+        .await
+        .unwrap();
+    Migrator::up(&db, None).await.unwrap();
+    db.execute_unprepared(
+        "INSERT INTO music_folders (id, path, name) VALUES (1, '/music', 'Test')",
+    )
+    .await
+    .unwrap();
+    // Create the _scanner_seen table (normally done by SeenTracker::prepare)
+    crate::scanner::seen::SeenTracker::prepare(&db)
+        .await
+        .unwrap();
+    db
+}
+
+/// A song referencing an album that is created in the same flush cycle
+/// should succeed thanks to deferred FK constraints.
+#[tokio::test]
+async fn flush_cycle_song_references_album_in_same_batch() {
+    let db = test_db().await;
+    let now = chrono::Utc::now();
+
+    let mut artists = vec![artist::ActiveModel {
+        id: Set("a1".into()),
+        name: Set("Artist One".into()),
+        artist_image_url: Set(None),
+        average_rating: Set(0.0),
+        ..Default::default()
+    }];
+    let mut genres = vec![genre::ActiveModel {
+        name: Set("Rock".into()),
+    }];
+    let mut albums = vec![album::ActiveModel {
+        id: Set("al1".into()),
+        name: Set("Album One".into()),
+        created: Set(now),
+        year: Set(2024),
+        average_rating: Set(0.0),
+        ..Default::default()
+    }];
+    let mut songs = vec![child::ActiveModel {
+        id: Set("s1".into()),
+        parent: Set(None),
+        is_dir: Set(false),
+        title: Set("Song One".into()),
+        path: Set("/music/song1.mp3".into()),
+        music_folder_id: Set(1),
+        content_type: Set(Some("audio/mp3".into())),
+        suffix: Set(Some("mp3".into())),
+        transcoded_content_type: Set(None),
+        transcoded_suffix: Set(None),
+        album_id: Set(Some("al1".into())), // references album in same batch
+        r#type: Set("music".into()),
+        track: Set(1),
+        year: Set(2024),
+        disc_number: Set(1),
+        duration: Set(200),
+        bit_rate: Set(320),
+        size: Set(4_000_000),
+        is_video: Set(false),
+        average_rating: Set(0.0),
+        play_count: Set(0),
+        ..Default::default()
+    }];
+    let mut song_relations = vec![SongRelations {
+        song_id: "s1".into(),
+        artists: vec!["a1".into()],
+        genres: vec!["Rock".into()],
+        lyrics: Some("Hello world".into()),
+    }];
+    let mut album_relations = vec![AlbumRelations {
+        album_id: "al1".into(),
+        artists: vec!["a1".into()],
+        genres: vec!["Rock".into()],
+    }];
+    let mut seen_ids = vec!["s1".into()];
+
+    do_flush_cycle(
+        &db,
+        &mut artists,
+        &mut genres,
+        &mut albums,
+        &mut songs,
+        &mut song_relations,
+        &mut album_relations,
+        &mut seen_ids,
+    )
+    .await
+    .expect("flush_cycle should succeed with deferred FKs");
+
+    // All buffers should be drained
+    assert!(artists.is_empty());
+    assert!(genres.is_empty());
+    assert!(albums.is_empty());
+    assert!(songs.is_empty());
+    assert!(song_relations.is_empty());
+    assert!(album_relations.is_empty());
+    assert!(seen_ids.is_empty());
+
+    // Verify rows
+    let song_count: u64 = child::Entity::find().count(&db).await.unwrap();
+    assert_eq!(song_count, 1);
+    let album_count: u64 = album::Entity::find().count(&db).await.unwrap();
+    assert_eq!(album_count, 1);
+    let artist_count: u64 = artist::Entity::find().count(&db).await.unwrap();
+    assert_eq!(artist_count, 1);
+}
+
+/// A directory and its child file in the same flush cycle should
+/// succeed (self-referencing parent FK on children table).
+#[tokio::test]
+async fn flush_cycle_parent_child_directory_in_same_batch() {
+    let db = test_db().await;
+
+    let mut artists = vec![];
+    let mut genres = vec![];
+    let mut albums = vec![];
+    let mut songs = vec![
+        child::ActiveModel {
+            id: Set("dir1".into()),
+            parent: Set(None),
+            is_dir: Set(true),
+            title: Set("ArtistDir".into()),
+            path: Set("/music/ArtistDir".into()),
+            music_folder_id: Set(1),
+            content_type: Set(None),
+            suffix: Set(None),
+            transcoded_content_type: Set(None),
+            transcoded_suffix: Set(None),
+            album_id: Set(None),
+            r#type: Set("directory".into()),
+            track: Set(0),
+            year: Set(0),
+            disc_number: Set(0),
+            duration: Set(0),
+            bit_rate: Set(0),
+            size: Set(0),
+            is_video: Set(false),
+            average_rating: Set(0.0),
+            play_count: Set(0),
+            ..Default::default()
+        },
+        child::ActiveModel {
+            id: Set("file1".into()),
+            parent: Set(Some("dir1".into())), // references dir in same batch
+            is_dir: Set(false),
+            title: Set("Track 01".into()),
+            path: Set("/music/ArtistDir/track01.mp3".into()),
+            music_folder_id: Set(1),
+            content_type: Set(Some("audio/mp3".into())),
+            suffix: Set(Some("mp3".into())),
+            transcoded_content_type: Set(None),
+            transcoded_suffix: Set(None),
+            album_id: Set(None),
+            r#type: Set("music".into()),
+            track: Set(1),
+            year: Set(0),
+            disc_number: Set(0),
+            duration: Set(180),
+            bit_rate: Set(256),
+            size: Set(3_000_000),
+            is_video: Set(false),
+            average_rating: Set(0.0),
+            play_count: Set(0),
+            ..Default::default()
+        },
+    ];
+    let mut song_relations = vec![];
+    let mut album_relations = vec![];
+    let mut seen_ids = vec!["dir1".into(), "file1".into()];
+
+    do_flush_cycle(
+        &db,
+        &mut artists,
+        &mut genres,
+        &mut albums,
+        &mut songs,
+        &mut song_relations,
+        &mut album_relations,
+        &mut seen_ids,
+    )
+    .await
+    .expect("flush_cycle should handle parent-child in same batch");
+
+    let count: u64 = child::Entity::find().count(&db).await.unwrap();
+    assert_eq!(count, 2);
+}
+
+/// Song relations referencing songs+artists+genres all created
+/// in the same flush cycle should succeed.
+#[tokio::test]
+async fn flush_cycle_relations_reference_entities_in_same_batch() {
+    let db = test_db().await;
+    let now = chrono::Utc::now();
+
+    let mut artists = vec![
+        artist::ActiveModel {
+            id: Set("a1".into()),
+            name: Set("Artist A".into()),
+            artist_image_url: Set(None),
+            average_rating: Set(0.0),
+            ..Default::default()
+        },
+        artist::ActiveModel {
+            id: Set("a2".into()),
+            name: Set("Artist B".into()),
+            artist_image_url: Set(None),
+            average_rating: Set(0.0),
+            ..Default::default()
+        },
+    ];
+    let mut genres = vec![
+        genre::ActiveModel {
+            name: Set("Rock".into()),
+        },
+        genre::ActiveModel {
+            name: Set("Pop".into()),
+        },
+    ];
+    let mut albums = vec![album::ActiveModel {
+        id: Set("al1".into()),
+        name: Set("Collaboration".into()),
+        created: Set(now),
+        year: Set(2024),
+        average_rating: Set(0.0),
+        ..Default::default()
+    }];
+    let mut songs = vec![child::ActiveModel {
+        id: Set("s1".into()),
+        parent: Set(None),
+        is_dir: Set(false),
+        title: Set("Duet".into()),
+        path: Set("/music/duet.mp3".into()),
+        music_folder_id: Set(1),
+        content_type: Set(Some("audio/mp3".into())),
+        suffix: Set(Some("mp3".into())),
+        transcoded_content_type: Set(None),
+        transcoded_suffix: Set(None),
+        album_id: Set(Some("al1".into())),
+        r#type: Set("music".into()),
+        track: Set(1),
+        year: Set(2024),
+        disc_number: Set(1),
+        duration: Set(240),
+        bit_rate: Set(320),
+        size: Set(5_000_000),
+        is_video: Set(false),
+        average_rating: Set(0.0),
+        play_count: Set(0),
+        ..Default::default()
+    }];
+    // Song has two artists and two genres
+    let mut song_relations = vec![SongRelations {
+        song_id: "s1".into(),
+        artists: vec!["a1".into(), "a2".into()],
+        genres: vec!["Rock".into(), "Pop".into()],
+        lyrics: None,
+    }];
+    let mut album_relations = vec![AlbumRelations {
+        album_id: "al1".into(),
+        artists: vec!["a1".into(), "a2".into()],
+        genres: vec!["Rock".into(), "Pop".into()],
+    }];
+    let mut seen_ids = vec!["s1".into()];
+
+    do_flush_cycle(
+        &db,
+        &mut artists,
+        &mut genres,
+        &mut albums,
+        &mut songs,
+        &mut song_relations,
+        &mut album_relations,
+        &mut seen_ids,
+    )
+    .await
+    .expect("flush_cycle should handle multi-artist/genre relations");
+
+    use crate::models::{album_artist, album_genre, lyrics, song_artist, song_genre};
+    let sa: u64 = song_artist::Entity::find().count(&db).await.unwrap();
+    assert_eq!(sa, 2, "song should have 2 artists");
+    let sg: u64 = song_genre::Entity::find().count(&db).await.unwrap();
+    assert_eq!(sg, 2, "song should have 2 genres");
+    let aa: u64 = album_artist::Entity::find().count(&db).await.unwrap();
+    assert_eq!(aa, 2, "album should have 2 artists");
+    let ag: u64 = album_genre::Entity::find().count(&db).await.unwrap();
+    assert_eq!(ag, 2, "album should have 2 genres");
+    let ly: u64 = lyrics::Entity::find().count(&db).await.unwrap();
+    assert_eq!(ly, 0, "no lyrics expected");
+}
+
+/// Two consecutive flush cycles should work correctly:
+/// the second one can update/replace data from the first.
+#[tokio::test]
+async fn flush_cycle_two_consecutive_cycles() {
+    let db = test_db().await;
+    let now = chrono::Utc::now();
+
+    // Cycle 1: insert artist + album + song
+    let mut artists = vec![artist::ActiveModel {
+        id: Set("a1".into()),
+        name: Set("Artist".into()),
+        artist_image_url: Set(None),
+        average_rating: Set(0.0),
+        ..Default::default()
+    }];
+    let mut genres = vec![genre::ActiveModel {
+        name: Set("Rock".into()),
+    }];
+    let mut albums = vec![album::ActiveModel {
+        id: Set("al1".into()),
+        name: Set("Album".into()),
+        created: Set(now),
+        year: Set(2020),
+        average_rating: Set(0.0),
+        ..Default::default()
+    }];
+    let mut songs = vec![child::ActiveModel {
+        id: Set("s1".into()),
+        parent: Set(None),
+        is_dir: Set(false),
+        title: Set("Old Title".into()),
+        path: Set("/music/song.mp3".into()),
+        music_folder_id: Set(1),
+        content_type: Set(Some("audio/mp3".into())),
+        suffix: Set(Some("mp3".into())),
+        transcoded_content_type: Set(None),
+        transcoded_suffix: Set(None),
+        album_id: Set(Some("al1".into())),
+        r#type: Set("music".into()),
+        track: Set(1),
+        year: Set(2020),
+        disc_number: Set(1),
+        duration: Set(200),
+        bit_rate: Set(320),
+        size: Set(4_000_000),
+        is_video: Set(false),
+        average_rating: Set(0.0),
+        play_count: Set(0),
+        ..Default::default()
+    }];
+    let mut sr = vec![SongRelations {
+        song_id: "s1".into(),
+        artists: vec!["a1".into()],
+        genres: vec!["Rock".into()],
+        lyrics: Some("Old lyrics".into()),
+    }];
+    let mut ar = vec![];
+    let mut seen = vec!["s1".into()];
+
+    do_flush_cycle(
+        &db,
+        &mut artists,
+        &mut genres,
+        &mut albums,
+        &mut songs,
+        &mut sr,
+        &mut ar,
+        &mut seen,
+    )
+    .await
+    .unwrap();
+
+    // Cycle 2: update same song with new title and new lyrics
+    artists.push(artist::ActiveModel {
+        id: Set("a1".into()),
+        name: Set("Artist".into()),
+        artist_image_url: Set(None),
+        average_rating: Set(0.0),
+        ..Default::default()
+    });
+    genres.push(genre::ActiveModel {
+        name: Set("Rock".into()),
+    });
+    albums.push(album::ActiveModel {
+        id: Set("al1".into()),
+        name: Set("Album".into()),
+        created: Set(now),
+        year: Set(2024), // updated year
+        average_rating: Set(0.0),
+        ..Default::default()
+    });
+    songs.push(child::ActiveModel {
+        id: Set("s1".into()),
+        parent: Set(None),
+        is_dir: Set(false),
+        title: Set("New Title".into()), // updated title
+        path: Set("/music/song.mp3".into()),
+        music_folder_id: Set(1),
+        content_type: Set(Some("audio/mp3".into())),
+        suffix: Set(Some("mp3".into())),
+        transcoded_content_type: Set(None),
+        transcoded_suffix: Set(None),
+        album_id: Set(Some("al1".into())),
+        r#type: Set("music".into()),
+        track: Set(1),
+        year: Set(2024),
+        disc_number: Set(1),
+        duration: Set(200),
+        bit_rate: Set(320),
+        size: Set(4_000_000),
+        is_video: Set(false),
+        average_rating: Set(0.0),
+        play_count: Set(0),
+        ..Default::default()
+    });
+    sr.push(SongRelations {
+        song_id: "s1".into(),
+        artists: vec!["a1".into()],
+        genres: vec!["Rock".into()],
+        lyrics: Some("New lyrics".into()),
+    });
+
+    do_flush_cycle(
+        &db,
+        &mut artists,
+        &mut genres,
+        &mut albums,
+        &mut songs,
+        &mut sr,
+        &mut ar,
+        &mut seen,
+    )
+    .await
+    .unwrap();
+
+    // Should still be 1 song, 1 album, 1 artist
+    let count: u64 = child::Entity::find().count(&db).await.unwrap();
+    assert_eq!(count, 1);
+    let album_count: u64 = album::Entity::find().count(&db).await.unwrap();
+    assert_eq!(album_count, 1);
+
+    // Verify the title was updated
+    let song = child::Entity::find_by_id("s1")
+        .one(&db)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(song.title, "New Title");
+
+    // Verify album year was updated
+    let alb = album::Entity::find_by_id("al1")
+        .one(&db)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(alb.year, 2024);
+}
+
+/// Empty flush cycle should be a no-op and not error.
+#[tokio::test]
+async fn flush_cycle_empty_is_noop() {
+    let db = test_db().await;
+    let mut a = vec![];
+    let mut g = vec![];
+    let mut al = vec![];
+    let mut s = vec![];
+    let mut sr = vec![];
+    let mut ar = vec![];
+    let mut si = vec![];
+
+    do_flush_cycle(
+        &db, &mut a, &mut g, &mut al, &mut s, &mut sr, &mut ar, &mut si,
+    )
+    .await
+    .expect("empty flush should succeed");
 }
