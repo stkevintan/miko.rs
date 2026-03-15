@@ -246,8 +246,8 @@ impl From<artist::Model> for Artist {
             id: a.id,
             name: a.name,
             artist_image_url: a.artist_image_url,
-            starred: a.starred,
-            user_rating: Some(a.user_rating),
+            starred: None,
+            user_rating: None,
             average_rating: Some(a.average_rating),
         }
     }

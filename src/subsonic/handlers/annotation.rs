@@ -8,7 +8,7 @@ use poem::{
     IntoResponse,
 };
 use sea_orm::sea_query::Expr;
-use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter};
+use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set};
 use serde::Deserialize;
 
 #[derive(Deserialize)]
@@ -37,31 +37,109 @@ pub struct ScrobbleQuery {
     pub submission: Option<bool>,
 }
 
-async fn update_starred_status(
+async fn insert_stars(
     db: &DatabaseConnection,
+    username: &str,
     query: StarQuery,
-    value: Option<chrono::DateTime<chrono::Utc>>,
 ) -> Result<(), sea_orm::DbErr> {
-    use crate::models::{album, artist, child};
+    use crate::models::user_star;
+
+    let now = chrono::Utc::now();
+
+    for id in query.id {
+        let star_model = user_star::ActiveModel {
+            username: Set(username.to_string()),
+            item_id: Set(id),
+            item_type: Set("song".to_string()),
+            starred_at: Set(now),
+        };
+        user_star::Entity::insert(star_model)
+            .on_conflict(
+                sea_orm::sea_query::OnConflict::columns([
+                    user_star::Column::Username,
+                    user_star::Column::ItemId,
+                    user_star::Column::ItemType,
+                ])
+                .do_nothing()
+                .to_owned(),
+            )
+            .exec_without_returning(db)
+            .await?;
+    }
+
+    for id in query.album_id {
+        let star_model = user_star::ActiveModel {
+            username: Set(username.to_string()),
+            item_id: Set(id),
+            item_type: Set("album".to_string()),
+            starred_at: Set(now),
+        };
+        user_star::Entity::insert(star_model)
+            .on_conflict(
+                sea_orm::sea_query::OnConflict::columns([
+                    user_star::Column::Username,
+                    user_star::Column::ItemId,
+                    user_star::Column::ItemType,
+                ])
+                .do_nothing()
+                .to_owned(),
+            )
+            .exec_without_returning(db)
+            .await?;
+    }
+
+    for id in query.artist_id {
+        let star_model = user_star::ActiveModel {
+            username: Set(username.to_string()),
+            item_id: Set(id),
+            item_type: Set("artist".to_string()),
+            starred_at: Set(now),
+        };
+        user_star::Entity::insert(star_model)
+            .on_conflict(
+                sea_orm::sea_query::OnConflict::columns([
+                    user_star::Column::Username,
+                    user_star::Column::ItemId,
+                    user_star::Column::ItemType,
+                ])
+                .do_nothing()
+                .to_owned(),
+            )
+            .exec_without_returning(db)
+            .await?;
+    }
+
+    Ok(())
+}
+
+async fn remove_stars(
+    db: &DatabaseConnection,
+    username: &str,
+    query: StarQuery,
+) -> Result<(), sea_orm::DbErr> {
+    use crate::models::user_star;
 
     if !query.id.is_empty() {
-        child::Entity::update_many()
-            .filter(child::Column::Id.is_in(query.id))
-            .col_expr(child::Column::Starred, Expr::value(value))
+        user_star::Entity::delete_many()
+            .filter(user_star::Column::Username.eq(username))
+            .filter(user_star::Column::ItemId.is_in(query.id))
+            .filter(user_star::Column::ItemType.eq("song"))
             .exec(db)
             .await?;
     }
     if !query.album_id.is_empty() {
-        album::Entity::update_many()
-            .filter(album::Column::Id.is_in(query.album_id))
-            .col_expr(album::Column::Starred, Expr::value(value))
+        user_star::Entity::delete_many()
+            .filter(user_star::Column::Username.eq(username))
+            .filter(user_star::Column::ItemId.is_in(query.album_id))
+            .filter(user_star::Column::ItemType.eq("album"))
             .exec(db)
             .await?;
     }
     if !query.artist_id.is_empty() {
-        artist::Entity::update_many()
-            .filter(artist::Column::Id.is_in(query.artist_id))
-            .col_expr(artist::Column::Starred, Expr::value(value))
+        user_star::Entity::delete_many()
+            .filter(user_star::Column::Username.eq(username))
+            .filter(user_star::Column::ItemId.is_in(query.artist_id))
+            .filter(user_star::Column::ItemType.eq("artist"))
             .exec(db)
             .await?;
     }
@@ -71,11 +149,11 @@ async fn update_starred_status(
 #[handler]
 pub async fn star(
     db: Data<&DatabaseConnection>,
+    user: Data<&std::sync::Arc<crate::models::user::Model>>,
     params: Data<&SubsonicParams>,
     query: Query<StarQuery>,
 ) -> impl IntoResponse {
-    let now = chrono::Utc::now();
-    match update_starred_status(db.0, query.0, Some(now)).await {
+    match insert_stars(db.0, &user.username, query.0).await {
         Ok(_) => send_response(
             SubsonicResponse::new_ok(SubsonicResponseBody::None),
             &params.f,
@@ -93,10 +171,11 @@ pub async fn star(
 #[handler]
 pub async fn unstar(
     db: Data<&DatabaseConnection>,
+    user: Data<&std::sync::Arc<crate::models::user::Model>>,
     params: Data<&SubsonicParams>,
     query: Query<StarQuery>,
 ) -> impl IntoResponse {
-    match update_starred_status(db.0, query.0, None).await {
+    match remove_stars(db.0, &user.username, query.0).await {
         Ok(_) => send_response(
             SubsonicResponse::new_ok(SubsonicResponseBody::None),
             &params.f,
@@ -114,10 +193,11 @@ pub async fn unstar(
 #[handler]
 pub async fn set_rating(
     db: Data<&DatabaseConnection>,
+    user: Data<&std::sync::Arc<crate::models::user::Model>>,
     params: Data<&SubsonicParams>,
     query: Query<SetRatingQuery>,
 ) -> impl IntoResponse {
-    use crate::models::{album, artist, child};
+    use crate::models::{album, artist, child, user_rating};
 
     if query.rating < 0 || query.rating > 5 {
         return send_response(
@@ -126,79 +206,75 @@ pub async fn set_rating(
         );
     }
 
-    match child::Entity::update_many()
-        .filter(child::Column::Id.eq(&query.id))
-        .col_expr(child::Column::UserRating, Expr::value(query.rating))
-        .exec(db.0)
-        .await
-    {
-        Ok(res) => {
-            if res.rows_affected > 0 {
-                return send_response(
-                    SubsonicResponse::new_ok(SubsonicResponseBody::None),
-                    &params.f,
-                );
-            }
-        }
-        Err(e) => {
-            log::error!("Database error in set_rating: {}", e);
-            return send_response(
-                SubsonicResponse::new_error(0, "Failed to set rating".into()),
-                &params.f,
-            );
-        }
-    }
+    let username = &user.username;
 
-    // Try album if child not found
-    match album::Entity::update_many()
-        .filter(album::Column::Id.eq(&query.id))
-        .col_expr(album::Column::UserRating, Expr::value(query.rating))
-        .exec(db.0)
-        .await
-    {
-        Ok(res) => {
-            if res.rows_affected > 0 {
-                return send_response(
-                    SubsonicResponse::new_ok(SubsonicResponseBody::None),
-                    &params.f,
-                );
-            }
-        }
-        Err(e) => {
-            log::error!("Database error in set_rating: {}", e);
-            return send_response(
-                SubsonicResponse::new_error(0, "Failed to set rating".into()),
-                &params.f,
-            );
-        }
-    }
+    // Determine item_type by checking which entity the id belongs to
+    let item_type = if child::Entity::find_by_id(&query.id).one(db.0).await.ok().flatten().is_some() {
+        "song"
+    } else if album::Entity::find_by_id(&query.id).one(db.0).await.ok().flatten().is_some() {
+        "album"
+    } else if artist::Entity::find_by_id(&query.id).one(db.0).await.ok().flatten().is_some() {
+        "artist"
+    } else {
+        return send_response(
+            SubsonicResponse::new_error(70, "Item not found".into()),
+            &params.f,
+        );
+    };
 
-    // Try artist if album not found
-    match artist::Entity::update_many()
-        .filter(artist::Column::Id.eq(&query.id))
-        .col_expr(artist::Column::UserRating, Expr::value(query.rating))
-        .exec(db.0)
-        .await
-    {
-        Ok(res) => {
-            if res.rows_affected > 0 {
+    if query.rating == 0 {
+        // Remove rating
+        match user_rating::Entity::delete_many()
+            .filter(user_rating::Column::Username.eq(username))
+            .filter(user_rating::Column::ItemId.eq(&query.id))
+            .filter(user_rating::Column::ItemType.eq(item_type))
+            .exec(db.0)
+            .await
+        {
+            Ok(_) => send_response(
+                SubsonicResponse::new_ok(SubsonicResponseBody::None),
+                &params.f,
+            ),
+            Err(e) => {
+                log::error!("Database error in set_rating: {}", e);
                 send_response(
-                    SubsonicResponse::new_ok(SubsonicResponseBody::None),
-                    &params.f,
-                )
-            } else {
-                send_response(
-                    SubsonicResponse::new_error(70, "Item not found".into()),
+                    SubsonicResponse::new_error(0, "Failed to set rating".into()),
                     &params.f,
                 )
             }
         }
-        Err(e) => {
-            log::error!("Database error in set_rating: {}", e);
-            send_response(
-                SubsonicResponse::new_error(0, "Failed to set rating".into()),
-                &params.f,
+    } else {
+        // Upsert rating
+        let rating = user_rating::ActiveModel {
+            username: Set(username.to_string()),
+            item_id: Set(query.id.clone()),
+            item_type: Set(item_type.to_string()),
+            rating: Set(query.rating),
+        };
+        match user_rating::Entity::insert(rating)
+            .on_conflict(
+                sea_orm::sea_query::OnConflict::columns([
+                    user_rating::Column::Username,
+                    user_rating::Column::ItemId,
+                    user_rating::Column::ItemType,
+                ])
+                .update_column(user_rating::Column::Rating)
+                .to_owned(),
             )
+            .exec_without_returning(db.0)
+            .await
+        {
+            Ok(_) => send_response(
+                SubsonicResponse::new_ok(SubsonicResponseBody::None),
+                &params.f,
+            ),
+            Err(e) => {
+                log::error!("Database error in set_rating: {}", e);
+                send_response(
+                    SubsonicResponse::new_error(0, "Failed to set rating".into()),
+                    &params.f,
+                )
+            }
         }
     }
 }
@@ -295,3 +371,7 @@ pub async fn scrobble(
         }
     }
 }
+
+#[cfg(test)]
+#[path = "annotation_tests.rs"]
+mod tests;

@@ -64,13 +64,11 @@ enum Children {
     BitRate,
     Path,
     IsVideo,
-    UserRating,
     AverageRating,
     PlayCount,
     LastPlayed,
     DiscNumber,
     Created,
-    Starred,
     AlbumId,
     MusicFolderId,
     #[iden = "type"]
@@ -84,8 +82,6 @@ enum Artists {
     Id,
     Name,
     ArtistImageUrl,
-    Starred,
-    UserRating,
     AverageRating,
 }
 
@@ -96,8 +92,6 @@ enum Albums {
     Id,
     Name,
     Created,
-    Starred,
-    UserRating,
     AverageRating,
     Year,
 }
@@ -213,6 +207,26 @@ enum PlayQueueSong {
     SongId,
 }
 
+#[derive(Iden)]
+enum UserStars {
+    #[iden = "user_stars"]
+    Table,
+    Username,
+    ItemId,
+    ItemType,
+    StarredAt,
+}
+
+#[derive(Iden)]
+enum UserRatings {
+    #[iden = "user_ratings"]
+    Table,
+    Username,
+    ItemId,
+    ItemType,
+    Rating,
+}
+
 #[derive(DeriveMigrationName)]
 pub struct Migration;
 
@@ -272,8 +286,6 @@ impl MigrationTrait for Migration {
                     .col(ColumnDef::new(Artists::Id).string().not_null().primary_key())
                     .col(ColumnDef::new(Artists::Name).string().not_null())
                     .col(ColumnDef::new(Artists::ArtistImageUrl).string())
-                    .col(ColumnDef::new(Artists::Starred).date_time())
-                    .col(ColumnDef::new(Artists::UserRating).integer().not_null().default(0))
                     .col(ColumnDef::new(Artists::AverageRating).double().not_null().default(0.0))
                     .to_owned(),
             )
@@ -288,8 +300,6 @@ impl MigrationTrait for Migration {
                     .col(ColumnDef::new(Albums::Id).string().not_null().primary_key())
                     .col(ColumnDef::new(Albums::Name).string().not_null())
                     .col(ColumnDef::new(Albums::Created).date_time().not_null())
-                    .col(ColumnDef::new(Albums::Starred).date_time())
-                    .col(ColumnDef::new(Albums::UserRating).integer().not_null().default(0))
                     .col(ColumnDef::new(Albums::AverageRating).double().not_null().default(0.0))
                     .col(ColumnDef::new(Albums::Year).integer().not_null().default(0))
                     .to_owned(),
@@ -357,13 +367,11 @@ impl MigrationTrait for Migration {
                     .col(ColumnDef::new(Children::BitRate).integer().not_null().default(0))
                     .col(ColumnDef::new(Children::Path).string().not_null().unique_key())
                     .col(ColumnDef::new(Children::IsVideo).boolean().not_null().default(false))
-                    .col(ColumnDef::new(Children::UserRating).integer().not_null().default(0))
                     .col(ColumnDef::new(Children::AverageRating).double().not_null().default(0.0))
                     .col(ColumnDef::new(Children::PlayCount).big_integer().not_null().default(0))
                     .col(ColumnDef::new(Children::LastPlayed).date_time())
                     .col(ColumnDef::new(Children::DiscNumber).integer().not_null().default(0))
                     .col(ColumnDef::new(Children::Created).date_time())
-                    .col(ColumnDef::new(Children::Starred).date_time())
                     .col(ColumnDef::new(Children::AlbumId).string())
                     .col(ColumnDef::new(Children::MusicFolderId).integer().not_null())
                     .col(ColumnDef::new(Children::Type).string().not_null().default("music"))
@@ -714,10 +722,68 @@ impl MigrationTrait for Migration {
             )
             .await?;
 
+        // UserStars - per-user starred items
+        manager
+            .create_table(
+                Table::create()
+                    .table(UserStars::Table)
+                    .if_not_exists()
+                    .col(ColumnDef::new(UserStars::Username).string().not_null())
+                    .col(ColumnDef::new(UserStars::ItemId).string().not_null())
+                    .col(ColumnDef::new(UserStars::ItemType).string().not_null())
+                    .col(ColumnDef::new(UserStars::StarredAt).date_time().not_null())
+                    .primary_key(
+                        Index::create()
+                            .col(UserStars::Username)
+                            .col(UserStars::ItemId)
+                            .col(UserStars::ItemType),
+                    )
+                    .foreign_key(
+                        ForeignKey::create()
+                            .name("fk-user_stars-username")
+                            .from(UserStars::Table, UserStars::Username)
+                            .to(Users::Table, Users::Username)
+                            .on_delete(ForeignKeyAction::Cascade)
+                            .on_update(ForeignKeyAction::Cascade),
+                    )
+                    .to_owned(),
+            )
+            .await?;
+
+        // UserRatings - per-user ratings
+        manager
+            .create_table(
+                Table::create()
+                    .table(UserRatings::Table)
+                    .if_not_exists()
+                    .col(ColumnDef::new(UserRatings::Username).string().not_null())
+                    .col(ColumnDef::new(UserRatings::ItemId).string().not_null())
+                    .col(ColumnDef::new(UserRatings::ItemType).string().not_null())
+                    .col(ColumnDef::new(UserRatings::Rating).integer().not_null())
+                    .primary_key(
+                        Index::create()
+                            .col(UserRatings::Username)
+                            .col(UserRatings::ItemId)
+                            .col(UserRatings::ItemType),
+                    )
+                    .foreign_key(
+                        ForeignKey::create()
+                            .name("fk-user_ratings-username")
+                            .from(UserRatings::Table, UserRatings::Username)
+                            .to(Users::Table, Users::Username)
+                            .on_delete(ForeignKeyAction::Cascade)
+                            .on_update(ForeignKeyAction::Cascade),
+                    )
+                    .to_owned(),
+            )
+            .await?;
+
         Ok(())
     }
 
     async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        manager.drop_table(Table::drop().table(UserRatings::Table).to_owned()).await?;
+        manager.drop_table(Table::drop().table(UserStars::Table).to_owned()).await?;
         manager.drop_table(Table::drop().table(PlayQueueSong::Table).to_owned()).await?;
         manager.drop_table(Table::drop().table(PlayQueue::Table).to_owned()).await?;
         manager.drop_table(Table::drop().table(Bookmark::Table).to_owned()).await?;

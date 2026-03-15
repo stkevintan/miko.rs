@@ -10,7 +10,6 @@ fn make_artist(id: &str) -> UpsertMessage {
         id: Set(id.to_string()),
         name: Set(id.to_string()),
         artist_image_url: Set(None),
-        user_rating: Set(0),
         average_rating: Set(0.0),
         ..Default::default()
     }))
@@ -28,7 +27,6 @@ fn make_album(id: &str) -> UpsertMessage {
         name: Set(id.to_string()),
         created: Set(chrono::Utc::now()),
         year: Set(2024),
-        user_rating: Set(0),
         average_rating: Set(0.0),
         ..Default::default()
     }))
@@ -55,7 +53,6 @@ fn make_song(id: &str, path: &str, is_dir: bool) -> UpsertMessage {
         bit_rate: Set(0),
         size: Set(0),
         is_video: Set(false),
-        user_rating: Set(0),
         average_rating: Set(0.0),
         play_count: Set(0),
         ..Default::default()
@@ -346,7 +343,6 @@ fn make_child_active(id: &str, path: &str, is_dir: bool) -> child::ActiveModel {
         bit_rate: Set(0),
         size: Set(0),
         is_video: Set(false),
-        user_rating: Set(0),
         average_rating: Set(0.0),
         play_count: Set(0),
         ..Default::default()
@@ -487,7 +483,6 @@ fn flush_when_overdue_with_data() {
         id: Set("a1".into()),
         name: Set("A1".into()),
         artist_image_url: Set(None),
-        user_rating: Set(0),
         average_rating: Set(0.0),
         ..Default::default()
     }];
@@ -511,7 +506,6 @@ fn flush_when_artist_threshold_reached() {
             id: Set(format!("a{}", i)),
             name: Set(format!("Artist {}", i)),
             artist_image_url: Set(None),
-            user_rating: Set(0),
             average_rating: Set(0.0),
             ..Default::default()
         })
@@ -590,7 +584,6 @@ fn no_flush_below_all_thresholds_not_overdue() {
             id: Set(format!("a{}", i)),
             name: Set(format!("Artist {}", i)),
             artist_image_url: Set(None),
-            user_rating: Set(0),
             average_rating: Set(0.0),
             ..Default::default()
         })

@@ -74,7 +74,6 @@ fn generate_virtual_library(folder_id: i32, folder_path: &str) -> Vec<UpsertMess
             bit_rate: Set(0),
             size: Set(0),
             is_video: Set(false),
-            user_rating: Set(0),
             average_rating: Set(0.0),
             play_count: Set(0),
             ..Default::default()
@@ -111,7 +110,6 @@ fn generate_virtual_library(folder_id: i32, folder_path: &str) -> Vec<UpsertMess
                 bit_rate: Set(0),
                 size: Set(0),
                 is_video: Set(false),
-                user_rating: Set(0),
                 average_rating: Set(0.0),
                 play_count: Set(0),
                 ..Default::default()
@@ -150,7 +148,6 @@ fn generate_virtual_library(folder_id: i32, folder_path: &str) -> Vec<UpsertMess
                     bit_rate: Set(0),
                     size: Set(0),
                     is_video: Set(false),
-                    user_rating: Set(0),
                     average_rating: Set(0.0),
                     play_count: Set(0),
                     ..Default::default()
@@ -173,7 +170,6 @@ fn generate_virtual_library(folder_id: i32, folder_path: &str) -> Vec<UpsertMess
                     id: Set(a_id.clone()),
                     name: Set(a_name.clone()),
                     artist_image_url: Set(None),
-                    user_rating: Set(0),
                     average_rating: Set(0.0),
                     ..Default::default()
                 })));
@@ -189,7 +185,6 @@ fn generate_virtual_library(folder_id: i32, folder_path: &str) -> Vec<UpsertMess
                     name: Set(al_name.clone()),
                     created: Set(now),
                     year: Set(year),
-                    user_rating: Set(0),
                     average_rating: Set(0.0),
                     ..Default::default()
                 })));
@@ -199,7 +194,6 @@ fn generate_virtual_library(folder_id: i32, folder_path: &str) -> Vec<UpsertMess
                     id: Set(a_id.clone()),
                     name: Set(a_name.clone()),
                     artist_image_url: Set(None),
-                    user_rating: Set(0),
                     average_rating: Set(0.0),
                     ..Default::default()
                 })));
@@ -234,7 +228,6 @@ fn generate_virtual_library(folder_id: i32, folder_path: &str) -> Vec<UpsertMess
                     duration: Set(200 + track as i32),
                     bit_rate: Set(320),
                     is_video: Set(false),
-                    user_rating: Set(0),
                     average_rating: Set(0.0),
                     play_count: Set(0),
                     ..Default::default()
@@ -460,7 +453,6 @@ async fn flusher_handles_2000_songs_then_prune_removes_missing() {
             bit_rate: Set(0),
             size: Set(0),
             is_video: Set(false),
-            user_rating: Set(0),
             average_rating: Set(0.0),
             play_count: Set(0),
             ..Default::default()
@@ -498,7 +490,6 @@ async fn flusher_handles_2000_songs_then_prune_removes_missing() {
                 bit_rate: Set(0),
                 size: Set(0),
                 is_video: Set(false),
-                user_rating: Set(0),
                 average_rating: Set(0.0),
                 play_count: Set(0),
                 ..Default::default()
@@ -539,7 +530,6 @@ async fn flusher_handles_2000_songs_then_prune_removes_missing() {
                     bit_rate: Set(0),
                     size: Set(0),
                     is_video: Set(false),
-                    user_rating: Set(0),
                     average_rating: Set(0.0),
                     play_count: Set(0),
                     ..Default::default()
@@ -561,7 +551,6 @@ async fn flusher_handles_2000_songs_then_prune_removes_missing() {
                     id: Set(a_id.clone()),
                     name: Set(a_name.clone()),
                     artist_image_url: Set(None),
-                    user_rating: Set(0),
                     average_rating: Set(0.0),
                     ..Default::default()
                 })));
@@ -573,7 +562,6 @@ async fn flusher_handles_2000_songs_then_prune_removes_missing() {
                     name: Set(al_name.clone()),
                     created: Set(now),
                     year: Set(year),
-                    user_rating: Set(0),
                     average_rating: Set(0.0),
                     ..Default::default()
                 })));
@@ -581,7 +569,6 @@ async fn flusher_handles_2000_songs_then_prune_removes_missing() {
                     id: Set(a_id.clone()),
                     name: Set(a_name.clone()),
                     artist_image_url: Set(None),
-                    user_rating: Set(0),
                     average_rating: Set(0.0),
                     ..Default::default()
                 })));
@@ -614,7 +601,6 @@ async fn flusher_handles_2000_songs_then_prune_removes_missing() {
                     duration: Set(200 + track as i32),
                     bit_rate: Set(320),
                     is_video: Set(false),
-                    user_rating: Set(0),
                     average_rating: Set(0.0),
                     play_count: Set(0),
                     ..Default::default()

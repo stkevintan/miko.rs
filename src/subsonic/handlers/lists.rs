@@ -1,5 +1,6 @@
 use crate::service::library::AlbumListOptions;
 use crate::service::Service;
+use crate::models::user;
 use crate::subsonic::{
     common::{send_response, SubsonicParams},
     models::{
@@ -41,10 +42,11 @@ fn default_count() -> u64 {
 #[handler]
 pub async fn get_album_list2(
     service: Data<&Arc<Service>>,
+    user: Data<&Arc<user::Model>>,
     params: Data<&SubsonicParams>,
     list_params: Query<AlbumListOptions>,
 ) -> impl IntoResponse {
-    let albums = match service.get_albums(list_params.0).await {
+    let albums = match service.get_albums(list_params.0, &user.username).await {
         Ok(a) => a,
         Err(e) => {
             log::error!("Database error: {}", e);
@@ -65,10 +67,11 @@ pub async fn get_album_list2(
 #[handler]
 pub async fn get_album_list(
     service: Data<&Arc<Service>>,
+    user: Data<&Arc<user::Model>>,
     params: Data<&SubsonicParams>,
     list_params: Query<AlbumListOptions>,
 ) -> impl IntoResponse {
-    let albums = match service.get_albums(list_params.0).await {
+    let albums = match service.get_albums(list_params.0, &user.username).await {
         Ok(a) => a,
         Err(e) => {
             log::error!("Database error: {}", e);
@@ -89,10 +92,11 @@ pub async fn get_album_list(
 #[handler]
 pub async fn get_random_songs(
     service: Data<&Arc<Service>>,
+    user: Data<&Arc<user::Model>>,
     params: Data<&SubsonicParams>,
     list_params: Query<AlbumListOptions>,
 ) -> impl IntoResponse {
-    let songs = match service.get_random_songs(list_params.0).await {
+    let songs = match service.get_random_songs(list_params.0, &user.username).await {
         Ok(s) => s,
         Err(e) => {
             log::error!("Database error: {}", e);
@@ -113,6 +117,7 @@ pub async fn get_random_songs(
 #[handler]
 pub async fn get_songs_by_genre(
     service: Data<&Arc<Service>>,
+    user: Data<&Arc<user::Model>>,
     params: Data<&SubsonicParams>,
     query: Query<SongsByGenreQuery>,
 ) -> impl IntoResponse {
@@ -122,6 +127,7 @@ pub async fn get_songs_by_genre(
             query.count,
             query.offset,
             query.music_folder_id,
+            &user.username,
         )
         .await
     {
@@ -144,12 +150,13 @@ pub async fn get_songs_by_genre(
 #[handler]
 pub async fn get_starred(
     service: Data<&Arc<Service>>,
+    user: Data<&Arc<user::Model>>,
     params: Data<&SubsonicParams>,
     query: Query<MusicFolderQuery>,
 ) -> impl IntoResponse {
     let music_folder_id = query.music_folder_id;
 
-    let (artists, albums, songs) = match service.get_starred_items(music_folder_id).await {
+    let (artists, albums, songs) = match service.get_starred_items(music_folder_id, &user.username).await {
         Ok(res) => res,
         Err(e) => {
             log::error!("Database error: {}", e);
@@ -172,12 +179,13 @@ pub async fn get_starred(
 #[handler]
 pub async fn get_starred2(
     service: Data<&Arc<Service>>,
+    user: Data<&Arc<user::Model>>,
     params: Data<&SubsonicParams>,
     query: Query<MusicFolderQuery>,
 ) -> impl IntoResponse {
     let music_folder_id = query.music_folder_id;
 
-    let (artists, albums, songs) = match service.get_starred_items(music_folder_id).await {
+    let (artists, albums, songs) = match service.get_starred_items(music_folder_id, &user.username).await {
         Ok(res) => res,
         Err(e) => {
             log::error!("Database error: {}", e);
@@ -203,6 +211,7 @@ const NOW_PLAYING_EXPIRATION_MINUTES: i64 = 10;
 pub async fn get_now_playing(
     db: Data<&DatabaseConnection>,
     service: Data<&Arc<Service>>,
+    user: Data<&Arc<user::Model>>,
     params: Data<&SubsonicParams>,
 ) -> impl IntoResponse {
     use crate::models::now_playing;
@@ -247,7 +256,7 @@ pub async fn get_now_playing(
         .into_iter()
         .collect();
 
-    let songs = match service.get_songs_by_ids(&song_ids).await {
+    let songs = match service.get_songs_by_ids(&song_ids, &user.username).await {
         Ok(s) => s,
         Err(e) => {
             log::error!("Failed to get songs for now playing: {}", e);

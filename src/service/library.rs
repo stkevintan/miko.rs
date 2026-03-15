@@ -24,12 +24,13 @@ impl Service {
     pub async fn get_albums(
         &self,
         opts: AlbumListOptions,
+        username: &str,
     ) -> Result<Vec<AlbumWithStats>, sea_orm::DbErr> {
         let list_type = opts.r#type.as_deref().unwrap_or("newest");
         let size = opts.size.unwrap_or(10);
         let offset = opts.offset.unwrap_or(0);
 
-        let mut query = queries::album_with_stats_query();
+        let mut query = queries::album_with_stats_query(username);
 
         if let Some(folder_id) = opts.music_folder_id {
             query = query.filter(child::Column::MusicFolderId.eq(folder_id));
@@ -50,7 +51,12 @@ impl Service {
                 }
             }
             "starred" => {
-                query = query.filter(album::Column::Starred.is_not_null());
+                query = query.filter(
+                    Expr::cust_with_values(
+                        "EXISTS (SELECT 1 FROM user_stars WHERE username = ? AND item_id = albums.id AND item_type = 'album')",
+                        [username.to_string()],
+                    )
+                );
             }
             "recent" => {
                 query = query.having(child::Column::LastPlayed.max().is_not_null());
@@ -63,7 +69,7 @@ impl Service {
             "newest" => query.order_by_desc(album::Column::Created),
             "frequent" => query.order_by_desc(Expr::cust("play_count")),
             "recent" => query.order_by_desc(Expr::cust("last_played")),
-            "starred" => query.order_by_desc(album::Column::Starred),
+            "starred" => query.order_by_desc(Expr::cust("starred")),
             "alphabeticalByName" => query.order_by_asc(album::Column::Name),
             "alphabeticalByArtist" => query.order_by_asc(artist::Column::Name),
             "byYear" => query.order_by_desc(album::Column::Year),
@@ -81,8 +87,9 @@ impl Service {
     pub async fn get_artists(
         &self,
         ignored_articles: &str,
+        username: &str,
     ) -> Result<Vec<(String, Vec<ArtistWithStats>)>, DbErr> {
-        let artists = queries::artist_with_stats_query()
+        let artists = queries::artist_with_stats_query(username)
             .into_model::<ArtistWithStats>()
             .all(&self.db)
             .await?;
@@ -97,15 +104,16 @@ impl Service {
     pub async fn get_artist(
         &self,
         id: &str,
+        username: &str,
     ) -> Result<(ArtistWithStats, Vec<AlbumWithStats>), DbErr> {
-        let artist = queries::artist_with_stats_query()
+        let artist = queries::artist_with_stats_query(username)
             .filter(artist::Column::Id.eq(id))
             .into_model::<ArtistWithStats>()
             .one(&self.db)
             .await?
             .ok_or(DbErr::RecordNotFound("Artist not found".into()))?;
 
-        let albums = self.get_albums_by_artist(id).await?;
+        let albums = self.get_albums_by_artist(id, username).await?;
 
         Ok((artist, albums))
     }
@@ -113,8 +121,9 @@ impl Service {
     pub async fn get_albums_by_artist(
         &self,
         artist_id: &str,
+        username: &str,
     ) -> Result<Vec<AlbumWithStats>, DbErr> {
-        queries::album_with_stats_query()
+        queries::album_with_stats_query(username)
             .filter(
                 album_artist::Column::ArtistId
                     .eq(artist_id)
@@ -142,10 +151,11 @@ impl Service {
     pub async fn get_album(
         &self,
         id: &str,
+        username: &str,
     ) -> Result<(AlbumWithStats, Vec<ChildWithMetadata>), DbErr> {
-        let album = self.get_album_with_stats(id).await?;
+        let album = self.get_album_with_stats(id, username).await?;
 
-        let songs = queries::song_with_metadata_query()
+        let songs = queries::song_with_metadata_query(username)
             .filter(child::Column::AlbumId.eq(id))
             .filter(child::Column::IsDir.eq(false))
             .order_by_asc(child::Column::DiscNumber)
@@ -157,8 +167,8 @@ impl Service {
         Ok((album, songs))
     }
 
-    async fn get_album_with_stats(&self, id: &str) -> Result<AlbumWithStats, DbErr> {
-        queries::album_with_stats_query()
+    async fn get_album_with_stats(&self, id: &str, username: &str) -> Result<AlbumWithStats, DbErr> {
+        queries::album_with_stats_query(username)
             .filter(album::Column::Id.eq(id))
             .into_model::<AlbumWithStats>()
             .one(&self.db)
@@ -166,8 +176,8 @@ impl Service {
             .ok_or(DbErr::RecordNotFound("Album not found".into()))
     }
 
-    pub async fn get_song(&self, id: &str) -> Result<ChildWithMetadata, DbErr> {
-        queries::song_with_metadata_query()
+    pub async fn get_song(&self, id: &str, username: &str) -> Result<ChildWithMetadata, DbErr> {
+        queries::song_with_metadata_query(username)
             .filter(child::Column::Id.eq(id))
             .filter(child::Column::IsDir.eq(false))
             .into_model::<ChildWithMetadata>()
@@ -179,10 +189,11 @@ impl Service {
     pub async fn get_random_songs(
         &self,
         opts: AlbumListOptions,
+        username: &str,
     ) -> Result<Vec<ChildWithMetadata>, sea_orm::DbErr> {
         let size = opts.size.unwrap_or(10);
 
-        let mut query = queries::song_with_metadata_query().filter(child::Column::IsDir.eq(false));
+        let mut query = queries::song_with_metadata_query(username).filter(child::Column::IsDir.eq(false));
 
         if let Some(folder_id) = opts.music_folder_id {
             query = query.filter(child::Column::MusicFolderId.eq(folder_id));
@@ -222,8 +233,9 @@ impl Service {
         count: u64,
         offset: u64,
         folder_id: Option<i32>,
+        username: &str,
     ) -> Result<Vec<ChildWithMetadata>, sea_orm::DbErr> {
-        let mut db_query = queries::song_with_metadata_query()
+        let mut db_query = queries::song_with_metadata_query(username)
             .filter(child::Column::IsDir.eq(false))
             .filter(
                 child::Column::Id.in_subquery(
@@ -250,12 +262,13 @@ impl Service {
     pub async fn get_songs_by_ids(
         &self,
         ids: &[String],
+        username: &str,
     ) -> Result<Vec<ChildWithMetadata>, sea_orm::DbErr> {
         if ids.is_empty() {
             return Ok(Vec::new());
         }
 
-        queries::song_with_metadata_query()
+        queries::song_with_metadata_query(username)
             .filter(child::Column::Id.is_in(ids))
             .into_model::<ChildWithMetadata>()
             .all(&self.db)
@@ -265,6 +278,7 @@ impl Service {
     pub async fn get_starred_items(
         &self,
         folder_id: Option<i32>,
+        username: &str,
     ) -> Result<
         (
             Vec<ArtistWithStats>,
@@ -274,9 +288,14 @@ impl Service {
         sea_orm::DbErr,
     > {
         // Artists
-        let mut artist_query = queries::artist_with_stats_query()
-            .filter(artist::Column::Starred.is_not_null())
-            .order_by_desc(artist::Column::Starred);
+        let mut artist_query = queries::artist_with_stats_query(username)
+            .filter(
+                Expr::cust_with_values(
+                    "EXISTS (SELECT 1 FROM user_stars WHERE username = ? AND item_id = artists.id AND item_type = 'artist')",
+                    [username.to_string()],
+                )
+            )
+            .order_by_desc(Expr::cust("starred"));
 
         if let Some(f_id) = folder_id {
             artist_query = artist_query.filter(
@@ -307,13 +326,18 @@ impl Service {
                 size: Some(100000),
                 music_folder_id: folder_id,
                 ..Default::default()
-            })
+            }, username)
             .await?;
 
         // Songs
-        let mut song_query = queries::song_with_metadata_query()
+        let mut song_query = queries::song_with_metadata_query(username)
             .filter(child::Column::IsDir.eq(false))
-            .filter(child::Column::Starred.is_not_null());
+            .filter(
+                Expr::cust_with_values(
+                    "EXISTS (SELECT 1 FROM user_stars WHERE username = ? AND item_id = children.id AND item_type = 'song')",
+                    [username.to_string()],
+                )
+            );
 
         if let Some(f_id) = folder_id {
             song_query = song_query.filter(child::Column::MusicFolderId.eq(f_id));

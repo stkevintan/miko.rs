@@ -17,3 +17,5 @@ pub mod song_artist;
 pub mod song_genre;
 pub mod user;
 pub mod user_music_folder;
+pub mod user_rating;
+pub mod user_star;

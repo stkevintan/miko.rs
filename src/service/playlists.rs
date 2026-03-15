@@ -166,6 +166,66 @@ impl Service {
             })
     }
 
+    /// Used by createPlaylist with playlistId — replaces all songs and optionally updates name.
+    pub async fn replace_playlist_songs(
+        &self,
+        playlist_id: i32,
+        username: &str,
+        song_ids: Vec<String>,
+        opts: UpdatePlaylistOptions,
+    ) -> Result<(), DbErr> {
+        let username = username.to_string();
+        self.db
+            .transaction::<_, (), DbErr>(|txn| {
+                Box::pin(async move {
+                    let mut p: playlist::ActiveModel = playlist::Entity::find_by_id(playlist_id)
+                        .one(txn)
+                        .await?
+                        .ok_or_else(|| DbErr::Custom("Playlist not found".to_string()))?
+                        .into();
+
+                    if p.owner.as_ref() != &username {
+                        return Err(DbErr::Custom("Permission denied".to_string()));
+                    }
+
+                    if let Some(name) = opts.name {
+                        p.name = Set(name);
+                    }
+                    p.updated_at = Set(Utc::now());
+                    p.update(txn).await?;
+
+                    // Replace all songs
+                    playlist_song::Entity::delete_many()
+                        .filter(playlist_song::Column::PlaylistId.eq(playlist_id))
+                        .exec(txn)
+                        .await?;
+
+                    if !song_ids.is_empty() {
+                        let entries: Vec<playlist_song::ActiveModel> = song_ids
+                            .into_iter()
+                            .enumerate()
+                            .map(|(i, sid)| playlist_song::ActiveModel {
+                                playlist_id: Set(playlist_id),
+                                song_id: Set(sid),
+                                index: Set(i as i32),
+                                ..Default::default()
+                            })
+                            .collect();
+                        playlist_song::Entity::insert_many(entries)
+                            .exec(txn)
+                            .await?;
+                    }
+
+                    Ok(())
+                })
+            })
+            .await
+            .map_err(|e| match e {
+                TransactionError::Connection(e) => e,
+                TransactionError::Transaction(e) => e,
+            })
+    }
+
     pub async fn delete_playlist(&self, id: i32, username: &str) -> Result<(), DbErr> {
         let p = playlist::Entity::find_by_id(id)
             .one(&self.db)
@@ -212,7 +272,7 @@ impl Service {
         query.into_model::<PlaylistWithStats>().all(&self.db).await
     }
 
-    pub async fn get_playlist(&self, id: i32) -> Result<Option<PlaylistWithSongs>, DbErr> {
+    pub async fn get_playlist(&self, id: i32, username: &str) -> Result<Option<PlaylistWithSongs>, DbErr> {
         let playlist = playlist::Entity::find()
             .filter(playlist::Column::Id.eq(id))
             .column_as(playlist_song::Column::SongId.count(), "song_count")
@@ -237,7 +297,7 @@ impl Service {
             .await?;
 
         if let Some(playlist) = playlist {
-            let songs = queries::song_with_metadata_query()
+            let songs = queries::song_with_metadata_query(username)
                 .join_rev(
                     JoinType::InnerJoin,
                     playlist_song::Entity::belongs_to(child::Entity)

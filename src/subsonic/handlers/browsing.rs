@@ -1,5 +1,5 @@
 use crate::config::Config;
-use crate::models::music_folder;
+use crate::models::{music_folder, user};
 use crate::scanner::Scanner;
 use crate::service::Service;
 use crate::subsonic::{
@@ -170,6 +170,7 @@ pub async fn get_indexes(
 #[handler]
 pub async fn get_music_directory(
     service: Data<&Arc<Service>>,
+    user: Data<&Arc<user::Model>>,
     params: Data<&SubsonicParams>,
     query: Query<GetMusicDirectoryQuery>,
 ) -> impl IntoResponse {
@@ -177,14 +178,14 @@ pub async fn get_music_directory(
     let offset = query.offset.unwrap_or(0);
     let count = query.count.unwrap_or(0);
 
-    match service.get_directory(id, offset, count).await {
+    match service.get_directory(id, offset, count, &user.username).await {
         Ok(data) => {
             let resp = SubsonicResponse::new_ok(SubsonicResponseBody::Directory(Directory {
                 id: data.dir.id,
                 parent: data.dir.parent,
                 name: data.dir.title,
-                starred: data.dir.starred,
-                user_rating: Some(data.dir.user_rating),
+                starred: None,
+                user_rating: None,
                 average_rating: Some(data.dir.average_rating),
                 play_count: Some(data.dir.play_count),
                 total_count: Some(data.total_count),
@@ -231,9 +232,10 @@ pub async fn get_genres(
 pub async fn get_artists(
     service: Data<&Arc<Service>>,
     config: Data<&Arc<Config>>,
+    user: Data<&Arc<user::Model>>,
     params: Data<&SubsonicParams>,
 ) -> impl IntoResponse {
-    match service.get_artists(&config.subsonic.ignored_articles).await {
+    match service.get_artists(&config.subsonic.ignored_articles, &user.username).await {
         Ok(indexes) => {
             let index_vec: Vec<IndexID3> = indexes
                 .into_iter()
@@ -263,12 +265,13 @@ pub async fn get_artists(
 #[handler]
 pub async fn get_artist(
     service: Data<&Arc<Service>>,
+    user: Data<&Arc<user::Model>>,
     params: Data<&SubsonicParams>,
     query: Query<IdQuery>,
 ) -> impl IntoResponse {
     let id = &query.id;
 
-    match service.get_artist(id).await {
+    match service.get_artist(id, &user.username).await {
         Ok((artist, albums)) => {
             let resp =
                 SubsonicResponse::new_ok(SubsonicResponseBody::Artist(ArtistWithAlbumsID3 {
@@ -291,12 +294,13 @@ pub async fn get_artist(
 #[handler]
 pub async fn get_album(
     service: Data<&Arc<Service>>,
+    user: Data<&Arc<user::Model>>,
     params: Data<&SubsonicParams>,
     query: Query<IdQuery>,
 ) -> impl IntoResponse {
     let id = &query.id;
 
-    match service.get_album(id).await {
+    match service.get_album(id, &user.username).await {
         Ok((album, songs)) => {
             let resp = SubsonicResponse::new_ok(SubsonicResponseBody::Album(AlbumWithSongsID3 {
                 album: AlbumID3::from(album),
@@ -318,12 +322,13 @@ pub async fn get_album(
 #[handler]
 pub async fn get_song(
     service: Data<&Arc<Service>>,
+    user: Data<&Arc<user::Model>>,
     params: Data<&SubsonicParams>,
     query: Query<IdQuery>,
 ) -> impl IntoResponse {
     let id = &query.id;
 
-    match service.get_song(id).await {
+    match service.get_song(id, &user.username).await {
         Ok(song) => {
             let resp = SubsonicResponse::new_ok(SubsonicResponseBody::Song(Child::from(song)));
             send_response(resp, &params.f)
@@ -397,11 +402,12 @@ pub async fn get_similar_songs2(
 #[handler]
 pub async fn get_top_songs(
     service: Data<&Arc<Service>>,
+    user: Data<&Arc<user::Model>>,
     params: Data<&SubsonicParams>,
     query: Query<ArtistQuery>,
 ) -> impl IntoResponse {
     let count = query.count.unwrap_or(50);
-    let songs = match service.get_top_songs(&query.artist, count).await {
+    let songs = match service.get_top_songs(&query.artist, count, &user.username).await {
         Ok(songs) => songs,
         Err(_) => {
             return send_response(

@@ -49,10 +49,11 @@ pub struct GetPlaylistParams {
 #[handler]
 pub async fn get_playlist(
     service: Data<&Arc<Service>>,
+    current_user: Data<&Arc<user::Model>>,
     params: Data<&SubsonicParams>,
     query: Query<GetPlaylistParams>,
 ) -> impl IntoResponse {
-    match service.get_playlist(query.id).await {
+    match service.get_playlist(query.id, &current_user.username).await {
         Ok(Some(playlist)) => {
             let subsonic_playlist = Playlist::from(playlist);
             let resp = SubsonicResponse::new_ok(SubsonicResponseBody::Playlist(subsonic_playlist));
@@ -73,7 +74,8 @@ pub async fn get_playlist(
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CreatePlaylistParams {
-    pub name: String,
+    pub playlist_id: Option<i32>,
+    pub name: Option<String>,
     #[serde(default, deserialize_with = "deserialize_vec")]
     pub song_id: Vec<String>,
 }
@@ -85,18 +87,64 @@ pub async fn create_playlist(
     params: Data<&SubsonicParams>,
     query: Query<CreatePlaylistParams>,
 ) -> impl IntoResponse {
-    let name = query.name.clone();
-    let owner = current_user.username.clone();
+    let username = &current_user.username;
     let song_ids = query.song_id.clone();
 
-    match service.create_playlist(name, owner, song_ids).await {
-        Ok(_) => {
-            let resp = SubsonicResponse::new_ok(SubsonicResponseBody::None);
+    let playlist_id = if let Some(pid) = query.playlist_id {
+        // Update existing playlist: replace songs
+        let opts = UpdatePlaylistOptions {
+            name: query.name.clone(),
+            song_ids_to_add: vec![],
+            song_indices_to_remove: vec![],
+            comment: None,
+            public: None,
+        };
+        if let Err(e) = service.replace_playlist_songs(pid, username, song_ids, opts).await {
+            log::error!("Failed to update playlist: {}", e);
+            return send_response(
+                SubsonicResponse::new_error(0, format!("Failed to update playlist: {}", e)),
+                &params.f,
+            );
+        }
+        pid
+    } else {
+        let name = match &query.name {
+            Some(n) => n.clone(),
+            None => {
+                return send_response(
+                    SubsonicResponse::new_error(10, "Missing required parameter: name".to_string()),
+                    &params.f,
+                );
+            }
+        };
+        match service.create_playlist(name, username.clone(), song_ids).await {
+            Ok(id) => id,
+            Err(e) => {
+                log::error!("Failed to create playlist: {}", e);
+                return send_response(
+                    SubsonicResponse::new_error(0, "Failed to create playlist".to_string()),
+                    &params.f,
+                );
+            }
+        }
+    };
+
+    // Return the created/updated playlist per Subsonic API 1.14.0+
+    match service.get_playlist(playlist_id, username).await {
+        Ok(Some(playlist)) => {
+            let resp = SubsonicResponse::new_ok(SubsonicResponseBody::Playlist(
+                Playlist::from(playlist),
+            ));
+            send_response(resp, &params.f)
+        }
+        Ok(None) => {
+            let resp = SubsonicResponse::new_error(70, "Playlist not found".to_string());
             send_response(resp, &params.f)
         }
         Err(e) => {
-            log::error!("Failed to create playlist: {}", e);
-            let resp = SubsonicResponse::new_error(0, "Failed to create playlist".to_string());
+            log::error!("Failed to get playlist after create: {}", e);
+            // Still return ok since the playlist was created
+            let resp = SubsonicResponse::new_ok(SubsonicResponseBody::None);
             send_response(resp, &params.f)
         }
     }

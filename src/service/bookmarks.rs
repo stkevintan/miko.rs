@@ -14,7 +14,7 @@ impl Service {
         &self,
         username: &str,
     ) -> Result<Vec<(bookmark::Model, ChildWithMetadata)>, DbErr> {
-        let results = queries::song_with_metadata_query()
+        let results = queries::song_with_metadata_query(username)
             .join(JoinType::InnerJoin, child::Relation::Bookmarks.def())
             .filter(bookmark::Column::Username.eq(username))
             .order_by_desc(bookmark::Column::UpdatedAt)
@@ -86,7 +86,7 @@ impl Service {
 
         if let Some(queue) = queue {
             // play_queue_song::Column::Index represents the order of songs in the list.
-            let songs = queries::song_with_metadata_query()
+            let songs = queries::song_with_metadata_query(username)
                 .join(JoinType::InnerJoin, child::Relation::PlayQueueSongs.def())
                 .filter(play_queue_song::Column::Username.eq(username))
                 .order_by_asc(play_queue_song::Column::Index)

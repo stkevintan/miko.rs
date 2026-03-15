@@ -45,7 +45,7 @@ impl Config {
                 password_secret: read_val("PASSWORD_SECRET", None),
             },
             database: DatabaseConfig {
-                url: norm_path(&read_val("DATABASE_URL", None)),
+                url: normalize_database_url(&read_val("DATABASE_URL", None)),
             },
             subsonic: SubsonicConfig {
                 data_dir: read_path("SUBSONIC_DATA_DIR", Some("./data")),
@@ -71,13 +71,28 @@ impl Config {
     }
 }
 
+/// Normalize a sqlite:// URL so that $HOME/~ expansion produces a valid path
+/// on both Unix (sqlite:///absolute/path) and Windows (sqlite://C:/path).
+fn normalize_database_url(url: &str) -> String {
+    let rest = if let Some(rest) = url.strip_prefix("sqlite://") {
+        rest.trim_start_matches('/')
+    } else if let Some(rest) = url.strip_prefix("sqlite:") {
+        rest
+    } else {
+        return norm_path(url);
+    };
+
+    let expanded = expand_path(rest).replace('\\', "/");
+    format!("sqlite://{}", expanded)
+}
+
 fn norm_path(path: &str) -> String {
     expand_path(path).replace('\\', "/")
 }
 
 fn expand_path(path: &str) -> String {
-    let home = env::home_dir()
-        .map(|p| p.to_string_lossy().to_string())
-        .unwrap_or_else(|| ".".to_string());
+    let home = env::var("HOME")
+        .or_else(|_| env::var("USERPROFILE"))
+        .unwrap_or_else(|_| ".".to_string());
     path.replacen('~', &home, 1).replace("$HOME", &home)
 }

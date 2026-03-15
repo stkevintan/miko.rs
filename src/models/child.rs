@@ -33,8 +33,6 @@ pub struct Model {
     pub path: String,
     #[sea_orm(default_value = false)]
     pub is_video: bool,
-    #[sea_orm(default_value = 0)]
-    pub user_rating: i32,
     #[sea_orm(default_value = 0.0)]
     pub average_rating: f64,
     #[sea_orm(default_value = 0)]
@@ -43,7 +41,6 @@ pub struct Model {
     #[sea_orm(default_value = 0)]
     pub disc_number: i32,
     pub created: Option<DateTimeUtc>,
-    pub starred: Option<DateTimeUtc>,
     #[sea_orm(index)]
     pub album_id: Option<String>,
     #[sea_orm(index)]

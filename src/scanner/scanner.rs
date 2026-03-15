@@ -113,7 +113,6 @@ impl Scanner {
                 bit_rate: Set(0),
                 size: Set(0),
                 is_video: Set(false),
-                user_rating: Set(0),
                 average_rating: Set(0.0),
                 play_count: Set(0),
                 ..Default::default()
@@ -190,7 +189,6 @@ impl Scanner {
             duration: Set(0),
             bit_rate: Set(0),
             is_video: Set(false),
-            user_rating: Set(0),
             average_rating: Set(0.0),
             play_count: Set(0),
             ..Default::default()
@@ -287,7 +285,6 @@ impl Scanner {
             id: Set(id.clone()),
             name: Set(name.to_string()),
             artist_image_url: Set(None),
-            user_rating: Set(0),
             average_rating: Set(0.0),
             ..Default::default()
         };
@@ -321,7 +318,6 @@ impl Scanner {
             name: Set(name.to_string()),
             created: Set(created),
             year: Set(year),
-            user_rating: Set(0),
             average_rating: Set(0.0),
             ..Default::default()
         };

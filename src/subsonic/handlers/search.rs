@@ -1,5 +1,6 @@
 use crate::service::search::SearchOptions;
 use crate::service::Service;
+use crate::models::user;
 use crate::subsonic::{
     common::{send_response, SubsonicParams},
     models::{
@@ -53,12 +54,13 @@ pub struct SearchQuery {
 #[handler]
 pub async fn search3(
     service: Data<&Arc<Service>>,
+    user: Data<&Arc<user::Model>>,
     params: Data<&SubsonicParams>,
     query: Query<Search23Query>,
 ) -> impl IntoResponse {
     let opts = SearchOptions::from(query.0);
 
-    match service.search(opts).await {
+    match service.search(opts, &user.username).await {
         Ok((artists, albums, songs)) => {
             let resp =
                 SubsonicResponse::new_ok(SubsonicResponseBody::SearchResult3(SearchResult3 {
@@ -81,12 +83,13 @@ pub async fn search3(
 #[handler]
 pub async fn search2(
     service: Data<&Arc<Service>>,
+    user: Data<&Arc<user::Model>>,
     params: Data<&SubsonicParams>,
     query: Query<Search23Query>,
 ) -> impl IntoResponse {
     let opts = SearchOptions::from(query.0);
 
-    match service.search(opts).await {
+    match service.search(opts, &user.username).await {
         Ok((artists, albums, songs)) => {
             // Search2 uses Artist and Child (for albums)
             let resp =
@@ -113,6 +116,7 @@ pub async fn search2(
 #[handler]
 pub async fn search(
     service: Data<&Arc<Service>>,
+    user: Data<&Arc<user::Model>>,
     params: Data<&SubsonicParams>,
     query: Query<SearchQuery>,
 ) -> impl IntoResponse {
@@ -120,7 +124,7 @@ pub async fn search(
     let count = query.count.unwrap_or(20);
     let offset = query.offset.unwrap_or(0);
 
-    match service.search_songs(q, count, offset).await {
+    match service.search_songs(q, count, offset, &user.username).await {
         Ok((songs, total_hits)) => {
             let resp = SubsonicResponse::new_ok(SubsonicResponseBody::SearchResult(SearchResult {
                 offset,

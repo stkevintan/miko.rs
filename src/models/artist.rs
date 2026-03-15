@@ -8,9 +8,6 @@ pub struct Model {
     pub id: String,
     pub name: String,
     pub artist_image_url: Option<String>,
-    pub starred: Option<DateTimeUtc>,
-    #[sea_orm(default_value = 0)]
-    pub user_rating: i32,
     #[sea_orm(default_value = 0.0)]
     pub average_rating: f64,
 }

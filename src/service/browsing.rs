@@ -34,8 +34,6 @@ impl Service {
                 id: child.id,
                 name: child.title,
                 artist_image_url: None,
-                starred: None,
-                user_rating: 0,
                 average_rating: 0.0,
             })
             .collect();
@@ -52,6 +50,7 @@ impl Service {
         id: &str,
         offset: u64,
         limit: u64,
+        username: &str,
     ) -> Result<DirectoryWithChildren, DbErr> {
         let dir = child::Entity::find_by_id(id)
             .filter(child::Column::IsDir.eq(true))
@@ -64,7 +63,7 @@ impl Service {
             .count(&self.db)
             .await?;
 
-        let mut query = queries::song_with_metadata_query()
+        let mut query = queries::song_with_metadata_query(username)
             .filter(child::Column::Parent.eq(&dir.id))
             .order_by_desc(child::Column::IsDir)
             .order_by_asc(child::Column::Title);
@@ -122,8 +121,9 @@ impl Service {
         &self,
         artist_name: &str,
         count: u64,
+        username: &str,
     ) -> Result<Vec<child::ChildWithMetadata>, DbErr> {
-        queries::song_with_metadata_query()
+        queries::song_with_metadata_query(username)
             .filter(
                 child::Column::Id.in_subquery(
                     song_artist::Entity::find()

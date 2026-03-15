@@ -25,6 +25,7 @@ impl Service {
     pub async fn search(
         &self,
         opts: SearchOptions,
+        username: &str,
     ) -> Result<
         (
             Vec<ArtistWithStats>,
@@ -38,13 +39,13 @@ impl Service {
 
         // Artists
         let mut artist_query =
-            queries::artist_with_stats_query().filter(artist::Column::Name.like(&search_query));
+            queries::artist_with_stats_query(username).filter(artist::Column::Name.like(&search_query));
 
         // Albums
         let mut album_query =
-            queries::album_with_stats_query().filter(album::Column::Name.like(&search_query));
+            queries::album_with_stats_query(username).filter(album::Column::Name.like(&search_query));
 
-        let mut song_query = queries::song_with_metadata_query()
+        let mut song_query = queries::song_with_metadata_query(username)
             .filter(child::Column::IsDir.eq(false))
             .filter(
                 child::Column::Title.like(&search_query)
@@ -102,11 +103,12 @@ impl Service {
         query: &str,
         count: u64,
         offset: u64,
+        username: &str,
     ) -> Result<(Vec<ChildWithMetadata>, u64), DbErr> {
         let clean_query = query.trim().trim_matches('"');
         let search_query = format!("%{}%", clean_query);
 
-        let q = queries::song_with_metadata_query()
+        let q = queries::song_with_metadata_query(username)
             .filter(child::Column::IsDir.eq(false))
             .filter(
                 child::Column::Title.like(&search_query)

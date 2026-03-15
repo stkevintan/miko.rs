@@ -1,7 +1,8 @@
 use crate::models::{album, album_artist, album_genre, artist, child, lyrics, song_artist};
-use sea_orm::sea_query::Expr;
+use sea_orm::sea_query::{Expr, SimpleExpr};
 use sea_orm::{
-    ColumnTrait, EntityTrait, FromQueryResult, JoinType, QueryFilter, QuerySelect, RelationTrait,
+    ColumnTrait, EntityTrait, FromQueryResult, Iterable, JoinType, QueryFilter, QuerySelect,
+    RelationTrait,
 };
 
 #[derive(Debug, FromQueryResult, Clone)]
@@ -53,21 +54,47 @@ pub fn lyrics_with_metadata_query() -> sea_orm::Select<lyrics::Entity> {
         .group_by(lyrics::Column::SongId)
 }
 
-pub fn song_with_metadata_query() -> sea_orm::Select<child::Entity> {
+fn starred_subquery(username: &str, table: &str, id_col: &str, item_type: &str) -> SimpleExpr {
+    Expr::cust_with_values(
+        format!("(SELECT starred_at FROM user_stars WHERE username = ? AND item_id = {table}.{id_col} AND item_type = '{item_type}')"),
+        [username.to_string()],
+    )
+}
+
+fn rating_subquery(username: &str, table: &str, id_col: &str, item_type: &str) -> SimpleExpr {
+    Expr::cust_with_values(
+        format!("COALESCE((SELECT rating FROM user_ratings WHERE username = ? AND item_id = {table}.{id_col} AND item_type = '{item_type}'), 0)"),
+        [username.to_string()],
+    )
+}
+
+pub fn song_with_metadata_query(username: &str) -> sea_orm::Select<child::Entity> {
     child::Entity::find()
+        .select_only()
+        .columns(child::Column::iter())
+        .column_as(starred_subquery(username, "children", "id", "song"), "starred")
+        .column_as(rating_subquery(username, "children", "id", "song"), "user_rating")
         .column_as(Expr::cust("(SELECT GROUP_CONCAT(a.id || '[:]' || a.name) FROM song_artists sa JOIN artists a ON sa.artist_id = a.id WHERE sa.song_id = children.id)"), "artists")
         .column_as(Expr::cust("(SELECT GROUP_CONCAT(a.id || '[:]' || a.name) FROM album_artists aa JOIN artists a ON aa.artist_id = a.id WHERE aa.album_id = children.album_id)"), "album_artists")
         .column_as(Expr::cust("(SELECT GROUP_CONCAT(genre_name) FROM song_genres WHERE song_id = children.id)"), "genre")
         .column_as(Expr::cust("(SELECT name FROM albums WHERE id = children.album_id)"), "album")
 }
 
-pub fn artist_with_stats_query() -> sea_orm::Select<artist::Entity> {
+pub fn artist_with_stats_query(username: &str) -> sea_orm::Select<artist::Entity> {
     artist::Entity::find()
+        .select_only()
+        .columns(artist::Column::iter())
+        .column_as(starred_subquery(username, "artists", "id", "artist"), "starred")
+        .column_as(rating_subquery(username, "artists", "id", "artist"), "user_rating")
         .column_as(Expr::cust("(SELECT COUNT(DISTINCT album_id) FROM (SELECT album_id FROM children JOIN song_artists ON song_artists.song_id = children.id WHERE song_artists.artist_id = artists.id UNION SELECT album_id FROM album_artists WHERE album_artists.artist_id = artists.id))"), "album_count")
 }
 
-pub fn album_with_stats_query() -> sea_orm::Select<album::Entity> {
+pub fn album_with_stats_query(username: &str) -> sea_orm::Select<album::Entity> {
     album::Entity::find()
+        .select_only()
+        .columns(album::Column::iter())
+        .column_as(starred_subquery(username, "albums", "id", "album"), "starred")
+        .column_as(rating_subquery(username, "albums", "id", "album"), "user_rating")
         .column_as(child::Column::Id.count(), "song_count")
         .column_as(Expr::cust("COALESCE(SUM(duration), 0)"), "duration")
         .column_as(Expr::cust("COALESCE(SUM(play_count), 0)"), "play_count")
