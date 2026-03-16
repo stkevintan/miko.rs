@@ -18,22 +18,22 @@ jobs:
             os_name: linux
             arch: amd64
             suffix: ""
-            bin_name: miko-rs-linux-amd64
+            bin_name: miko-linux-amd64
           - os: ubuntu-latest
             target: aarch64-unknown-linux-musl
             os_name: linux
             arch: arm64
-            bin_name: miko-rs-linux-arm64
+            bin_name: miko-linux-arm64
           - os: macos-latest
             target: aarch64-apple-darwin
             os_name: darwin
             arch: arm64
-            bin_name: miko-rs-darwin-arm64
+            bin_name: miko-darwin-arm64
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             os_name: windows
             arch: amd64
-            bin_name: miko-rs-windows-amd64
+            bin_name: miko-windows-amd64
 
     runs-on: ${{ matrix.os }}
     steps:
