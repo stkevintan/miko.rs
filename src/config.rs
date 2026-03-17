@@ -75,15 +75,15 @@ impl Config {
 /// on both Unix (sqlite:///absolute/path) and Windows (sqlite://C:/path).
 fn normalize_database_url(url: &str) -> String {
     let rest = if let Some(rest) = url.strip_prefix("sqlite://") {
-        rest.trim_start_matches('/')
+        rest
     } else if let Some(rest) = url.strip_prefix("sqlite:") {
         rest
     } else {
-        return norm_path(url);
+        // not sqlite url, return as-is
+        return url.to_string();
     };
 
-    let expanded = expand_path(rest).replace('\\', "/");
-    format!("sqlite://{}", expanded)
+    format!("sqlite://{}", norm_path(rest))
 }
 
 fn norm_path(path: &str) -> String {
