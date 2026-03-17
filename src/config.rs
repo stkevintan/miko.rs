@@ -1,4 +1,5 @@
 use dotenvy::dotenv;
+use regex::Regex;
 use serde::Deserialize;
 use std::env;
 
@@ -74,16 +75,28 @@ impl Config {
 /// Normalize a sqlite:// URL so that $HOME/~ expansion produces a valid path
 /// on both Unix (sqlite:///absolute/path) and Windows (sqlite://C:/path).
 fn normalize_database_url(url: &str) -> String {
-    let rest = if let Some(rest) = url.strip_prefix("sqlite://") {
-        rest.trim_start_matches('/')
-    } else if let Some(rest) = url.strip_prefix("sqlite:") {
-        rest
+    if let Some(rest) = url
+        .strip_prefix("sqlite://")
+        .or_else(|| url.strip_prefix("sqlite:"))
+    {
+        // Split the rest into path and query parts
+        let (path, query) = if let Some(idx) = rest.find('?') {
+            (&rest[..idx], &rest[idx..])
+        } else {
+            (rest, "")
+        };
+        let normalized = norm_path(path);
+        // Append ?mode=rwc so sqlx creates the file if it doesn't exist,
+        // unless the user already specified query parameters.
+        if query.is_empty() {
+            format!("sqlite://{}?mode=rwc", normalized)
+        } else {
+            format!("sqlite://{}{}", normalized, query)
+        }
     } else {
-        return norm_path(url);
-    };
-
-    let expanded = expand_path(rest).replace('\\', "/");
-    format!("sqlite://{}", expanded)
+        // not sqlite url, return as-is
+        url.to_string()
+    }
 }
 
 fn norm_path(path: &str) -> String {
@@ -94,7 +107,9 @@ fn expand_path(path: &str) -> String {
     let home = env::var("HOME")
         .or_else(|_| env::var("USERPROFILE"))
         .unwrap_or_else(|_| ".".to_string());
-    let path = if path == "~" || path.starts_with("~/") || path.starts_with("~\\") {
+    // only expand ~ at the start of the path, to avoid accidentally replacing ~ in the middle of a path
+    let re = Regex::new(r"^~($|[/\\?])").unwrap();
+    let path = if re.is_match(path) {
         format!("{}{}", home, &path[1..])
     } else {
         path.to_string()

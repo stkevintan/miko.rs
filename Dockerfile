@@ -7,12 +7,7 @@ ARG TARGETARCH=amd64
 COPY bin/ /bin/
 
 # Final stage - minimal runtime image
-FROM debian:bookworm-slim
-
-# Install runtime dependencies (ca-certificates is needed for HTTPS)
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+FROM alpine:latest
 
 # Create non-root user for security
 RUN adduser --disabled-password --gecos "" miko
@@ -24,10 +19,11 @@ ARG TARGETOS
 ARG TARGETARCH
 # We map Docker's TARGETARCH to our binary naming convention if necessary
 # In our build script we use amd64 and arm64
-COPY --from=binary-selector /bin/miko-rs-${TARGETOS}-${TARGETARCH}* ./miko-rs
+COPY --from=binary-selector /bin/miko-${TARGETOS}-${TARGETARCH}* ./miko
 
-# Set binary as executable and change ownership
-RUN chmod +x ./miko-rs && chown miko:miko ./miko-rs
+# Create data directory, set binary as executable and change ownership
+RUN mkdir -p /app/data && chmod +x ./miko && \
+  chown miko:miko /app/data ./miko
 
 # Switch to non-root user
 USER miko
@@ -40,4 +36,4 @@ ENV DATABASE_URL=sqlite:///app/data/miko.db
 EXPOSE 8081
 
 # Command to run
-CMD ["./miko-rs"]
+CMD ["./miko"]

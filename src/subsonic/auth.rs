@@ -8,9 +8,18 @@ pub fn decrypt_password(stored_password: &str, secret: &[u8]) -> String {
     }
 }
 
+pub fn decode_password(password: &str) -> String {
+    if let Some(encoded) = password.strip_prefix("enc:") {
+        let bytes = hex::decode(encoded).unwrap_or_default();
+        String::from_utf8_lossy(&bytes).to_string()
+    } else {
+        password.to_string()
+    }
+}
+
 pub fn verify_password(stored_password: &str, password: &str, secret: &[u8]) -> bool {
     let decrypted = decrypt_password(stored_password, secret);
-    decrypted == password
+    decrypted == decode_password(password)
 }
 
 pub fn verify_token(stored_password: &str, token: &str, salt: &str, secret: &[u8]) -> bool {

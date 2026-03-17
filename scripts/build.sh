@@ -8,7 +8,7 @@
 
 set -e
 
-APP_NAME="miko-rs"
+APP_NAME="miko"
 VERSION=$(grep '^version =' Cargo.toml | head -n1 | cut -d '"' -f2)
 BIN_DIR="bin"
 
@@ -82,7 +82,6 @@ if [ $# -ge 1 ] && [[ "$1" == *"/"* ]]; then
         echo "Unknown platform: $1"
         exit 1
     fi
-fi
 elif [ $# -eq 4 ]; then
     TARGET=$1
     OS=$2
