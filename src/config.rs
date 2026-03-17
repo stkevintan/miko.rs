@@ -1,4 +1,5 @@
 use dotenvy::dotenv;
+use regex::Regex;
 use serde::Deserialize;
 use std::env;
 
@@ -100,7 +101,9 @@ fn expand_path(path: &str) -> String {
     let home = env::var("HOME")
         .or_else(|_| env::var("USERPROFILE"))
         .unwrap_or_else(|_| ".".to_string());
-    let path = if path == "~" || path.starts_with("~/") || path.starts_with("~\\") {
+    // only expand ~ at the start of the path, to avoid accidentally replacing ~ in the middle of a path
+    let re = Regex::new(r"^~($|[/\\?])").unwrap();
+    let path = if re.is_match(path) {
         format!("{}{}", home, &path[1..])
     } else {
         path.to_string()
