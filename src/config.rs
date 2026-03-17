@@ -74,16 +74,15 @@ impl Config {
 /// Normalize a sqlite:// URL so that $HOME/~ expansion produces a valid path
 /// on both Unix (sqlite:///absolute/path) and Windows (sqlite://C:/path).
 fn normalize_database_url(url: &str) -> String {
-    let rest = if let Some(rest) = url.strip_prefix("sqlite://") {
-        rest.trim_start_matches('/')
-    } else if let Some(rest) = url.strip_prefix("sqlite:") {
-        rest
+    if let Some(rest) = url
+        .strip_prefix("sqlite://")
+        .or_else(|| url.strip_prefix("sqlite:"))
+    {
+        format!("sqlite://{}", norm_path(rest))
     } else {
-        return norm_path(url);
-    };
-
-    let expanded = expand_path(rest).replace('\\', "/");
-    format!("sqlite://{}", expanded)
+        // not sqlite url, return as-is
+        url.to_string()
+    }
 }
 
 fn norm_path(path: &str) -> String {
