@@ -78,7 +78,14 @@ fn normalize_database_url(url: &str) -> String {
         .strip_prefix("sqlite://")
         .or_else(|| url.strip_prefix("sqlite:"))
     {
-        format!("sqlite://{}", norm_path(rest))
+        let normalized = norm_path(rest);
+        // Append ?mode=rwc so sqlx creates the file if it doesn't exist,
+        // unless the user already specified query parameters.
+        if normalized.contains('?') {
+            format!("sqlite://{}", normalized)
+        } else {
+            format!("sqlite://{}?mode=rwc", normalized)
+        }
     } else {
         // not sqlite url, return as-is
         url.to_string()
