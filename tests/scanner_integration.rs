@@ -713,3 +713,476 @@ async fn flusher_handles_2000_songs_then_prune_removes_missing() {
     let sg_count: u64 = song_genre::Entity::find().count(&db).await.unwrap();
     assert_eq!(sg_count, half_songs as u64);
 }
+
+// ─── transactional flush / FK deferral tests ───────────────────
+
+/// Sends songs that reference albums arriving in the same flush window.
+/// Before the transactional fix, a race between flush_albums and flush_songs
+/// would cause FK violations. With do_flush_cycle wrapping everything in a
+/// single transaction with deferred FKs, this must succeed.
+#[tokio::test]
+async fn flusher_song_album_fk_same_flush_window() {
+    let db = setup_db().await;
+    insert_music_folder(&db, 1, "/music").await;
+    seen::SeenTracker::prepare(&db).await.unwrap();
+
+    let (tx, rx) = mpsc::channel(200);
+    let flusher_db = db.clone();
+    let handle = tokio::spawn(async move {
+        flusher::run_flusher(flusher_db, rx).await;
+    });
+
+    let now = chrono::Utc::now();
+
+    // Send 50 songs, each referencing a unique album that is
+    // included in the same Batch message (album + song together).
+    for i in 0..50 {
+        let a_id = format!("artist-{}", i);
+        let al_id = format!("album-{}", i);
+        let s_id = format!("song-{}", i);
+        let g_name = format!("genre-{}", i % 5);
+
+        tx.send(UpsertMessage::Batch(vec![
+            UpsertMessage::Seen(s_id.clone()),
+            UpsertMessage::Artist(Box::new(artist::ActiveModel {
+                id: Set(a_id.clone()),
+                name: Set(a_id.clone()),
+                artist_image_url: Set(None),
+                average_rating: Set(0.0),
+                ..Default::default()
+            })),
+            UpsertMessage::Genre(Box::new(genre::ActiveModel {
+                name: Set(g_name.clone()),
+            })),
+            UpsertMessage::Album(Box::new(album::ActiveModel {
+                id: Set(al_id.clone()),
+                name: Set(format!("Album {}", i)),
+                created: Set(now),
+                year: Set(2024),
+                average_rating: Set(0.0),
+                ..Default::default()
+            })),
+            UpsertMessage::Song(Box::new(child::ActiveModel {
+                id: Set(s_id.clone()),
+                parent: Set(None),
+                is_dir: Set(false),
+                title: Set(format!("Song {}", i)),
+                path: Set(format!("/music/song-{}.mp3", i)),
+                music_folder_id: Set(1),
+                content_type: Set(Some("audio/mp3".into())),
+                suffix: Set(Some("mp3".into())),
+                transcoded_content_type: Set(None),
+                transcoded_suffix: Set(None),
+                album_id: Set(Some(al_id.clone())),
+                r#type: Set("music".into()),
+                track: Set(1),
+                year: Set(2024),
+                disc_number: Set(1),
+                duration: Set(200),
+                bit_rate: Set(320),
+                size: Set(4_000_000),
+                is_video: Set(false),
+                average_rating: Set(0.0),
+                play_count: Set(0),
+                ..Default::default()
+            })),
+            UpsertMessage::SongRelations(Box::new(SongRelations {
+                song_id: s_id.clone(),
+                artists: vec![a_id.clone()],
+                genres: vec![g_name.clone()],
+                lyrics: None,
+            })),
+            UpsertMessage::AlbumRelations(Box::new(AlbumRelations {
+                album_id: al_id,
+                artists: vec![a_id],
+                genres: vec![g_name],
+            })),
+        ]))
+        .await
+        .unwrap();
+    }
+
+    let (ack_tx, ack_rx) = tokio::sync::oneshot::channel();
+    tx.send(UpsertMessage::Flush(ack_tx)).await.unwrap();
+    ack_rx.await.unwrap();
+    drop(tx);
+    handle.await.unwrap();
+
+    let song_count: u64 = child::Entity::find().count(&db).await.unwrap();
+    assert_eq!(song_count, 50, "all 50 songs should be inserted");
+    let album_count: u64 = album::Entity::find().count(&db).await.unwrap();
+    assert_eq!(album_count, 50, "all 50 albums should be inserted");
+    let sa_count: u64 = song_artist::Entity::find().count(&db).await.unwrap();
+    assert_eq!(sa_count, 50, "all 50 song-artist relations");
+}
+
+/// Verifies that parent-child directory FK (self-referencing children.parent → children.id)
+/// works correctly when parent dir and child files arrive in the same flush window.
+#[tokio::test]
+async fn flusher_parent_child_self_referencing_fk() {
+    let db = setup_db().await;
+    insert_music_folder(&db, 1, "/music").await;
+    seen::SeenTracker::prepare(&db).await.unwrap();
+
+    let (tx, rx) = mpsc::channel(200);
+    let flusher_db = db.clone();
+    let handle = tokio::spawn(async move {
+        flusher::run_flusher(flusher_db, rx).await;
+    });
+
+    // Send a 3-level directory tree + files in one batch:
+    //   /music (root)
+    //   /music/Artist
+    //   /music/Artist/Album
+    //   /music/Artist/Album/track.mp3
+    let root_id = utils::generate_id("/music", 1, "/music");
+    let artist_dir_id = utils::generate_id("/music/Artist", 1, "/music");
+    let album_dir_id = utils::generate_id("/music/Artist/Album", 1, "/music");
+    let song_id = utils::generate_id("/music/Artist/Album/track.mp3", 1, "/music");
+
+    let make_dir =
+        |id: &str, parent: Option<String>, title: &str, path: &str| -> child::ActiveModel {
+            child::ActiveModel {
+                id: Set(id.into()),
+                parent: Set(parent),
+                is_dir: Set(true),
+                title: Set(title.into()),
+                path: Set(path.into()),
+                music_folder_id: Set(1),
+                content_type: Set(None),
+                suffix: Set(None),
+                transcoded_content_type: Set(None),
+                transcoded_suffix: Set(None),
+                album_id: Set(None),
+                r#type: Set("directory".into()),
+                track: Set(0),
+                year: Set(0),
+                disc_number: Set(0),
+                duration: Set(0),
+                bit_rate: Set(0),
+                size: Set(0),
+                is_video: Set(false),
+                average_rating: Set(0.0),
+                play_count: Set(0),
+                ..Default::default()
+            }
+        };
+
+    // Intentionally send child before parent to test reordering
+    tx.send(UpsertMessage::Batch(vec![
+        UpsertMessage::Seen(song_id.clone()),
+        UpsertMessage::Seen(album_dir_id.clone()),
+        UpsertMessage::Seen(artist_dir_id.clone()),
+        UpsertMessage::Seen(root_id.clone()),
+        UpsertMessage::Song(Box::new(child::ActiveModel {
+            id: Set(song_id.clone()),
+            parent: Set(Some(album_dir_id.clone())),
+            is_dir: Set(false),
+            title: Set("Track 01".into()),
+            path: Set("/music/Artist/Album/track.mp3".into()),
+            music_folder_id: Set(1),
+            content_type: Set(Some("audio/mp3".into())),
+            suffix: Set(Some("mp3".into())),
+            transcoded_content_type: Set(None),
+            transcoded_suffix: Set(None),
+            album_id: Set(None),
+            r#type: Set("music".into()),
+            track: Set(1),
+            year: Set(0),
+            disc_number: Set(0),
+            duration: Set(180),
+            bit_rate: Set(256),
+            size: Set(3_000_000),
+            is_video: Set(false),
+            average_rating: Set(0.0),
+            play_count: Set(0),
+            ..Default::default()
+        })),
+        UpsertMessage::Song(Box::new(make_dir(
+            &album_dir_id,
+            Some(artist_dir_id.clone()),
+            "Album",
+            "/music/Artist/Album",
+        ))),
+        UpsertMessage::Song(Box::new(make_dir(
+            &artist_dir_id,
+            Some(root_id.clone()),
+            "Artist",
+            "/music/Artist",
+        ))),
+        UpsertMessage::Song(Box::new(make_dir(&root_id, None, "music", "/music"))),
+    ]))
+    .await
+    .unwrap();
+
+    let (ack_tx, ack_rx) = tokio::sync::oneshot::channel();
+    tx.send(UpsertMessage::Flush(ack_tx)).await.unwrap();
+    ack_rx.await.unwrap();
+    drop(tx);
+    handle.await.unwrap();
+
+    let total: u64 = child::Entity::find().count(&db).await.unwrap();
+    assert_eq!(total, 4, "3 dirs + 1 song = 4 children");
+
+    // Verify parent chain is intact
+    let song = child::Entity::find_by_id(song_id)
+        .one(&db)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(song.parent.as_deref(), Some(album_dir_id.as_str()));
+
+    let album_dir = child::Entity::find_by_id(album_dir_id)
+        .one(&db)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(album_dir.parent.as_deref(), Some(artist_dir_id.as_str()));
+}
+
+/// Verifies that lyrics, song_artists, and song_genres referencing songs
+/// created in the same flush window are committed without FK violations.
+#[tokio::test]
+async fn flusher_lyrics_and_relations_same_flush_window() {
+    let db = setup_db().await;
+    insert_music_folder(&db, 1, "/music").await;
+    seen::SeenTracker::prepare(&db).await.unwrap();
+
+    let (tx, rx) = mpsc::channel(200);
+    let flusher_db = db.clone();
+    let handle = tokio::spawn(async move {
+        flusher::run_flusher(flusher_db, rx).await;
+    });
+
+    let num_songs: u64 = 20;
+
+    for i in 0..num_songs {
+        let a_id = format!("a{}", i % 5);
+        let g_name = format!("g{}", i % 3);
+        let s_id = format!("s{}", i);
+
+        tx.send(UpsertMessage::Batch(vec![
+            UpsertMessage::Seen(s_id.clone()),
+            UpsertMessage::Artist(Box::new(artist::ActiveModel {
+                id: Set(a_id.clone()),
+                name: Set(a_id.clone()),
+                artist_image_url: Set(None),
+                average_rating: Set(0.0),
+                ..Default::default()
+            })),
+            UpsertMessage::Genre(Box::new(genre::ActiveModel {
+                name: Set(g_name.clone()),
+            })),
+            UpsertMessage::Song(Box::new(child::ActiveModel {
+                id: Set(s_id.clone()),
+                parent: Set(None),
+                is_dir: Set(false),
+                title: Set(format!("Song {}", i)),
+                path: Set(format!("/music/s{}.mp3", i)),
+                music_folder_id: Set(1),
+                content_type: Set(Some("audio/mp3".into())),
+                suffix: Set(Some("mp3".into())),
+                transcoded_content_type: Set(None),
+                transcoded_suffix: Set(None),
+                album_id: Set(None),
+                r#type: Set("music".into()),
+                track: Set(i as i32 + 1),
+                year: Set(2024),
+                disc_number: Set(1),
+                duration: Set(200),
+                bit_rate: Set(320),
+                size: Set(4_000_000),
+                is_video: Set(false),
+                average_rating: Set(0.0),
+                play_count: Set(0),
+                ..Default::default()
+            })),
+            UpsertMessage::SongRelations(Box::new(SongRelations {
+                song_id: s_id.clone(),
+                artists: vec![a_id],
+                genres: vec![g_name],
+                lyrics: Some(format!("Lyrics for song {}", i)),
+            })),
+        ]))
+        .await
+        .unwrap();
+    }
+
+    let (ack_tx, ack_rx) = tokio::sync::oneshot::channel();
+    tx.send(UpsertMessage::Flush(ack_tx)).await.unwrap();
+    ack_rx.await.unwrap();
+    drop(tx);
+    handle.await.unwrap();
+
+    let song_count: u64 = child::Entity::find().count(&db).await.unwrap();
+    assert_eq!(song_count, num_songs);
+
+    let lyrics_count: u64 = lyrics::Entity::find().count(&db).await.unwrap();
+    assert_eq!(lyrics_count, num_songs, "every song should have lyrics");
+
+    let sa_count: u64 = song_artist::Entity::find().count(&db).await.unwrap();
+    assert_eq!(sa_count, num_songs, "every song should have 1 artist rel");
+
+    let sg_count: u64 = song_genre::Entity::find().count(&db).await.unwrap();
+    assert_eq!(sg_count, num_songs, "every song should have 1 genre rel");
+}
+
+/// Re-scanning the same songs (update cycle) should update metadata
+/// without FK errors — tests the ON CONFLICT UPDATE path.
+#[tokio::test]
+async fn flusher_rescan_updates_metadata() {
+    let db = setup_db().await;
+    insert_music_folder(&db, 1, "/music").await;
+    seen::SeenTracker::prepare(&db).await.unwrap();
+
+    let now = chrono::Utc::now();
+
+    // Phase 1: initial scan
+    let (tx, rx) = mpsc::channel(200);
+    let flusher_db = db.clone();
+    let h = tokio::spawn(async move { flusher::run_flusher(flusher_db, rx).await });
+
+    tx.send(UpsertMessage::Batch(vec![
+        UpsertMessage::Seen("s1".into()),
+        UpsertMessage::Artist(Box::new(artist::ActiveModel {
+            id: Set("a1".into()),
+            name: Set("Artist".into()),
+            artist_image_url: Set(None),
+            average_rating: Set(0.0),
+            ..Default::default()
+        })),
+        UpsertMessage::Genre(Box::new(genre::ActiveModel {
+            name: Set("Rock".into()),
+        })),
+        UpsertMessage::Album(Box::new(album::ActiveModel {
+            id: Set("al1".into()),
+            name: Set("Album".into()),
+            created: Set(now),
+            year: Set(2020),
+            average_rating: Set(0.0),
+            ..Default::default()
+        })),
+        UpsertMessage::Song(Box::new(child::ActiveModel {
+            id: Set("s1".into()),
+            parent: Set(None),
+            is_dir: Set(false),
+            title: Set("Old Title".into()),
+            path: Set("/music/song.mp3".into()),
+            music_folder_id: Set(1),
+            content_type: Set(Some("audio/mp3".into())),
+            suffix: Set(Some("mp3".into())),
+            transcoded_content_type: Set(None),
+            transcoded_suffix: Set(None),
+            album_id: Set(Some("al1".into())),
+            r#type: Set("music".into()),
+            track: Set(1),
+            year: Set(2020),
+            disc_number: Set(1),
+            duration: Set(200),
+            bit_rate: Set(320),
+            size: Set(4_000_000),
+            is_video: Set(false),
+            average_rating: Set(0.0),
+            play_count: Set(0),
+            ..Default::default()
+        })),
+        UpsertMessage::SongRelations(Box::new(SongRelations {
+            song_id: "s1".into(),
+            artists: vec!["a1".into()],
+            genres: vec!["Rock".into()],
+            lyrics: Some("Old lyrics".into()),
+        })),
+    ]))
+    .await
+    .unwrap();
+
+    let (ack, ack_rx) = tokio::sync::oneshot::channel();
+    tx.send(UpsertMessage::Flush(ack)).await.unwrap();
+    ack_rx.await.unwrap();
+    drop(tx);
+    h.await.unwrap();
+
+    // Phase 2: re-scan with updated metadata
+    let (tx2, rx2) = mpsc::channel(200);
+    let flusher_db2 = db.clone();
+    let h2 = tokio::spawn(async move { flusher::run_flusher(flusher_db2, rx2).await });
+
+    tx2.send(UpsertMessage::Batch(vec![
+        UpsertMessage::Seen("s1".into()),
+        UpsertMessage::Artist(Box::new(artist::ActiveModel {
+            id: Set("a1".into()),
+            name: Set("Artist".into()),
+            artist_image_url: Set(None),
+            average_rating: Set(0.0),
+            ..Default::default()
+        })),
+        UpsertMessage::Genre(Box::new(genre::ActiveModel {
+            name: Set("Rock".into()),
+        })),
+        UpsertMessage::Album(Box::new(album::ActiveModel {
+            id: Set("al1".into()),
+            name: Set("Album".into()),
+            created: Set(now),
+            year: Set(2024), // updated year
+            average_rating: Set(0.0),
+            ..Default::default()
+        })),
+        UpsertMessage::Song(Box::new(child::ActiveModel {
+            id: Set("s1".into()),
+            parent: Set(None),
+            is_dir: Set(false),
+            title: Set("New Title".into()), // updated title
+            path: Set("/music/song.mp3".into()),
+            music_folder_id: Set(1),
+            content_type: Set(Some("audio/mp3".into())),
+            suffix: Set(Some("mp3".into())),
+            transcoded_content_type: Set(None),
+            transcoded_suffix: Set(None),
+            album_id: Set(Some("al1".into())),
+            r#type: Set("music".into()),
+            track: Set(1),
+            year: Set(2024),
+            disc_number: Set(1),
+            duration: Set(200),
+            bit_rate: Set(320),
+            size: Set(4_000_000),
+            is_video: Set(false),
+            average_rating: Set(0.0),
+            play_count: Set(0),
+            ..Default::default()
+        })),
+        UpsertMessage::SongRelations(Box::new(SongRelations {
+            song_id: "s1".into(),
+            artists: vec!["a1".into()],
+            genres: vec!["Rock".into()],
+            lyrics: Some("New lyrics".into()),
+        })),
+    ]))
+    .await
+    .unwrap();
+
+    let (ack2, ack_rx2) = tokio::sync::oneshot::channel();
+    tx2.send(UpsertMessage::Flush(ack2)).await.unwrap();
+    ack_rx2.await.unwrap();
+    drop(tx2);
+    h2.await.unwrap();
+
+    // Verify: still 1 song, updated title and year
+    let song_count: u64 = child::Entity::find().count(&db).await.unwrap();
+    assert_eq!(song_count, 1);
+
+    let song = child::Entity::find_by_id("s1")
+        .one(&db)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(song.title, "New Title");
+    assert_eq!(song.year, 2024);
+
+    let alb = album::Entity::find_by_id("al1")
+        .one(&db)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(alb.year, 2024);
+}

@@ -14,7 +14,10 @@ use poem::{
     middleware::{Cors, Tracing},
     EndpointExt, Route, Server,
 };
-use sea_orm::{ActiveModelTrait, Database, DatabaseConnection, EntityTrait, PaginatorTrait, Set};
+use sea_orm::{
+    ActiveModelTrait, ConnectionTrait, Database, DatabaseConnection, EntityTrait, PaginatorTrait,
+    Set,
+};
 use std::sync::Arc;
 
 async fn init_default_user(
@@ -56,7 +59,9 @@ async fn init_default_user(
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
-    env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
+    env_logger::Builder::from_env(env_logger::Env::new().default_filter_or("info"))
+        .filter_module("lofty", log::LevelFilter::Error)
+        .init();
 
     let mb_client = Arc::new(miko::service::musicbrainz::MusicBrainzClient::new(
         env!("CARGO_PKG_NAME"),
@@ -87,8 +92,8 @@ async fn main() -> Result<(), anyhow::Error> {
     }
 
     let mut opt = sea_orm::ConnectOptions::new(&config.database.url);
-    opt.max_connections(100)
-        .min_connections(5)
+    opt.max_connections(5)
+        .min_connections(1)
         .connect_timeout(std::time::Duration::from_secs(30))
         .acquire_timeout(std::time::Duration::from_secs(30))
         .idle_timeout(std::time::Duration::from_secs(600))
@@ -98,6 +103,13 @@ async fn main() -> Result<(), anyhow::Error> {
     let db = Database::connect(opt)
         .await
         .expect("Failed to connect to database");
+
+    // SQLite: enable WAL mode for concurrent readers + single writer,
+    // and set a busy timeout to avoid "database is locked" errors.
+    if config.database.url.starts_with("sqlite") {
+        let _ = db.execute_unprepared("PRAGMA journal_mode=WAL").await;
+        let _ = db.execute_unprepared("PRAGMA busy_timeout=5000").await;
+    }
 
     Migrator::up(&db, None)
         .await

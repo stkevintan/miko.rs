@@ -3,7 +3,10 @@ use crate::models::{
 };
 use crate::scanner::seen;
 use crate::scanner::types::{AlbumRelations, SongRelations, UpsertMessage};
-use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set, TransactionTrait};
+use sea_orm::{
+    ColumnTrait, ConnectionTrait, DatabaseConnection, EntityTrait, QueryFilter, Set,
+    TransactionTrait,
+};
 use std::time::{Duration, Instant};
 
 /// Maximum rows per INSERT statement.
@@ -30,66 +33,57 @@ impl<T> IntoChunks for Vec<T> {
 }
 
 /// Flush artists (no dependencies).
-async fn flush_artists(db: &DatabaseConnection, buf: &mut Vec<artist::ActiveModel>) {
-    if buf.is_empty() {
-        return;
-    }
-    let items = std::mem::take(buf);
+async fn flush_artists<C: ConnectionTrait>(
+    db: &C,
+    items: Vec<artist::ActiveModel>,
+) -> Result<(), sea_orm::DbErr> {
     for chunk in items.chunks_into(CHUNK_SIZE) {
-        if let Err(e) = artist::Entity::insert_many(chunk)
+        artist::Entity::insert_many(chunk)
             .on_conflict(
                 sea_orm::sea_query::OnConflict::column(artist::Column::Id)
                     .do_nothing()
                     .to_owned(),
             )
             .exec_without_returning(db)
-            .await
-        {
-            log::error!("Failed to flush artists: {}", e);
-        }
+            .await?;
     }
+    Ok(())
 }
 
 /// Flush genres (no dependencies).
-async fn flush_genres(db: &DatabaseConnection, buf: &mut Vec<genre::ActiveModel>) {
-    if buf.is_empty() {
-        return;
-    }
-    let items = std::mem::take(buf);
+async fn flush_genres<C: ConnectionTrait>(
+    db: &C,
+    items: Vec<genre::ActiveModel>,
+) -> Result<(), sea_orm::DbErr> {
     for chunk in items.chunks_into(CHUNK_SIZE) {
-        if let Err(e) = genre::Entity::insert_many(chunk)
+        genre::Entity::insert_many(chunk)
             .on_conflict(
                 sea_orm::sea_query::OnConflict::column(genre::Column::Name)
                     .do_nothing()
                     .to_owned(),
             )
             .exec_without_returning(db)
-            .await
-        {
-            log::error!("Failed to flush genres: {}", e);
-        }
+            .await?;
     }
+    Ok(())
 }
 
 /// Flush albums (no dependencies on artists/genres in the table itself).
-async fn flush_albums(db: &DatabaseConnection, buf: &mut Vec<album::ActiveModel>) {
-    if buf.is_empty() {
-        return;
-    }
-    let items = std::mem::take(buf);
+async fn flush_albums<C: ConnectionTrait>(
+    db: &C,
+    items: Vec<album::ActiveModel>,
+) -> Result<(), sea_orm::DbErr> {
     for chunk in items.chunks_into(CHUNK_SIZE) {
-        if let Err(e) = album::Entity::insert_many(chunk)
+        album::Entity::insert_many(chunk)
             .on_conflict(
                 sea_orm::sea_query::OnConflict::column(album::Column::Id)
                     .update_columns([album::Column::Year])
                     .to_owned(),
             )
             .exec_without_returning(db)
-            .await
-        {
-            log::error!("Failed to flush albums: {}", e);
-        }
+            .await?;
     }
+    Ok(())
 }
 
 /// Sort songs so directories come first, ordered by path length (shorter first).
@@ -108,14 +102,13 @@ fn sort_songs_for_insert(items: &mut [child::ActiveModel]) {
 /// Flush songs/children (depends on albums via album_id FK, self-referencing parent FK).
 /// Items are sorted so directories come first, ordered by path depth, ensuring parent
 /// directories exist before their children within each batch.
-async fn flush_songs(db: &DatabaseConnection, buf: &mut Vec<child::ActiveModel>) {
-    if buf.is_empty() {
-        return;
-    }
-    let mut items = std::mem::take(buf);
+async fn flush_songs<C: ConnectionTrait>(
+    db: &C,
+    mut items: Vec<child::ActiveModel>,
+) -> Result<(), sea_orm::DbErr> {
     sort_songs_for_insert(&mut items);
     for chunk in items.chunks_into(CHUNK_SIZE) {
-        if let Err(e) = child::Entity::insert_many(chunk)
+        child::Entity::insert_many(chunk)
             .on_conflict(
                 sea_orm::sea_query::OnConflict::column(child::Column::Id)
                     .update_columns([
@@ -135,19 +128,19 @@ async fn flush_songs(db: &DatabaseConnection, buf: &mut Vec<child::ActiveModel>)
                     .to_owned(),
             )
             .exec_without_returning(db)
-            .await
-        {
-            log::error!("Failed to flush songs: {}", e);
-        }
+            .await?;
     }
+    Ok(())
 }
 
 /// Flush song relations (depends on children, artists, genres).
-async fn flush_song_relations(db: &DatabaseConnection, buf: &mut Vec<SongRelations>) {
-    if buf.is_empty() {
-        return;
+async fn flush_song_relations<C: ConnectionTrait>(
+    db: &C,
+    relations: Vec<SongRelations>,
+) -> Result<(), sea_orm::DbErr> {
+    if relations.is_empty() {
+        return Ok(());
     }
-    let relations = std::mem::take(buf);
     let song_ids: Vec<String> = relations.iter().map(|r| r.song_id.clone()).collect();
 
     let mut all_artists = Vec::new();
@@ -175,80 +168,73 @@ async fn flush_song_relations(db: &DatabaseConnection, buf: &mut Vec<SongRelatio
         }
     }
 
-    let flush_op = async {
-        let txn = db.begin().await?;
+    song_artist::Entity::delete_many()
+        .filter(song_artist::Column::SongId.is_in(&song_ids))
+        .exec(db)
+        .await?;
+    song_genre::Entity::delete_many()
+        .filter(song_genre::Column::SongId.is_in(&song_ids))
+        .exec(db)
+        .await?;
+    lyrics::Entity::delete_many()
+        .filter(lyrics::Column::SongId.is_in(&song_ids))
+        .exec(db)
+        .await?;
 
-        song_artist::Entity::delete_many()
-            .filter(song_artist::Column::SongId.is_in(&song_ids))
-            .exec(&txn)
-            .await?;
-        song_genre::Entity::delete_many()
-            .filter(song_genre::Column::SongId.is_in(&song_ids))
-            .exec(&txn)
-            .await?;
-        lyrics::Entity::delete_many()
-            .filter(lyrics::Column::SongId.is_in(&song_ids))
-            .exec(&txn)
-            .await?;
-
-        if !all_artists.is_empty() {
-            for chunk in all_artists.chunks_into(CHUNK_SIZE) {
-                song_artist::Entity::insert_many(chunk)
-                    .on_conflict(
-                        sea_orm::sea_query::OnConflict::columns([
-                            song_artist::Column::SongId,
-                            song_artist::Column::ArtistId,
-                        ])
-                        .do_nothing()
-                        .to_owned(),
-                    )
-                    .exec_without_returning(&txn)
-                    .await?;
-            }
+    if !all_artists.is_empty() {
+        for chunk in all_artists.chunks_into(CHUNK_SIZE) {
+            song_artist::Entity::insert_many(chunk)
+                .on_conflict(
+                    sea_orm::sea_query::OnConflict::columns([
+                        song_artist::Column::SongId,
+                        song_artist::Column::ArtistId,
+                    ])
+                    .do_nothing()
+                    .to_owned(),
+                )
+                .exec_without_returning(db)
+                .await?;
         }
-        if !all_genres.is_empty() {
-            for chunk in all_genres.chunks_into(CHUNK_SIZE) {
-                song_genre::Entity::insert_many(chunk)
-                    .on_conflict(
-                        sea_orm::sea_query::OnConflict::columns([
-                            song_genre::Column::SongId,
-                            song_genre::Column::GenreName,
-                        ])
-                        .do_nothing()
-                        .to_owned(),
-                    )
-                    .exec_without_returning(&txn)
-                    .await?;
-            }
-        }
-        if !all_lyrics.is_empty() {
-            for chunk in all_lyrics.chunks_into(CHUNK_SIZE) {
-                lyrics::Entity::insert_many(chunk)
-                    .on_conflict(
-                        sea_orm::sea_query::OnConflict::column(lyrics::Column::SongId)
-                            .do_nothing()
-                            .to_owned(),
-                    )
-                    .exec_without_returning(&txn)
-                    .await?;
-            }
-        }
-
-        txn.commit().await?;
-        Ok::<(), sea_orm::DbErr>(())
-    };
-
-    if let Err(e) = flush_op.await {
-        log::error!("Failed to flush song relations: {}", e);
     }
+    if !all_genres.is_empty() {
+        for chunk in all_genres.chunks_into(CHUNK_SIZE) {
+            song_genre::Entity::insert_many(chunk)
+                .on_conflict(
+                    sea_orm::sea_query::OnConflict::columns([
+                        song_genre::Column::SongId,
+                        song_genre::Column::GenreName,
+                    ])
+                    .do_nothing()
+                    .to_owned(),
+                )
+                .exec_without_returning(db)
+                .await?;
+        }
+    }
+    if !all_lyrics.is_empty() {
+        for chunk in all_lyrics.chunks_into(CHUNK_SIZE) {
+            lyrics::Entity::insert_many(chunk)
+                .on_conflict(
+                    sea_orm::sea_query::OnConflict::column(lyrics::Column::SongId)
+                        .do_nothing()
+                        .to_owned(),
+                )
+                .exec_without_returning(db)
+                .await?;
+        }
+    }
+
+    Ok(())
 }
 
 /// Flush album relations (depends on albums, artists, genres).
-async fn flush_album_relations(db: &DatabaseConnection, buf: &mut Vec<AlbumRelations>) {
-    if buf.is_empty() {
-        return;
+async fn flush_album_relations<C: ConnectionTrait>(
+    db: &C,
+    relations: Vec<AlbumRelations>,
+) -> Result<(), sea_orm::DbErr> {
+    if relations.is_empty() {
+        return Ok(());
     }
-    let relations = std::mem::take(buf);
     let album_ids: Vec<String> = relations.iter().map(|r| r.album_id.clone()).collect();
 
     let mut all_artists = Vec::new();
@@ -269,66 +255,118 @@ async fn flush_album_relations(db: &DatabaseConnection, buf: &mut Vec<AlbumRelat
         }
     }
 
-    let flush_op = async {
-        let txn = db.begin().await?;
-
-        album_artist::Entity::delete_many()
-            .filter(album_artist::Column::AlbumId.is_in(&album_ids))
-            .exec(&txn)
-            .await?;
-        album_genre::Entity::delete_many()
-            .filter(album_genre::Column::AlbumId.is_in(&album_ids))
-            .exec(&txn)
-            .await?;
-        if !all_artists.is_empty() {
-            for chunk in all_artists.chunks_into(CHUNK_SIZE) {
-                album_artist::Entity::insert_many(chunk)
-                    .on_conflict(
-                        sea_orm::sea_query::OnConflict::columns([
-                            album_artist::Column::AlbumId,
-                            album_artist::Column::ArtistId,
-                        ])
-                        .do_nothing()
-                        .to_owned(),
-                    )
-                    .exec_without_returning(&txn)
-                    .await?;
-            }
+    album_artist::Entity::delete_many()
+        .filter(album_artist::Column::AlbumId.is_in(&album_ids))
+        .exec(db)
+        .await?;
+    album_genre::Entity::delete_many()
+        .filter(album_genre::Column::AlbumId.is_in(&album_ids))
+        .exec(db)
+        .await?;
+    if !all_artists.is_empty() {
+        for chunk in all_artists.chunks_into(CHUNK_SIZE) {
+            album_artist::Entity::insert_many(chunk)
+                .on_conflict(
+                    sea_orm::sea_query::OnConflict::columns([
+                        album_artist::Column::AlbumId,
+                        album_artist::Column::ArtistId,
+                    ])
+                    .do_nothing()
+                    .to_owned(),
+                )
+                .exec_without_returning(db)
+                .await?;
         }
-        if !all_genres.is_empty() {
-            for chunk in all_genres.chunks_into(CHUNK_SIZE) {
-                album_genre::Entity::insert_many(chunk)
-                    .on_conflict(
-                        sea_orm::sea_query::OnConflict::columns([
-                            album_genre::Column::AlbumId,
-                            album_genre::Column::GenreName,
-                        ])
-                        .do_nothing()
-                        .to_owned(),
-                    )
-                    .exec_without_returning(&txn)
-                    .await?;
-            }
-        }
-
-        txn.commit().await?;
-        Ok::<(), sea_orm::DbErr>(())
-    };
-
-    if let Err(e) = flush_op.await {
-        log::error!("Failed to flush album relations: {}", e);
     }
+    if !all_genres.is_empty() {
+        for chunk in all_genres.chunks_into(CHUNK_SIZE) {
+            album_genre::Entity::insert_many(chunk)
+                .on_conflict(
+                    sea_orm::sea_query::OnConflict::columns([
+                        album_genre::Column::AlbumId,
+                        album_genre::Column::GenreName,
+                    ])
+                    .do_nothing()
+                    .to_owned(),
+                )
+                .exec_without_returning(db)
+                .await?;
+        }
+    }
+
+    Ok(())
 }
 
 /// Flush seen IDs.
-async fn flush_seen(db: &DatabaseConnection, buf: &mut Vec<String>) {
-    if buf.is_empty() {
-        return;
+async fn flush_seen<C: ConnectionTrait>(db: &C, ids: Vec<String>) -> Result<(), sea_orm::DbErr> {
+    if ids.is_empty() {
+        return Ok(());
     }
-    let ids = std::mem::take(buf);
-    if let Err(e) = seen::SeenTracker::insert_batch(db, ids).await {
-        log::error!("Failed to bulk insert seen IDs: {}", e);
+    let models: Vec<seen::ActiveModel> = ids
+        .into_iter()
+        .map(|id| seen::ActiveModel { id: Set(id) })
+        .collect();
+    for chunk in models.chunks_into(CHUNK_SIZE) {
+        seen::Entity::insert_many(chunk)
+            .on_conflict(
+                sea_orm::sea_query::OnConflict::column(seen::Column::Id)
+                    .do_nothing()
+                    .to_owned(),
+            )
+            .exec_without_returning(db)
+            .await?;
     }
+    Ok(())
+}
+
+/// Execute a complete flush cycle within a single transaction.
+/// Uses deferred foreign key constraints so all cross-table references
+/// are resolved at commit time, preventing partial-flush FK failures.
+#[allow(clippy::too_many_arguments)]
+pub(crate) async fn do_flush_cycle(
+    db: &DatabaseConnection,
+    artists: &mut Vec<artist::ActiveModel>,
+    genres: &mut Vec<genre::ActiveModel>,
+    albums: &mut Vec<album::ActiveModel>,
+    songs: &mut Vec<child::ActiveModel>,
+    song_relations: &mut Vec<SongRelations>,
+    album_relations: &mut Vec<AlbumRelations>,
+    seen_ids: &mut Vec<String>,
+) -> Result<(), sea_orm::DbErr> {
+    let a = std::mem::take(artists);
+    let g = std::mem::take(genres);
+    let al = std::mem::take(albums);
+    let s = std::mem::take(songs);
+    let sr = std::mem::take(song_relations);
+    let ar = std::mem::take(album_relations);
+    let si = std::mem::take(seen_ids);
+
+    let txn = db.begin().await?;
+
+    if db.get_database_backend() == sea_orm::DbBackend::Sqlite {
+        // Defer FK constraint checks until COMMIT so that cross-table inserts
+        // within this flush cycle don't fail due to insertion ordering.
+        txn.execute_unprepared("PRAGMA defer_foreign_keys = ON")
+            .await?;
+    }
+
+    // Flush in strict dependency order:
+    //   1. artists, genres   (no FK dependencies)
+    //   2. albums            (no FK deps on artists/genres directly)
+    //   3. songs/children    (FK → albums.id, self-referencing parent)
+    //   4. song_relations    (FK → children.id, artists.id, genres.name)
+    //   5. album_relations   (FK → albums.id, artists.id, genres.name)
+    //   6. seen ids          (independent)
+    flush_artists(&txn, a).await?;
+    flush_genres(&txn, g).await?;
+    flush_albums(&txn, al).await?;
+    flush_songs(&txn, s).await?;
+    flush_song_relations(&txn, sr).await?;
+    flush_album_relations(&txn, ar).await?;
+    flush_seen(&txn, si).await?;
+
+    txn.commit().await?;
+    Ok(())
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -453,20 +491,20 @@ pub async fn run_flusher(
         let should_flush = any_threshold || (overdue && has_data) || force_flush;
 
         if should_flush {
-            // Flush in strict dependency order to satisfy foreign key constraints:
-            //   1. artists, genres   (no FK dependencies)
-            //   2. albums            (no FK deps on artists/genres directly)
-            //   3. songs/children    (FK → albums.id, self-referencing parent)
-            //   4. song_relations    (FK → children.id, artists.id, genres.name)
-            //   5. album_relations   (FK → albums.id, artists.id, genres.name)
-            //   6. seen ids          (independent)
-            flush_artists(&db, &mut artists).await;
-            flush_genres(&db, &mut genres).await;
-            flush_albums(&db, &mut albums).await;
-            flush_songs(&db, &mut songs).await;
-            flush_song_relations(&db, &mut song_relations).await;
-            flush_album_relations(&db, &mut album_relations).await;
-            flush_seen(&db, &mut seen_ids).await;
+            if let Err(e) = do_flush_cycle(
+                &db,
+                &mut artists,
+                &mut genres,
+                &mut albums,
+                &mut songs,
+                &mut song_relations,
+                &mut album_relations,
+                &mut seen_ids,
+            )
+            .await
+            {
+                log::error!("Flush cycle failed: {}", e);
+            }
 
             last_flush = Instant::now();
         }
