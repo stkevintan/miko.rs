@@ -343,10 +343,12 @@ pub(crate) async fn do_flush_cycle(
 
     let txn = db.begin().await?;
 
-    // Defer FK constraint checks until COMMIT so that cross-table inserts
-    // within this flush cycle don't fail due to insertion ordering.
-    txn.execute_unprepared("PRAGMA defer_foreign_keys = ON")
-        .await?;
+    if db.get_database_backend() == sea_orm::DbBackend::Sqlite {
+        // Defer FK constraint checks until COMMIT so that cross-table inserts
+        // within this flush cycle don't fail due to insertion ordering.
+        txn.execute_unprepared("PRAGMA defer_foreign_keys = ON")
+            .await?;
+    }
 
     // Flush in strict dependency order:
     //   1. artists, genres   (no FK dependencies)
